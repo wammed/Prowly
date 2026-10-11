@@ -443,4 +443,82 @@ impl GitHubService {
 
         Ok(())
     }
+
+    /// Rerun a failed or completed workflow run.
+    pub async fn rerun_workflow_run(
+        &self,
+        target: &GitHubRepoTarget,
+        run_id: u64,
+    ) -> Result<String, String> {
+        if self.mock_mode {
+            let mut guard = self.cache.lock().await;
+            if let Some((_, ref mut runs)) = guard.runs {
+                if let Some(r) = runs.iter_mut().find(|r| r.id == run_id) {
+                    r.status = "in_progress".to_string();
+                    r.conclusion = None;
+                }
+            }
+            return Ok(format!("Triggered rerun for workflow #{}", run_id));
+        }
+
+        // Try using `gh run rerun <id>` first
+        if let Ok(output) = Command::new("gh")
+            .args(["run", "rerun", &run_id.to_string(), "-R", &format!("{}/{}", target.owner, target.repo)])
+            .output()
+        {
+            if output.status.success() {
+                return Ok(format!("Triggered rerun for workflow #{}", run_id));
+            }
+        }
+
+        // Try octocrab post
+        if let Some(octo) = self.get_octocrab().await {
+            let route = format!("/repos/{}/{}/actions/runs/{}/rerun", target.owner, target.repo, run_id);
+            match octo.post::<_, serde_json::Value>(&route, None::<&()>).await {
+                Ok(_) => Ok(format!("Triggered rerun for workflow #{}", run_id)),
+                Err(e) => Err(format!("Failed to rerun workflow #{}: {}", run_id, e)),
+            }
+        } else {
+            Err("No GitHub authentication token found".to_string())
+        }
+    }
+
+    /// Checkout a PR branch locally into the working directory.
+    pub fn checkout_pr_locally(
+        &self,
+        target: &GitHubRepoTarget,
+        pr_number: u64,
+        head_branch: &str,
+        workdir: &std::path::Path,
+    ) -> Result<String, String> {
+        // Try `gh pr checkout <number>`
+        if let Ok(output) = Command::new("gh")
+            .current_dir(workdir)
+            .args(["pr", "checkout", &pr_number.to_string(), "-R", &format!("{}/{}", target.owner, target.repo)])
+            .output()
+        {
+            if output.status.success() {
+                return Ok(format!("Checked out PR #{} ({}) via gh CLI", pr_number, head_branch));
+            }
+        }
+
+        // Fallback to git fetch and checkout
+        let fetch_ref = format!("pull/{}/head:pr-{}", pr_number, pr_number);
+        let _ = Command::new("git")
+            .current_dir(workdir)
+            .args(["fetch", "origin", &fetch_ref])
+            .output();
+
+        let branch_name = format!("pr-{}", pr_number);
+        let co = Command::new("git")
+            .current_dir(workdir)
+            .args(["checkout", &branch_name])
+            .output();
+
+        match co {
+            Ok(out) if out.status.success() => Ok(format!("Checked out PR #{} as branch '{}'", pr_number, branch_name)),
+            Ok(out) => Err(String::from_utf8_lossy(&out.stderr).trim().to_string()),
+            Err(e) => Err(e.to_string()),
+        }
+    }
 }

@@ -97,7 +97,7 @@ impl AlertsView {
             return;
         }
 
-        self.scroll.viewport_height = inner.height.saturating_sub(2) as usize;
+        self.scroll.viewport_height = (inner.height as usize / 2).max(1);
         let range = self.scroll.visible_range();
 
         let mut lines = Vec::new();
@@ -157,5 +157,11 @@ impl AlertsView {
 
         let p = Paragraph::new(lines);
         frame.render_widget(p, inner);
+    }
+}
+
+impl Default for AlertsView {
+    fn default() -> Self {
+        Self::new()
     }
 }

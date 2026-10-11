@@ -28,6 +28,8 @@ pub enum AppEvent {
     AiCiAnalysisCompleted(Result<CiFailureAnalysis, String>),
     AiCommandSuggested(Result<SuggestedGitCommand, String>),
     AiMergeResolved(Result<String, String>),
+    AiAssistantResponseReceived(Result<(String, Option<String>), String>),
+    GitHubWorkflowRerunResult(Result<String, String>),
 }
 
 /// Asynchronous event listener sending crossterm and timer events over a channel.
@@ -66,10 +68,10 @@ impl EventHandler {
                                         break;
                                     }
                                 }
-                                CrosstermEvent::Resize(w, h) => {
-                                    if event_sender.send(AppEvent::Resize(w, h)).is_err() {
-                                        break;
-                                    }
+                                CrosstermEvent::Resize(w, h)
+                                    if event_sender.send(AppEvent::Resize(w, h)).is_err() =>
+                                {
+                                    break;
                                 }
                                 _ => {}
                             },

@@ -10,6 +10,7 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, Paragraph},
     Frame,
 };
+use std::num::NonZeroUsize;
 use std::sync::LazyLock;
 use syntect::easy::HighlightLines;
 use syntect::highlighting::ThemeSet;
@@ -18,22 +19,25 @@ use syntect::parsing::SyntaxSet;
 static SYNTAX_SET: LazyLock<SyntaxSet> = LazyLock::new(SyntaxSet::load_defaults_newlines);
 static THEME_SET: LazyLock<ThemeSet> = LazyLock::new(ThemeSet::load_defaults);
 
-/// Component for rendering high-performance virtual scrolled diff views.
+/// Type representing a single display line in a flattened diff.
+pub type FlatDiffLine = (Option<u32>, Option<u32>, char, DiffLineType, String);
+
+/// Component for rendering high-performance virtual scrolled diff views with LRU highlighting cache.
 pub struct DiffView {
     pub scroll: VirtualScroll,
+    pub highlight_cache: lru::LruCache<String, Vec<(ratatui::style::Color, String)>>,
 }
 
 impl DiffView {
     pub fn new() -> Self {
         Self {
             scroll: VirtualScroll::new(0, 20),
+            highlight_cache: lru::LruCache::new(NonZeroUsize::new(500).unwrap()),
         }
     }
 
     /// Flatten all hunks and lines from a FileDiff into a sequential display list.
-    pub fn flatten_diff_lines(
-        diff: &FileDiff,
-    ) -> Vec<(Option<u32>, Option<u32>, char, DiffLineType, String)> {
+    pub fn flatten_diff_lines(diff: &FileDiff) -> Vec<FlatDiffLine> {
         let mut lines = Vec::new();
         for hunk in &diff.hunks {
             lines.push((
@@ -127,20 +131,28 @@ impl DiffView {
                 Span::styled(format!("{} ", prefix), marker_style),
             ];
 
-            // For context lines, attempt syntect highlight; for added/deleted, emphasize diff color
+            // For context lines, attempt syntect highlight with LRU caching
             if *line_type == DiffLineType::Context {
-                if let Ok(ranges) = highlighter.highlight_line(content, &SYNTAX_SET) {
+                if let Some(cached) = self.highlight_cache.get(content) {
+                    for (c, text) in cached {
+                        spans.push(Span::styled(text.clone(), Style::default().bg(bg).fg(*c)));
+                    }
+                } else if let Ok(ranges) = highlighter.highlight_line(content, &SYNTAX_SET) {
+                    let mut cached_ranges = Vec::new();
                     for (style, text) in ranges {
                         let c = ratatui::style::Color::Rgb(
                             style.foreground.r,
                             style.foreground.g,
                             style.foreground.b,
                         );
+                        cached_ranges.push((c, text.to_string()));
                         spans.push(Span::styled(
                             text.to_string(),
                             Style::default().bg(bg).fg(c),
                         ));
                     }
+                    self.highlight_cache
+                        .put(content.clone(), cached_ranges);
                 } else {
                     spans.push(Span::styled(
                         content.clone(),

@@ -43,16 +43,10 @@ impl Default for GitConfig {
 }
 
 /// External editor preferences.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct EditorConfig {
     /// Preferred terminal or GUI editor command (e.g. "nvim", "code", or None to use $EDITOR)
     pub command: Option<String>,
-}
-
-impl Default for EditorConfig {
-    fn default() -> Self {
-        Self { command: None }
-    }
 }
 
 /// Root Prowly application configuration.

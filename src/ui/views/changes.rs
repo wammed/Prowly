@@ -23,6 +23,26 @@ pub enum ChangesFocus {
     CommitDescription,
 }
 
+/// Action button clicked in Changes view.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChangesButtonAction {
+    CommitAndSync,
+    AiGenerate,
+    AiReview,
+    StashAll,
+    DiscardSafe,
+}
+
+/// Rendering parameters bundled to avoid clippy::too_many_arguments.
+pub struct ChangesRenderParams<'a> {
+    pub files: &'a [GitFileItem],
+    pub active_diff: &'a FileDiff,
+    pub theme: &'a Theme,
+    pub i18n: &'a I18n,
+    pub icons: &'a Icons,
+    pub area: Rect,
+}
+
 /// Changes view controller.
 pub struct ChangesView {
     pub file_scroll: VirtualScroll,
@@ -30,6 +50,11 @@ pub struct ChangesView {
     pub focus: ChangesFocus,
     pub commit_summary: String,
     pub commit_description: String,
+    pub file_list_area: Rect,
+    pub commit_controls_area: Rect,
+    pub summary_input_area: Rect,
+    pub desc_input_area: Rect,
+    pub actions_bar_area: Rect,
 }
 
 impl ChangesView {
@@ -40,20 +65,84 @@ impl ChangesView {
             focus: ChangesFocus::FileList,
             commit_summary: String::new(),
             commit_description: String::new(),
+            file_list_area: Rect::default(),
+            commit_controls_area: Rect::default(),
+            summary_input_area: Rect::default(),
+            desc_input_area: Rect::default(),
+            actions_bar_area: Rect::default(),
+        }
+    }
+
+    /// Handle text input when a commit text box is focused.
+    pub fn handle_char(&mut self, c: char) {
+        match self.focus {
+            ChangesFocus::CommitSummary => self.commit_summary.push(c),
+            ChangesFocus::CommitDescription => self.commit_description.push(c),
+            _ => {}
+        }
+    }
+
+    /// Handle backspace in commit inputs.
+    pub fn handle_backspace(&mut self) {
+        match self.focus {
+            ChangesFocus::CommitSummary => {
+                self.commit_summary.pop();
+            }
+            ChangesFocus::CommitDescription => {
+                self.commit_description.pop();
+            }
+            _ => {}
+        }
+    }
+
+    /// Check which action button was clicked at (x, y).
+    pub fn hit_test_action_buttons(&self, x: u16, y: u16) -> Option<ChangesButtonAction> {
+        let area = self.actions_bar_area;
+        if y != area.y || x < area.x || x >= area.x + area.width {
+            return None;
+        }
+
+        let rel_x = x.saturating_sub(area.x);
+        // Buttons layout approx:
+        // [ Commit & Sync ] (19) [ AI Generate ] (17) [ AI Review ] (15) [ Stash All ] (15) [ Discard (Safe) ] (18)
+        if rel_x < 20 {
+            Some(ChangesButtonAction::CommitAndSync)
+        } else if rel_x < 38 {
+            Some(ChangesButtonAction::AiGenerate)
+        } else if rel_x < 54 {
+            Some(ChangesButtonAction::AiReview)
+        } else if rel_x < 70 {
+            Some(ChangesButtonAction::StashAll)
+        } else {
+            Some(ChangesButtonAction::DiscardSafe)
+        }
+    }
+
+    /// Check if an input area or file list was clicked.
+    pub fn hit_test_inputs(&self, x: u16, y: u16) -> Option<ChangesFocus> {
+        let in_rect = |r: Rect| x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height;
+        if in_rect(self.summary_input_area) {
+            Some(ChangesFocus::CommitSummary)
+        } else if in_rect(self.desc_input_area) {
+            Some(ChangesFocus::CommitDescription)
+        } else if in_rect(self.file_list_area) {
+            Some(ChangesFocus::FileList)
+        } else {
+            None
         }
     }
 
     /// Render Changes view layout into frame.
-    pub fn render(
-        &mut self,
-        frame: &mut Frame,
-        files: &[GitFileItem],
-        active_diff: &FileDiff,
-        theme: &Theme,
-        i18n: &I18n,
-        icons: &Icons,
-        area: Rect,
-    ) {
+    pub fn render(&mut self, frame: &mut Frame, params: ChangesRenderParams) {
+        let ChangesRenderParams {
+            files,
+            active_diff,
+            theme,
+            i18n,
+            icons,
+            area,
+        } = params;
+
         // Vertical layout: Top (Files + Diff preview, Min) -> Bottom (Commit box + Actions, Length 6)
         let main_chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -62,8 +151,9 @@ impl ChangesView {
 
         let top_area = main_chunks[0];
         let bottom_area = main_chunks[1];
+        self.commit_controls_area = bottom_area;
 
-        // Horizontal split of top area: File list (35% or 30-40 cols) -> Diff preview (remaining)
+        // Horizontal split of top area: File list (36%) -> Diff preview (64%)
         let top_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(36), Constraint::Percentage(64)])
@@ -71,6 +161,7 @@ impl ChangesView {
 
         let file_list_area = top_chunks[0];
         let diff_area = top_chunks[1];
+        self.file_list_area = file_list_area;
 
         // 1. Render File List
         self.render_file_list(frame, files, theme, i18n, icons, file_list_area);
@@ -102,8 +193,9 @@ impl ChangesView {
         let total_count = files.len();
 
         let title = format!(
-            " {} Changes (Staged: {}/{}) ",
+            " {} {} (Staged: {}/{}) ",
             icons.branch(),
+            i18n.t("tabs.changes"),
             staged_count,
             total_count
         );
@@ -177,19 +269,27 @@ impl ChangesView {
     }
 
     fn render_commit_controls(
-        &self,
+        &mut self,
         frame: &mut Frame,
         theme: &Theme,
         i18n: &I18n,
         icons: &Icons,
         area: Rect,
     ) {
+        let is_any_commit_focused = self.focus == ChangesFocus::CommitSummary
+            || self.focus == ChangesFocus::CommitDescription;
+        let border_color = if is_any_commit_focused {
+            theme.border_focused
+        } else {
+            theme.border
+        };
+
         let block = Block::default()
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(theme.border))
+            .border_style(Style::default().fg(border_color))
             .title(Span::styled(
-                " Commit & Actions ",
+                format!(" {} & Actions (Press Tab/Click to Focus) ", i18n.t("btn.commit")),
                 Style::default().fg(theme.primary),
             ))
             .style(Style::default().bg(theme.bg));
@@ -207,41 +307,75 @@ impl ChangesView {
             ])
             .split(inner);
 
+        self.summary_input_area = chunks[0];
+        self.desc_input_area = chunks[1];
+        self.actions_bar_area = chunks[2];
+
         // Summary Input
+        let is_summary_focused = self.focus == ChangesFocus::CommitSummary;
         let summary_text = if self.commit_summary.is_empty() {
-            i18n.t("changes.commit_placeholder")
+            if is_summary_focused {
+                "|".to_string()
+            } else {
+                i18n.t("changes.commit_placeholder").to_string()
+            }
+        } else if is_summary_focused {
+            format!("{}|", self.commit_summary)
         } else {
             self.commit_summary.clone()
         };
-        let summary_style = if self.commit_summary.is_empty() {
+
+        let summary_style = if self.commit_summary.is_empty() && !is_summary_focused {
             Style::default().fg(theme.dim_fg)
         } else {
-            Style::default().fg(theme.fg)
+            Style::default().fg(theme.fg).add_modifier(if is_summary_focused {
+                Modifier::BOLD
+            } else {
+                Modifier::empty()
+            })
         };
+
+        let summary_label_style = if is_summary_focused {
+            Style::default().fg(theme.primary).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(theme.primary)
+        };
+
         let summary_line = Line::from(vec![
-            Span::styled(
-                " Commit: ",
-                Style::default()
-                    .fg(theme.primary)
-                    .add_modifier(Modifier::BOLD),
-            ),
+            Span::styled(" Commit: ", summary_label_style),
             Span::styled(summary_text, summary_style),
         ]);
         frame.render_widget(Paragraph::new(summary_line), chunks[0]);
 
         // Description Input (optional)
+        let is_desc_focused = self.focus == ChangesFocus::CommitDescription;
         let desc_text = if self.commit_description.is_empty() {
-            i18n.t("changes.commit_desc_placeholder")
+            if is_desc_focused {
+                "|".to_string()
+            } else {
+                i18n.t("changes.commit_desc_placeholder").to_string()
+            }
+        } else if is_desc_focused {
+            format!("{}|", self.commit_description)
         } else {
             self.commit_description.clone()
         };
-        let desc_style = if self.commit_description.is_empty() {
+
+        let desc_style = if self.commit_description.is_empty() && !is_desc_focused {
             Style::default().fg(theme.dim_fg)
         } else {
             Style::default().fg(theme.fg)
         };
+
         let desc_line = Line::from(vec![
-            Span::styled(" Desc:   ", Style::default().fg(theme.dim_fg)),
+            Span::styled(
+                " Desc:   ",
+                if is_desc_focused {
+                    Style::default().fg(theme.primary)
+                } else {
+                    Style::default().fg(theme.dim_fg)
+                },
+            ),
             Span::styled(desc_text, desc_style),
         ]);
         frame.render_widget(Paragraph::new(desc_line), chunks[1]);

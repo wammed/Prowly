@@ -283,6 +283,83 @@ impl GitService {
         Ok(commit_oid)
     }
 
+    /// Commit staged changes with summary and optional description.
+    pub fn commit_with_description(
+        &self,
+        summary: &str,
+        description: Option<&str>,
+    ) -> Result<git2::Oid, GitError> {
+        let full_message = match description {
+            Some(desc) if !desc.trim().is_empty() => format!("{}\n\n{}", summary.trim(), desc.trim()),
+            _ => summary.trim().to_string(),
+        };
+        self.commit(&full_message)
+    }
+
+    /// List all local branch names.
+    pub fn list_branches(&self) -> Result<Vec<String>, GitError> {
+        let branches = self.repo.branches(Some(git2::BranchType::Local))?;
+        let mut list = Vec::new();
+        for b in branches {
+            let (branch, _) = b?;
+            if let Some(name) = branch.name()? {
+                list.push(name.to_string());
+            }
+        }
+        Ok(list)
+    }
+
+    /// Checkout a local or remote tracking branch.
+    pub fn checkout_branch(&self, branch_name: &str) -> Result<(), GitError> {
+        self.run_git_cli(&["checkout", branch_name])?;
+        Ok(())
+    }
+
+    /// Get unpushed and unpulled commit subject lines relative to upstream.
+    pub fn get_unpushed_unpulled_commits(&self) -> Result<(Vec<String>, Vec<String>), GitError> {
+        let status = self.get_status()?;
+        let unpushed = if status.ahead > 0 {
+            if let Some(ref upstream) = status.upstream {
+                let range = format!("{}..HEAD", upstream);
+                let out = self.run_git_cli(&["log", "--oneline", "-n", "10", &range])?;
+                out.lines().map(|s| s.to_string()).collect()
+            } else {
+                let out = self.run_git_cli(&["log", "--oneline", "-n", "10"])?;
+                out.lines().map(|s| s.to_string()).collect()
+            }
+        } else {
+            Vec::new()
+        };
+
+        let unpulled = if status.behind > 0 {
+            if let Some(ref upstream) = status.upstream {
+                let range = format!("HEAD..{}", upstream);
+                let out = self.run_git_cli(&["log", "--oneline", "-n", "10", &range])?;
+                out.lines().map(|s| s.to_string()).collect()
+            } else {
+                Vec::new()
+            }
+        } else {
+            Vec::new()
+        };
+
+        Ok((unpushed, unpulled))
+    }
+
+    /// Initialize a new Git repository in the working directory.
+    pub fn init_repo(dir: &std::path::Path) -> Result<(), GitError> {
+        let output = Command::new("git")
+            .current_dir(dir)
+            .args(["init"])
+            .output()?;
+        if output.status.success() {
+            Ok(())
+        } else {
+            let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            Err(GitError::Cli(err))
+        }
+    }
+
     /// Invoke Git CLI for push (ensuring SSH agent / Credential Helper / GPG compatibility).
     pub fn cli_push(&self) -> Result<String, GitError> {
         self.run_git_cli(&["push"])

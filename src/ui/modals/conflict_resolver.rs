@@ -12,7 +12,7 @@ use ratatui::{
 };
 
 /// Conflict resolver modal state.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ConflictResolverModal {
     pub is_open: bool,
     pub file_path: String,
@@ -20,19 +20,6 @@ pub struct ConflictResolverModal {
     pub hunks: Vec<ConflictHunk>,
     pub current_hunk_idx: usize,
     pub status_message: Option<String>,
-}
-
-impl Default for ConflictResolverModal {
-    fn default() -> Self {
-        Self {
-            is_open: false,
-            file_path: String::new(),
-            original_content: String::new(),
-            hunks: Vec::new(),
-            current_hunk_idx: 0,
-            status_message: None,
-        }
-    }
 }
 
 impl ConflictResolverModal {

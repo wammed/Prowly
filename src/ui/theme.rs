@@ -6,9 +6,10 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// All supported color theme identifiers.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ThemeId {
+    #[default]
     CatppuccinMocha,
     CatppuccinMacchiato,
     CatppuccinFrappe,
@@ -30,12 +31,6 @@ pub enum ThemeId {
     MonokaiPro,
     Synthwave84,
     EverforestDark,
-}
-
-impl Default for ThemeId {
-    fn default() -> Self {
-        Self::CatppuccinMocha
-    }
 }
 
 impl ThemeId {

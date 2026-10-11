@@ -14,6 +14,9 @@ use ratatui::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ContextMenuAction {
     ToggleStage,
+    OpenEditor,
+    RevealFileManager,
+    StashFile,
     SafeDiscard,
     CopyPath,
     CopyDiff,
@@ -27,11 +30,17 @@ impl ContextMenuAction {
         ContextMenuAction::CopyPath,
         ContextMenuAction::CopyDiff,
         ContextMenuAction::AskAi,
+        ContextMenuAction::OpenEditor,
+        ContextMenuAction::RevealFileManager,
+        ContextMenuAction::StashFile,
     ];
 
     pub fn label(&self) -> &'static str {
         match self {
             Self::ToggleStage => "Stage / Unstage (Space)",
+            Self::OpenEditor => "Open in Editor (e)",
+            Self::RevealFileManager => "Reveal in File Manager",
+            Self::StashFile => "Stash this file",
             Self::SafeDiscard => "Discard changes (Safe)",
             Self::CopyPath => "Copy File Path (y)",
             Self::CopyDiff => "Copy Diff Snippet",
@@ -138,6 +147,9 @@ impl ContextMenu {
                 let is_sel = idx == self.selected_index;
                 let icon_str = match action {
                     ContextMenuAction::ToggleStage => icons.checkbox_checked(),
+                    ContextMenuAction::OpenEditor => "󰅩",
+                    ContextMenuAction::RevealFileManager => icons.folder_open(),
+                    ContextMenuAction::StashFile => icons.stash(),
                     ContextMenuAction::SafeDiscard => icons.get(crate::ui::IconId::Trash),
                     ContextMenuAction::CopyPath => icons.get(crate::ui::IconId::Copy),
                     ContextMenuAction::CopyDiff => icons.get(crate::ui::IconId::Copy),

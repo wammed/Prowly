@@ -33,6 +33,7 @@ pub struct RebaseCommitItem {
     pub author: String,
     pub summary: String,
     pub action: RebaseAction,
+    pub is_verified: bool,
 }
 
 /// Retrieve the last `count` commits for interactive rebase preview.
@@ -42,7 +43,7 @@ pub fn list_recent_commits(
 ) -> Result<Vec<RebaseCommitItem>, GitError> {
     let output = Command::new("git")
         .current_dir(repo_dir)
-        .args(["log", &format!("-n{}", count), "--pretty=format:%h|%an|%s"])
+        .args(["log", &format!("-n{}", count), "--pretty=format:%h|%an|%s|%G?"])
         .output()?;
 
     if !output.status.success() {
@@ -58,11 +59,14 @@ pub fn list_recent_commits(
         if let (Some(hash), Some(author), Some(summary)) =
             (parts.next(), parts.next(), parts.next())
         {
+            let sig_flag = parts.next().unwrap_or("N");
+            let is_verified = sig_flag == "G" || sig_flag == "U";
             items.push(RebaseCommitItem {
                 hash: hash.to_string(),
                 author: author.to_string(),
                 summary: summary.to_string(),
                 action: RebaseAction::Pick,
+                is_verified,
             });
         }
     }
@@ -110,6 +114,21 @@ pub fn reword_head_commit(repo_dir: &Path, new_message: &str) -> Result<(), GitE
     let output = Command::new("git")
         .current_dir(repo_dir)
         .args(["commit", "--amend", "-m", new_message])
+        .output()?;
+
+    if !output.status.success() {
+        let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(GitError::Cli(err));
+    }
+
+    Ok(())
+}
+
+/// Fixup staged changes into the most recent commit without editing the message.
+pub fn fixup_head_commit(repo_dir: &Path) -> Result<(), GitError> {
+    let output = Command::new("git")
+        .current_dir(repo_dir)
+        .args(["commit", "--amend", "--no-edit"])
         .output()?;
 
     if !output.status.success() {

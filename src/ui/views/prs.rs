@@ -290,3 +290,9 @@ impl PrsView {
         }
     }
 }
+
+impl Default for PrsView {
+    fn default() -> Self {
+        Self::new()
+    }
+}

@@ -14,6 +14,7 @@ fn test_default_config() {
 }
 
 #[test]
+#[allow(clippy::field_reassign_with_default)]
 fn test_config_save_and_load_roundtrip() {
     let mut original = Config::default();
     original.theme = ThemeId::TokyoNight;

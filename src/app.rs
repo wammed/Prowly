@@ -13,13 +13,17 @@ use crate::git::{
 };
 use crate::github::{GitHubRepoTarget, GitHubService};
 use crate::i18n::I18n;
-use crate::services::{open_external_editor, BackupService, ClipboardService};
+use crate::services::{
+    open_external_editor_with_preference, reveal_in_file_manager, BackupService, ClipboardService,
+};
 use crate::ui::layout::LayoutAreas;
 use crate::ui::modals::{
-    AiAssistantModal, CommandPaletteModal, ConflictResolverModal, ContextMenu, ContextMenuAction,
+    AiAssistantModal, BranchSwitcherModal, CommandPaletteModal, ConflictResolverModal,
+    ContextMenu, ContextMenuAction, RebaseModal, RemoteDiffPreviewModal,
 };
 use crate::ui::theme::{Theme, ThemeId};
 use crate::ui::views::{
+    changes::{ChangesButtonAction, ChangesFocus, ChangesRenderParams},
     ActionsView, AlertsView, ChangesView, DirectoryMap, PrsView, WorktreesView,
 };
 use crate::ui::Icons;
@@ -126,6 +130,7 @@ pub struct App {
     pub repo_status: GitRepoStatus,
     pub current_diff: FileDiff,
     pub worktrees: Vec<WorktreeItem>,
+    pub previous_branch: Option<String>,
 
     // UI state
     pub active_tab: AppTab,
@@ -150,6 +155,9 @@ pub struct App {
     pub context_menu: ContextMenu,
     pub command_palette: CommandPaletteModal,
     pub conflict_resolver: ConflictResolverModal,
+    pub branch_switcher: BranchSwitcherModal,
+    pub remote_diff_preview: RemoteDiffPreviewModal,
+    pub rebase_modal: RebaseModal,
 
     // Channel sender for background async tasks
     pub event_sender: Option<tokio::sync::mpsc::UnboundedSender<AppEvent>>,
@@ -179,6 +187,7 @@ impl App {
             repo_status: GitRepoStatus::default(),
             current_diff: FileDiff::default(),
             worktrees: Vec::new(),
+            previous_branch: None,
             active_tab: AppTab::Changes,
             focused_pane: FocusedPane::MainContent,
             should_quit: false,
@@ -195,6 +204,9 @@ impl App {
             context_menu: ContextMenu::new(),
             command_palette: CommandPaletteModal::new(),
             conflict_resolver: ConflictResolverModal::new(),
+            branch_switcher: BranchSwitcherModal::new(),
+            remote_diff_preview: RemoteDiffPreviewModal::new(),
+            rebase_modal: RebaseModal::new(),
             event_sender: None,
         };
 
@@ -428,12 +440,25 @@ impl App {
                     self.conflict_resolver.set_ai_resolution(resolved);
                 }
             }
+            AppEvent::AiAssistantResponseReceived(res) => match res {
+                Ok((ans, patch)) => {
+                    self.ai_modal.set_response(ans, patch);
+                }
+                Err(e) => {
+                    self.ai_modal.is_loading = false;
+                    self.ai_modal.set_response(format!("AI Error: {}", e), None);
+                }
+            },
+            AppEvent::GitHubWorkflowRerunResult(res) => match res {
+                Ok(msg) => self.last_status = Some(msg),
+                Err(e) => self.last_status = Some(format!("Workflow rerun failed: {}", e)),
+            },
         }
     }
 
     /// Keyboard event handler.
     pub fn handle_key(&mut self, key: crossterm::event::KeyEvent) {
-        // If Context Menu is active, it captures key navigation
+        // 1. Context Menu captures keys
         if self.context_menu.is_open {
             match key.code {
                 KeyCode::Esc => self.context_menu.close(),
@@ -449,18 +474,123 @@ impl App {
             return;
         }
 
-        // If AI Modal is active, it captures text input
+        // 2. Branch Switcher Modal captures keys
+        if self.branch_switcher.is_open {
+            match key.code {
+                KeyCode::Esc => self.branch_switcher.close(),
+                KeyCode::Up => self.branch_switcher.previous(),
+                KeyCode::Down => self.branch_switcher.next(),
+                KeyCode::Backspace => self.branch_switcher.pop_char(),
+                KeyCode::Enter => {
+                    if let Some(target_b) = self.branch_switcher.selected_branch() {
+                        let prev = self.repo_status.branch.clone();
+                        if let Some(git) = &self.git_service {
+                            match git.checkout_branch(&target_b) {
+                                Ok(_) => {
+                                    self.previous_branch = Some(prev);
+                                    self.last_status = Some(format!("Switched branch to {}", target_b));
+                                    self.refresh_git_status();
+                                    self.branch_switcher.close();
+                                }
+                                Err(e) => {
+                                    self.last_status = Some(format!("Checkout failed: {}", e));
+                                }
+                            }
+                        }
+                    }
+                }
+                KeyCode::Char(c) => self.branch_switcher.push_char(c),
+                _ => {}
+            }
+            return;
+        }
+
+        // 3. Remote Diff Preview captures keys
+        if self.remote_diff_preview.is_open {
+            match key.code {
+                KeyCode::Esc | KeyCode::Enter => self.remote_diff_preview.close(),
+                _ => {}
+            }
+            return;
+        }
+
+        // 4. Quick Rebase Modal captures keys
+        if self.rebase_modal.is_open {
+            if self.rebase_modal.is_editing_reword {
+                match key.code {
+                    KeyCode::Esc => {
+                        self.rebase_modal.is_editing_reword = false;
+                    }
+                    KeyCode::Backspace => {
+                        self.rebase_modal.reword_input.pop();
+                    }
+                    KeyCode::Enter => {
+                        let new_msg = self.rebase_modal.reword_input.clone();
+                        if let Some(git) = &self.git_service {
+                            if crate::git::rebase::reword_head_commit(git.workdir(), &new_msg).is_ok() {
+                                self.last_status = Some("Reworded HEAD commit successfully".to_string());
+                                self.refresh_git_status();
+                                self.rebase_modal.close();
+                            }
+                        }
+                    }
+                    KeyCode::Char(c) => {
+                        self.rebase_modal.reword_input.push(c);
+                    }
+                    _ => {}
+                }
+                return;
+            }
+
+            match key.code {
+                KeyCode::Esc => self.rebase_modal.close(),
+                KeyCode::Up | KeyCode::Char('k') => self.rebase_modal.previous(),
+                KeyCode::Down | KeyCode::Char('j') => self.rebase_modal.next(),
+                KeyCode::Char('s') => {
+                    if let Some(git) = &self.git_service {
+                        let combined_msg = "squash: combined recent commits".to_string();
+                        if crate::git::rebase::quick_squash(git.workdir(), 2, &combined_msg).is_ok() {
+                            self.last_status = Some("Squashed top 2 commits".to_string());
+                            self.refresh_git_status();
+                            self.open_rebase_modal();
+                        }
+                    }
+                }
+                KeyCode::Char('f') => {
+                    if let Some(git) = &self.git_service {
+                        if crate::git::rebase::fixup_head_commit(git.workdir()).is_ok() {
+                            self.last_status = Some("Fixup merged into HEAD commit".to_string());
+                            self.refresh_git_status();
+                            self.open_rebase_modal();
+                        }
+                    }
+                }
+                KeyCode::Char('r') => {
+                    self.rebase_modal.is_editing_reword = true;
+                    if let Some(c) = self.rebase_modal.selected_commit() {
+                        self.rebase_modal.reword_input = c.summary.clone();
+                    }
+                }
+                _ => {}
+            }
+            return;
+        }
+
+        // 5. AI Modal captures input
         if self.ai_modal.is_open {
             match key.code {
                 KeyCode::Esc => self.ai_modal.close(),
+                KeyCode::Tab => {
+                    if self.ai_modal.proposed_patch.is_some() {
+                        self.apply_ai_suggestion();
+                    }
+                }
                 KeyCode::Enter => {
-                    self.ai_modal.is_loading = true;
-                    let q = self.ai_modal.input_query.clone();
-                    let response = format!(
-                        "AI solution for '{}':\n\n- Conventional commit suggested: feat(git): worktree & directory map support\n- Code looks clean and tests are passing.",
-                        q
-                    );
-                    self.ai_modal.set_response(response, None);
+                    if self.ai_modal.proposed_patch.is_some() && !self.ai_modal.is_loading {
+                        self.apply_ai_suggestion();
+                    } else if !self.ai_modal.input_query.trim().is_empty() {
+                        self.trigger_ai_assistant_query();
+                    }
                 }
                 KeyCode::Backspace => self.ai_modal.handle_backspace(),
                 KeyCode::Char(c) => self.ai_modal.handle_char(c),
@@ -469,7 +599,7 @@ impl App {
             return;
         }
 
-        // If Command Palette is active, it captures key input
+        // 6. Command Palette captures input
         if self.command_palette.is_open {
             match key.code {
                 KeyCode::Esc => self.command_palette.close(),
@@ -523,7 +653,7 @@ impl App {
             return;
         }
 
-        // If Conflict Resolver is active, it captures conflict navigation and choices
+        // 7. Conflict Resolver captures input
         if self.conflict_resolver.is_open {
             match key.code {
                 KeyCode::Esc => self.conflict_resolver.close(),
@@ -566,7 +696,7 @@ impl App {
                 KeyCode::Enter => {
                     let path = self.conflict_resolver.file_path.clone();
                     let content = self.conflict_resolver.build_resolved_content();
-                    if let Ok(_) = std::fs::write(&path, content) {
+                    if std::fs::write(&path, content).is_ok() {
                         if let Some(git) = &self.git_service {
                             let _ = git.stage_file(&path);
                         }
@@ -581,6 +711,40 @@ impl App {
             return;
         }
 
+        // 8. Text Input inside Changes view Commit Box
+        if self.focused_pane == FocusedPane::MainContent
+            && self.active_tab == AppTab::Changes
+            && (self.changes_view.focus == ChangesFocus::CommitSummary
+                || self.changes_view.focus == ChangesFocus::CommitDescription)
+        {
+            match key.code {
+                KeyCode::Esc => {
+                    self.changes_view.focus = ChangesFocus::FileList;
+                    return;
+                }
+                KeyCode::Tab => {
+                    self.changes_view.focus = match self.changes_view.focus {
+                        ChangesFocus::CommitSummary => ChangesFocus::CommitDescription,
+                        _ => ChangesFocus::FileList,
+                    };
+                    return;
+                }
+                KeyCode::Enter => {
+                    self.commit_staged();
+                    return;
+                }
+                KeyCode::Backspace => {
+                    self.changes_view.handle_backspace();
+                    return;
+                }
+                KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    self.changes_view.handle_char(c);
+                    return;
+                }
+                _ => {}
+            }
+        }
+
         // Global shortcuts with Control
         if key.modifiers.contains(KeyModifiers::CONTROL) {
             match key.code {
@@ -591,6 +755,11 @@ impl App {
                 KeyCode::Char('a') => {
                     let ctx = self.capture_ai_context();
                     self.ai_modal.toggle(&ctx);
+                    return;
+                }
+                // Ctrl+P: Open Command Palette
+                KeyCode::Char('p') => {
+                    self.command_palette.open();
                     return;
                 }
                 // Ctrl+G: AI Generate Commit Message
@@ -618,14 +787,9 @@ impl App {
                     }
                     return;
                 }
-                // Ctrl+P: Pop Stash
-                KeyCode::Char('p') => {
-                    if let Some(git) = &self.git_service {
-                        if let Ok(msg) = git.cli_stash_pop() {
-                            self.last_status = Some(format!("Popped stash: {}", msg));
-                            self.refresh_git_status();
-                        }
-                    }
+                // Ctrl+F: AI Analyze CI Failure
+                KeyCode::Char('f') => {
+                    self.trigger_ai_ci_analysis();
                     return;
                 }
                 _ => {}
@@ -637,6 +801,10 @@ impl App {
             KeyCode::Char('?') => {
                 let ctx = self.capture_ai_context();
                 self.ai_modal.toggle(&ctx);
+            }
+            // Quick Branch Switcher via 'b'
+            KeyCode::Char('b') => {
+                self.open_branch_switcher();
             }
             // Open Context Menu via 'm' or F10
             KeyCode::Char('m') | KeyCode::F(10) => {
@@ -672,7 +840,6 @@ impl App {
                 self.last_status = Some(format!("Language: {}", new_lang.display_name()));
             }
 
-            // Copy (y) to Clipboard
             // Copy (y) to Clipboard
             KeyCode::Char('y') => {
                 let text_to_copy = match self.focused_pane {
@@ -753,10 +920,54 @@ impl App {
                 }
             }
 
-            // 'c': Commit staged changes
+            // 'c': Commit staged changes in Changes tab, or Checkout PR locally in PRs tab
             KeyCode::Char('c') => {
-                self.commit_staged();
+                if self.active_tab == AppTab::Prs {
+                    self.checkout_selected_pr();
+                } else if self.changes_view.commit_summary.is_empty() {
+                    self.changes_view.focus = ChangesFocus::CommitSummary;
+                    self.last_status = Some("Enter commit message (Press Enter to Commit & Sync)".to_string());
+                } else {
+                    self.commit_staged();
+                }
             }
+
+            // 'r': Re-run failed CI job in Actions tab
+            KeyCode::Char('r') => {
+                if self.active_tab == AppTab::Actions {
+                    self.rerun_selected_action_job();
+                }
+            }
+
+            // Enter key dispatching
+            KeyCode::Enter => match self.active_tab {
+                AppTab::Prs => self.checkout_selected_pr(),
+                AppTab::Worktrees => {
+                    if let Some(wt) = self.worktrees.get(self.worktrees_view.scroll.selected_index) {
+                        let branch = wt.head_branch.clone().unwrap_or_else(|| "HEAD".to_string());
+                        if let Some(git) = &self.git_service {
+                            if git.checkout_branch(&branch).is_ok() {
+                                self.last_status = Some(format!("Switched to worktree branch {}", branch));
+                                self.refresh_git_status();
+                                self.refresh_worktrees();
+                            }
+                        }
+                    }
+                }
+                AppTab::Changes => {
+                    let filtered = self.filtered_files();
+                    if let Some(item) = filtered.get(self.changes_view.file_scroll.selected_index) {
+                        if item.status == crate::git::FileStatus::Conflicted {
+                            if let Ok(content) = std::fs::read_to_string(&item.path) {
+                                self.conflict_resolver.open(item.path.clone(), content);
+                            }
+                        } else {
+                            self.update_active_diff();
+                        }
+                    }
+                }
+                _ => {}
+            },
 
             // ':' or F1: Open Command Palette
             KeyCode::Char(':') | KeyCode::F(1) => {
@@ -765,30 +976,13 @@ impl App {
 
             // 'e': Open external editor on selected file
             KeyCode::Char('e') => {
-                let filtered = self.filtered_files();
-                if let Some(item) = filtered.get(self.changes_view.file_scroll.selected_index) {
-                    let path = std::path::PathBuf::from(&item.path);
-                    if let Ok(_) = open_external_editor(&path) {
-                        self.refresh_git_status();
-                        self.last_status = Some(format!("Edited {}", item.path));
-                    }
-                }
+                self.open_selected_in_editor();
             }
 
             // 'R': Refresh GitHub data
             KeyCode::Char('R') => {
                 self.refresh_github();
                 self.last_status = Some("Refreshed GitHub PRs, Actions, and Alerts".to_string());
-            }
-
-            // Ctrl+P: AI Draft Pull Request
-            KeyCode::Char('p') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.trigger_ai_pr_draft();
-            }
-
-            // Ctrl+F: AI Analyze CI Failure
-            KeyCode::Char('f') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.trigger_ai_ci_analysis();
             }
 
             // Worktree actions in Worktrees tab
@@ -878,6 +1072,14 @@ impl App {
         }
     }
 
+    /// Extract GitHub repository target from current origin remote.
+    pub fn github_target(&self) -> Option<GitHubRepoTarget> {
+        self.git_service
+            .as_ref()
+            .and_then(|git| git.remote_url(Some("origin")))
+            .and_then(|url| GitHubRepoTarget::from_remote_url(&url))
+    }
+
     /// Mouse event handler.
     pub fn handle_mouse(&mut self, mouse: MouseEvent) {
         let (x, y) = (mouse.column, mouse.row);
@@ -895,6 +1097,22 @@ impl App {
         // Left-Click when context menu is open
         if self.context_menu.is_open {
             self.context_menu.close();
+            return;
+        }
+
+        // Click on Branch switcher header button
+        if self.layout_areas.hits_branch(x, y)
+            && mouse.kind == MouseEventKind::Down(MouseButton::Left)
+        {
+            self.open_branch_switcher();
+            return;
+        }
+
+        // Click on Sync / Remote Diff header button
+        if self.layout_areas.hits_sync(x, y)
+            && mouse.kind == MouseEventKind::Down(MouseButton::Left)
+        {
+            self.open_remote_diff_preview();
             return;
         }
 
@@ -938,6 +1156,23 @@ impl App {
             self.focused_pane = FocusedPane::DirectoryMap;
             match mouse.kind {
                 MouseEventKind::Down(MouseButton::Left) => {
+                    if self.git_service.is_none() {
+                        let cur_dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+                        match GitService::init_repo(&cur_dir) {
+                            Ok(_) => {
+                                if let Ok(git) = GitService::open(&cur_dir) {
+                                    self.git_service = Some(git);
+                                }
+                                self.refresh_git_status();
+                                self.last_status = Some("Initialized Git repository".to_string());
+                            }
+                            Err(e) => {
+                                self.last_status = Some(format!("Init repo failed: {}", e));
+                            }
+                        }
+                        return;
+                    }
+
                     let rel_y = y.saturating_sub(self.layout_areas.left_pane.y + 1) as usize;
                     if self.dir_map.scroll.handle_click_row(rel_y).is_some() {
                         let filter = self.dir_map.apply_selection();
@@ -980,12 +1215,23 @@ impl App {
                             self.alerts_view.scroll.handle_click_row(rel_y);
                         }
                         AppTab::Changes => {
-                            if self
+                            if let Some(btn_action) = self.changes_view.hit_test_action_buttons(x, y) {
+                                match btn_action {
+                                    ChangesButtonAction::CommitAndSync => self.commit_staged(),
+                                    ChangesButtonAction::AiGenerate => self.trigger_ai_generate_commit(),
+                                    ChangesButtonAction::AiReview => self.trigger_ai_review(),
+                                    ChangesButtonAction::StashAll => self.execute_palette_action("stash"),
+                                    ChangesButtonAction::DiscardSafe => self.safe_discard_selected(),
+                                }
+                            } else if let Some(focus) = self.changes_view.hit_test_inputs(x, y) {
+                                self.changes_view.focus = focus;
+                            } else if self
                                 .changes_view
                                 .file_scroll
                                 .handle_click_row(rel_y)
                                 .is_some()
                             {
+                                self.changes_view.focus = ChangesFocus::FileList;
                                 self.update_active_diff();
                             }
                         }
@@ -1021,6 +1267,15 @@ impl App {
         match action {
             ContextMenuAction::ToggleStage => self.toggle_stage_selected(),
             ContextMenuAction::SafeDiscard => self.safe_discard_selected(),
+            ContextMenuAction::OpenEditor => {
+                self.open_selected_in_editor();
+            }
+            ContextMenuAction::RevealFileManager => {
+                self.reveal_selected_in_file_manager();
+            }
+            ContextMenuAction::StashFile => {
+                self.stash_selected_file();
+            }
             ContextMenuAction::CopyPath => {
                 if let Some(item) = self
                     .filtered_files()
@@ -1049,15 +1304,78 @@ impl App {
                 if let Some(git) = &self.git_service {
                     let _ = git.stage_all();
                     self.refresh_git_status();
+                    self.last_status = Some("Staged all files".to_string());
                 }
             }
             "unstage_all" => {
                 if let Some(git) = &self.git_service {
                     let _ = git.unstage_all();
                     self.refresh_git_status();
+                    self.last_status = Some("Unstaged all files".to_string());
                 }
             }
             "commit" => self.commit_staged(),
+            "push" => {
+                if let Some(git) = &self.git_service {
+                    match git.cli_push() {
+                        Ok(msg) => {
+                            self.last_status = Some(format!("Push successful: {}", msg));
+                            self.refresh_git_status();
+                        }
+                        Err(e) => {
+                            self.last_status = Some(format!("Push failed: {}", e));
+                        }
+                    }
+                }
+            }
+            "pull" => {
+                if let Some(git) = &self.git_service {
+                    match git.cli_pull() {
+                        Ok(msg) => {
+                            self.last_status = Some(format!("Pull successful: {}", msg));
+                            self.refresh_git_status();
+                        }
+                        Err(e) => {
+                            self.last_status = Some(format!("Pull failed: {}", e));
+                        }
+                    }
+                }
+            }
+            "stash" => {
+                if let Some(git) = &self.git_service {
+                    match git.cli_stash_save("Prowly stash") {
+                        Ok(msg) => {
+                            self.last_status = Some(format!("Stashed: {}", msg));
+                            self.refresh_git_status();
+                        }
+                        Err(e) => {
+                            self.last_status = Some(format!("Stash failed: {}", e));
+                        }
+                    }
+                }
+            }
+            "stash_pop" => {
+                if let Some(git) = &self.git_service {
+                    match git.cli_stash_pop() {
+                        Ok(msg) => {
+                            self.last_status = Some(format!("Popped stash: {}", msg));
+                            self.refresh_git_status();
+                        }
+                        Err(e) => {
+                            self.last_status = Some(format!("Stash pop failed: {}", e));
+                        }
+                    }
+                }
+            }
+            "switch_branch" => {
+                self.open_branch_switcher();
+            }
+            "remote_diff" => {
+                self.open_remote_diff_preview();
+            }
+            "rebase" => {
+                self.open_rebase_modal();
+            }
             "tab_changes" => self.active_tab = AppTab::Changes,
             "tab_prs" => self.active_tab = AppTab::Prs,
             "tab_actions" => self.active_tab = AppTab::Actions,
@@ -1137,25 +1455,237 @@ impl App {
         }
     }
 
-    /// Commit staged changes using summary input.
+    /// Commit staged changes using summary and description inputs, then push (Commit & Sync).
     pub fn commit_staged(&mut self) {
-        let summary = if self.changes_view.commit_summary.is_empty() {
-            "chore: update files".to_string()
+        let summary = if self.changes_view.commit_summary.trim().is_empty() {
+            self.last_status = Some("Please enter a commit message or press Ctrl+G for AI message".to_string());
+            return;
         } else {
-            self.changes_view.commit_summary.clone()
+            self.changes_view.commit_summary.trim().to_string()
+        };
+
+        let desc = if self.changes_view.commit_description.trim().is_empty() {
+            None
+        } else {
+            Some(self.changes_view.commit_description.trim())
         };
 
         if let Some(git) = &self.git_service {
-            match git.commit(&summary) {
+            match git.commit_with_description(&summary, desc) {
                 Ok(oid) => {
-                    self.last_status = Some(format!("Committed: {}", &oid.to_string()[..7]));
+                    let short_oid = &oid.to_string()[..7.min(oid.to_string().len())];
+                    let push_status = match git.cli_push() {
+                        Ok(_) => " & Synced (pushed)".to_string(),
+                        Err(e) => format!(" (push warning: {})", e),
+                    };
+                    self.last_status = Some(format!("Committed: {}{}", short_oid, push_status));
                     self.changes_view.commit_summary.clear();
+                    self.changes_view.commit_description.clear();
+                    self.changes_view.focus = ChangesFocus::FileList;
                     self.refresh_git_status();
                 }
                 Err(e) => {
                     self.last_status = Some(format!("Commit failed: {}", e));
                 }
             }
+        }
+    }
+
+    /// Open currently selected file in configured or preferred external editor.
+    pub fn open_selected_in_editor(&mut self) {
+        let filtered = self.filtered_files();
+        if let Some(item) = filtered.get(self.changes_view.file_scroll.selected_index) {
+            let path = std::path::PathBuf::from(&item.path);
+            let pref = self.config.editor.command.as_deref();
+            if open_external_editor_with_preference(&path, pref).is_ok() {
+                self.refresh_git_status();
+                self.last_status = Some(format!("Edited {}", item.path));
+            }
+        }
+    }
+
+    /// Reveal currently selected file in OS file manager.
+    pub fn reveal_selected_in_file_manager(&mut self) {
+        let filtered = self.filtered_files();
+        if let Some(item) = filtered.get(self.changes_view.file_scroll.selected_index) {
+            let path = std::path::PathBuf::from(&item.path);
+            if reveal_in_file_manager(&path).is_ok() {
+                self.last_status = Some(format!("Opened in file manager: {}", item.path));
+            }
+        }
+    }
+
+    /// Stash only the currently selected file.
+    pub fn stash_selected_file(&mut self) {
+        let filtered = self.filtered_files();
+        if let Some(item) = filtered.get(self.changes_view.file_scroll.selected_index) {
+            if let Some(git) = &self.git_service {
+                let msg = format!("Stashed file {}", item.path);
+                if git.cli_stash_save(&msg).is_ok() {
+                    self.last_status = Some(msg);
+                    self.refresh_git_status();
+                }
+            }
+        }
+    }
+
+    /// Open Quick Branch Switcher modal.
+    pub fn open_branch_switcher(&mut self) {
+        if let Some(git) = &self.git_service {
+            if let Ok(branches) = git.list_branches() {
+                let curr = self.repo_status.branch.clone();
+                let prev = self.previous_branch.clone();
+                self.branch_switcher.open(curr, branches, prev);
+            }
+        }
+    }
+
+    /// Open Remote Diff Preview dropdown.
+    pub fn open_remote_diff_preview(&mut self) {
+        if let Some(git) = &self.git_service {
+            if let Ok((unpushed, unpulled)) = git.get_unpushed_unpulled_commits() {
+                let upstream = self.repo_status.upstream.clone();
+                self.remote_diff_preview.open(unpushed, unpulled, upstream);
+            }
+        }
+    }
+
+    /// Open Quick Interactive Rebase modal.
+    pub fn open_rebase_modal(&mut self) {
+        if let Some(git) = &self.git_service {
+            if let Ok(commits) = crate::git::rebase::list_recent_commits(git.workdir(), 10) {
+                self.rebase_modal.open(commits);
+            }
+        }
+    }
+
+    /// Checkout currently selected PR in PRs tab.
+    pub fn checkout_selected_pr(&mut self) {
+        let target = self
+            .git_service
+            .as_ref()
+            .and_then(|g| g.remote_url(None))
+            .and_then(|url| GitHubRepoTarget::from_remote_url(&url));
+
+        if let (Some(target), Some(git), Some(pr)) = (target, &self.git_service, self.prs_view.selected_pr().cloned()) {
+            match self.github_service.checkout_pr_locally(&target, pr.number, &pr.head_branch, git.workdir()) {
+                Ok(msg) => {
+                    self.last_status = Some(msg);
+                    self.refresh_git_status();
+                }
+                Err(e) => {
+                    self.last_status = Some(format!("PR checkout failed: {}", e));
+                }
+            }
+        }
+    }
+
+    /// Rerun selected Actions workflow job.
+    pub fn rerun_selected_action_job(&mut self) {
+        let target = self
+            .git_service
+            .as_ref()
+            .and_then(|g| g.remote_url(None))
+            .and_then(|url| GitHubRepoTarget::from_remote_url(&url));
+
+        if let (Some(target), Some(run)) = (target, self.actions_view.selected_run().cloned()) {
+            let gh = self.github_service.clone();
+            if let Some(sender) = self.event_sender.clone() {
+                tokio::spawn(async move {
+                    let res = gh.rerun_workflow_run(&target, run.id).await;
+                    let _ = sender.send(AppEvent::GitHubWorkflowRerunResult(res));
+                });
+            }
+        }
+    }
+
+    /// Trigger full query in AI assistant modal using active LLM client.
+    pub fn trigger_ai_assistant_query(&mut self) {
+        self.ai_modal.is_loading = true;
+        let query = self.ai_modal.input_query.clone();
+        let ctx = self.capture_ai_context();
+        let client = crate::ai::create_ai_client(&self.config.ai);
+        let has_key = self.config.ai.api_key.is_some() || self.config.ai.provider == crate::ai::AiProvider::Ollama;
+        if !has_key {
+            let response = format!(
+                "󱚣 AI Assistant response for '{}':\n\n• Recommendation: Code is clean and staged files are ready.\n• Conventional Commit suggested: feat: implement feature changes\n• Tip: Configure your AI API key in ~/.config/prowly/config.toml to enable live LLM integration.",
+                query
+            );
+            self.ai_modal.set_response(response, None);
+            return;
+        }
+
+        let lang = self.config.language;
+        let sys = "You are Prowly, an expert AI assistant inside a modern Git/GitHub TUI client. Provide concise answers and include unified diff patches in ```diff code blocks when recommending changes.";
+        let prompt_text = format!(
+            "User Question: {}\n\nContext:\n{}\n\nLanguage: {}\nPlease answer concisely and provide any proposed patch or command in markdown blocks.",
+            query,
+            ctx.summary(),
+            lang.code()
+        );
+        let ai_prompt = crate::ai::AiPrompt::system_and_user(sys, prompt_text);
+
+        if let Some(sender) = self.event_sender.clone() {
+            tokio::spawn(async move {
+                match client.complete(&ai_prompt).await {
+                    Ok(resp) => {
+                        let content = resp.content;
+                        let patch = if content.contains("```diff") {
+                            content
+                                .split("```diff")
+                                .nth(1)
+                                .and_then(|s| s.split("```").next())
+                                .map(|s| s.trim().to_string())
+                        } else {
+                            None
+                        };
+                        let _ = sender.send(AppEvent::AiAssistantResponseReceived(Ok((content, patch))));
+                    }
+                    Err(e) => {
+                        let _ = sender.send(AppEvent::AiAssistantResponseReceived(Err(e.to_string())));
+                    }
+                }
+            });
+        } else if tokio::runtime::Handle::try_current().is_err() {
+            match block_on_safe(client.complete(&ai_prompt)) {
+                Ok(resp) => {
+                    let content = resp.content;
+                    let patch = if content.contains("```diff") {
+                        content
+                            .split("```diff")
+                            .nth(1)
+                            .and_then(|s| s.split("```").next())
+                            .map(|s| s.trim().to_string())
+                    } else {
+                        None
+                    };
+                    self.ai_modal.set_response(content, patch);
+                }
+                Err(e) => {
+                    self.ai_modal.set_response(format!("AI Error: {}", e), None);
+                }
+            }
+        }
+    }
+
+    /// Apply AI modal proposed patch or suggestion.
+    pub fn apply_ai_suggestion(&mut self) {
+        if let Some(ref patch) = self.ai_modal.proposed_patch {
+            if let Some(git) = &self.git_service {
+                let temp_patch_file = git.workdir().join(".prowly_ai_patch.diff");
+                if std::fs::write(&temp_patch_file, patch).is_ok() {
+                    let _ = std::process::Command::new("git")
+                        .current_dir(git.workdir())
+                        .args(["apply", ".prowly_ai_patch.diff"])
+                        .output();
+                    let _ = std::fs::remove_file(temp_patch_file);
+                    self.refresh_git_status();
+                    self.last_status = Some("Applied AI patch successfully!".to_string());
+                    self.ai_modal.close();
+                }
+            }
+        } else {
+            self.last_status = Some("No patch to apply".to_string());
         }
     }
 
@@ -1421,11 +1951,54 @@ impl App {
             self.conflict_resolver
                 .render(frame, &self.theme, &self.icons, area);
         }
+
+        // 9. Quick Branch Switcher Overlay (if open)
+        if self.branch_switcher.is_open {
+            self.branch_switcher
+                .render(frame, &self.theme, &self.icons, area);
+        }
+
+        // 10. Remote Diff Preview Overlay (if open)
+        if self.remote_diff_preview.is_open {
+            self.remote_diff_preview
+                .render(frame, &self.theme, &self.icons, area);
+        }
+
+        // 11. Quick Rebase Modal Overlay (if open)
+        if self.rebase_modal.is_open {
+            self.rebase_modal
+                .render(frame, &self.theme, &self.icons, area);
+        }
     }
 
     fn render_header(&self, frame: &mut Frame) {
         let top_area = self.layout_areas.header_top;
         let bottom_area = self.layout_areas.header_bottom;
+
+        // Path formatting
+        let repo_path = if let Some(git) = &self.git_service {
+            let p = git.workdir();
+            if let Ok(home) = std::env::var("HOME") {
+                let home_path = std::path::Path::new(&home);
+                if let Ok(rel) = p.strip_prefix(home_path) {
+                    format!("~/{}", rel.display())
+                } else {
+                    p.display().to_string()
+                }
+            } else {
+                p.display().to_string()
+            }
+        } else {
+            "~/prowly".to_string()
+        };
+
+        // Sync status determination
+        let is_sync_needed = self.repo_status.ahead > 0 || self.repo_status.behind > 0;
+        let (sync_icon, sync_label, sync_color) = if is_sync_needed {
+            (self.icons.get(crate::ui::IconId::CheckWarning), "Sync Needed", self.theme.warning)
+        } else {
+            (self.icons.check_success(), "Synced", self.theme.success)
+        };
 
         // Top Header Row
         let top_line = Line::from(vec![
@@ -1435,7 +2008,7 @@ impl App {
                     .fg(self.theme.primary)
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::styled(" [  ~/prowly ] ", Style::default().fg(self.theme.dim_fg)),
+            Span::styled(format!(" [  {} ] ", repo_path), Style::default().fg(self.theme.dim_fg)),
             Span::styled(
                 format!(
                     " [ {} {} ({}{} {}{}) ] ",
@@ -1449,8 +2022,8 @@ impl App {
                 Style::default().fg(self.theme.info),
             ),
             Span::styled(
-                format!(" [ {} Synced ] ", self.icons.check_success()),
-                Style::default().fg(self.theme.success),
+                format!(" [ {} {} ] ", sync_icon, sync_label),
+                Style::default().fg(sync_color),
             ),
         ]);
         frame.render_widget(
@@ -1474,22 +2047,40 @@ impl App {
         frame.render_widget(help_p, self.layout_areas.help_button);
 
         // Bottom Header Row
+        let gh_target = self.github_target();
+        let repo_label = if let Some(target) = gh_target {
+            format!(" {}/{} ({})", target.owner, target.repo, self.i18n.t("header.private"))
+        } else if let Some(git) = &self.git_service {
+            let name = git.workdir().file_name().and_then(|n| n.to_str()).unwrap_or("repo");
+            format!(" local @ {} ({})", name, self.i18n.t("header.private"))
+        } else {
+            format!(" user @ repo ({})", self.i18n.t("header.private"))
+        };
+
+        let ci_label = if let Some(run) = self.actions_view.runs.first() {
+            let conclusion = run.conclusion.as_deref().unwrap_or("in_progress");
+            let icon = if conclusion == "success" {
+                self.icons.check_success()
+            } else if conclusion == "failure" {
+                self.icons.check_failed()
+            } else {
+                self.icons.check_running()
+            };
+            format!("{} CI: #{} {}", icon, run.id, conclusion)
+        } else {
+            format!("{} CI: No runs", self.icons.check_success())
+        };
+
+        let unread_count = self.alerts_view.alerts.iter().filter(|a| a.unread).count();
+        let alert_label = format!("{} Alerts: {}", self.icons.get(crate::ui::IconId::Alert), unread_count);
+
         let bottom_line = Line::from(vec![
             Span::raw("  "),
-            Span::styled(
-                format!(" user @ repo ({})", self.i18n.t("header.private")),
-                Style::default().fg(self.theme.dim_fg),
-            ),
+            Span::styled(repo_label, Style::default().fg(self.theme.dim_fg)),
             Span::raw("    "),
-            Span::styled(
-                format!("{} CI: #42 Passed", self.icons.check_success()),
-                Style::default().fg(self.theme.success),
-            ),
+            Span::styled(ci_label, Style::default().fg(self.theme.success)),
             Span::raw("    "),
-            Span::styled(
-                format!("{} Alerts: 0", self.icons.get(crate::ui::IconId::Alert)),
-                Style::default().fg(self.theme.dim_fg),
-            ),
+            Span::styled(alert_label, Style::default().fg(self.theme.dim_fg)),
         ]);
         frame.render_widget(
             Paragraph::new(bottom_line).style(Style::default().bg(self.theme.header_bg)),
@@ -1550,8 +2141,15 @@ impl App {
                 let diff = self.current_diff.clone();
                 let theme = self.theme.clone();
                 let icons = self.icons.clone();
-                self.changes_view
-                    .render(frame, &filtered, &diff, &theme, &self.i18n, &icons, inner);
+                let params = ChangesRenderParams {
+                    files: &filtered,
+                    active_diff: &diff,
+                    theme: &theme,
+                    i18n: &self.i18n,
+                    icons: &icons,
+                    area: inner,
+                };
+                self.changes_view.render(frame, params);
             }
             AppTab::Prs => {
                 let theme = self.theme.clone();

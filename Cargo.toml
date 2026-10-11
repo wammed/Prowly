@@ -29,6 +29,7 @@ octocrab = "0.42"
 
 # Syntax highlighting & formatting
 syntect = "5.2"
+termimad = "0.31"
 
 # HTTP & AI clients
 reqwest = { version = "0.12", features = ["json", "stream"] }

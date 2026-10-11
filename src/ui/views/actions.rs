@@ -314,3 +314,9 @@ impl ActionsView {
         }
     }
 }
+
+impl Default for ActionsView {
+    fn default() -> Self {
+        Self::new()
+    }
+}

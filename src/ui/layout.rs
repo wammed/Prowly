@@ -11,6 +11,8 @@ pub struct LayoutAreas {
     pub header_bottom: Rect,
     pub ask_ai_button: Rect,
     pub help_button: Rect,
+    pub branch_button: Rect,
+    pub sync_button: Rect,
     pub body: Rect,
     pub left_pane: Rect,
     pub right_pane: Rect,
@@ -44,7 +46,25 @@ impl LayoutAreas {
         let header_top = header_rows[0];
         let header_bottom = header_rows[1];
 
-        // Top right buttons: [ 󱚣 Ask AI ] (12 cols) and [? Help] (8 cols)
+        // Header buttons on the left/middle:
+        // Prowly title (10), Path (~18), Branch button (~22), Sync status (~14)
+        let branch_x = header_top.x + 30;
+        let branch_button = Rect {
+            x: branch_x.min(header_top.width),
+            y: header_top.y,
+            width: 24.min(header_top.width.saturating_sub(branch_x)),
+            height: 1,
+        };
+
+        let sync_x = branch_x + 25;
+        let sync_button = Rect {
+            x: sync_x.min(header_top.width),
+            y: header_top.y,
+            width: 16.min(header_top.width.saturating_sub(sync_x)),
+            height: 1,
+        };
+
+        // Top right buttons: [ 󱚣 Ask AI ] (13 cols) and [? Help] (9 cols)
         let ask_ai_width = 13;
         let help_width = 9;
         let ask_ai_x = header_top.x
@@ -77,7 +97,7 @@ impl LayoutAreas {
         let left_pane = body_cols[0];
         let right_pane = body_cols[1];
 
-        // Split Right Pane: Tabs bar (1 line) -> Content area
+        // Split Right Pane: Tabs bar (2 lines) -> Content area
         let right_split = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Length(2), Constraint::Min(3)])
@@ -93,6 +113,8 @@ impl LayoutAreas {
             header_bottom,
             ask_ai_button,
             help_button,
+            branch_button,
+            sync_button,
             body,
             left_pane,
             right_pane,
@@ -110,6 +132,16 @@ impl LayoutAreas {
     /// Check if coordinates (x, y) hit the Help button in header.
     pub fn hits_help(&self, x: u16, y: u16) -> bool {
         contains_point(self.help_button, x, y)
+    }
+
+    /// Check if coordinates (x, y) hit the branch button in header.
+    pub fn hits_branch(&self, x: u16, y: u16) -> bool {
+        contains_point(self.branch_button, x, y)
+    }
+
+    /// Check if coordinates (x, y) hit the remote sync indicator in header.
+    pub fn hits_sync(&self, x: u16, y: u16) -> bool {
+        contains_point(self.sync_button, x, y)
     }
 
     /// Check if coordinates (x, y) are inside the left directory map pane.

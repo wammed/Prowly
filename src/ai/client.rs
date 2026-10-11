@@ -25,20 +25,15 @@ pub enum AiError {
 }
 
 /// Supported AI providers for BYOK configuration.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum AiProvider {
+    #[default]
     OpenAi,
     Anthropic,
     Gemini,
     Ollama,
     Custom,
-}
-
-impl Default for AiProvider {
-    fn default() -> Self {
-        Self::OpenAi
-    }
 }
 
 impl AiProvider {
