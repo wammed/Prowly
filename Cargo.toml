@@ -1,0 +1,46 @@
+[package]
+name = "prowly"
+version = "0.1.0"
+edition = "2021"
+authors = ["Prowly Contributors"]
+description = "Terminal Git & GitHub client with omnipresent AI"
+license = "MIT"
+
+[dependencies]
+# TUI & Terminal
+ratatui = { version = "0.29", features = ["serde", "crossterm"] }
+crossterm = { version = "0.28", features = ["event-stream"] }
+
+# Async runtime & concurrency
+tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1"
+futures = "0.3"
+async-trait = "0.1"
+
+# Serialization & Configuration
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+dirs = "5.0"
+
+# Git & GitHub
+git2 = "0.19"
+octocrab = "0.42"
+
+# Syntax highlighting & formatting
+syntect = "5.2"
+
+# HTTP & AI clients
+reqwest = { version = "0.12", features = ["json", "stream"] }
+
+# Clipboard
+arboard = "3.4"
+
+# Caching & Utilities
+lru = "0.13"
+thiserror = "2.0"
+anyhow = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+
+[dev-dependencies]
+tempfile = "3.17"

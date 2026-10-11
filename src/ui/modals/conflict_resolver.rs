@@ -1,0 +1,247 @@
+//! Visual conflict resolution modal component.
+
+use crate::git::conflict::{ConflictChoice, ConflictHunk};
+use crate::ui::icons::Icons;
+use crate::ui::theme::Theme;
+use ratatui::{
+    layout::{Constraint, Direction, Layout, Rect},
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
+    widgets::{Block, BorderType, Borders, Clear, Paragraph},
+    Frame,
+};
+
+/// Conflict resolver modal state.
+#[derive(Debug, Clone)]
+pub struct ConflictResolverModal {
+    pub is_open: bool,
+    pub file_path: String,
+    pub original_content: String,
+    pub hunks: Vec<ConflictHunk>,
+    pub current_hunk_idx: usize,
+    pub status_message: Option<String>,
+}
+
+impl Default for ConflictResolverModal {
+    fn default() -> Self {
+        Self {
+            is_open: false,
+            file_path: String::new(),
+            original_content: String::new(),
+            hunks: Vec::new(),
+            current_hunk_idx: 0,
+            status_message: None,
+        }
+    }
+}
+
+impl ConflictResolverModal {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Open resolver for a conflicted file.
+    pub fn open(&mut self, file_path: String, content: String) {
+        let (hunks, _) = crate::git::conflict::parse_conflicts(&content);
+        self.is_open = true;
+        self.file_path = file_path;
+        self.original_content = content;
+        self.hunks = hunks;
+        self.current_hunk_idx = 0;
+        self.status_message = None;
+    }
+
+    pub fn close(&mut self) {
+        self.is_open = false;
+    }
+
+    pub fn current_hunk(&self) -> Option<&ConflictHunk> {
+        self.hunks.get(self.current_hunk_idx)
+    }
+
+    pub fn current_hunk_mut(&mut self) -> Option<&mut ConflictHunk> {
+        self.hunks.get_mut(self.current_hunk_idx)
+    }
+
+    pub fn next_hunk(&mut self) {
+        if self.current_hunk_idx + 1 < self.hunks.len() {
+            self.current_hunk_idx += 1;
+        }
+    }
+
+    pub fn previous_hunk(&mut self) {
+        if self.current_hunk_idx > 0 {
+            self.current_hunk_idx -= 1;
+        }
+    }
+
+    pub fn resolve_current(&mut self, choice: ConflictChoice) {
+        if let Some(hunk) = self.current_hunk_mut() {
+            hunk.choice = Some(choice);
+            hunk.custom_resolution = None;
+        }
+        self.next_hunk();
+    }
+
+    pub fn set_ai_resolution(&mut self, resolved_code: String) {
+        if let Some(hunk) = self.current_hunk_mut() {
+            hunk.custom_resolution = Some(resolved_code);
+            hunk.choice = None;
+        }
+    }
+
+    pub fn build_resolved_content(&self) -> String {
+        crate::git::conflict::apply_resolutions(&self.original_content, &self.hunks)
+    }
+
+    pub fn render(&self, frame: &mut Frame, theme: &Theme, icons: &Icons, viewport: Rect) {
+        if !self.is_open {
+            return;
+        }
+
+        let width = 90.min(viewport.width.saturating_sub(4));
+        let height = 30.min(viewport.height.saturating_sub(4));
+        let x = (viewport.width.saturating_sub(width)) / 2;
+        let y = (viewport.height.saturating_sub(height)) / 2;
+        let area = Rect::new(x, y, width, height);
+
+        frame.render_widget(Clear, area);
+
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Double)
+            .border_style(Style::default().fg(theme.warning))
+            .title(Span::styled(
+                format!(
+                    " {} RESOLVE MERGE CONFLICTS: {} ",
+                    icons.conflict(),
+                    self.file_path
+                ),
+                Style::default()
+                    .fg(theme.warning)
+                    .add_modifier(Modifier::BOLD),
+            ))
+            .style(Style::default().bg(theme.bg));
+
+        let inner = block.inner(area);
+        frame.render_widget(block, area);
+
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3),
+                Constraint::Percentage(50),
+                Constraint::Percentage(35),
+                Constraint::Length(2),
+            ])
+            .split(inner);
+
+        // 1. Header with hunk counter
+        let total = self.hunks.len();
+        let curr = if total > 0 {
+            self.current_hunk_idx + 1
+        } else {
+            0
+        };
+        let header_p = Paragraph::new(vec![Line::from(vec![
+            Span::styled(
+                format!("Conflict Hunk {} of {}", curr, total),
+                Style::default()
+                    .fg(theme.primary)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "  (Use Tab / n / p to navigate hunks)",
+                Style::default().fg(theme.dim_fg),
+            ),
+        ])]);
+        frame.render_widget(header_p, chunks[0]);
+
+        // 2. Comparison split (Current vs Incoming)
+        if let Some(hunk) = self.current_hunk() {
+            let comp_chunks = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+                .split(chunks[1]);
+
+            // Left: Current (HEAD)
+            let curr_block = Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(Style::default().fg(theme.primary))
+                .title(format!(" Current: {} ", hunk.current_branch_name));
+            let curr_inner = curr_block.inner(comp_chunks[0]);
+            frame.render_widget(curr_block, comp_chunks[0]);
+
+            let curr_lines: Vec<Line> = hunk
+                .current_lines
+                .iter()
+                .map(|l| Line::from(Span::styled(l, Style::default().fg(theme.diff_add_fg))))
+                .collect();
+            frame.render_widget(Paragraph::new(curr_lines), curr_inner);
+
+            // Right: Incoming
+            let inc_block = Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(Style::default().fg(Color::Rgb(163, 113, 247)))
+                .title(format!(" Incoming: {} ", hunk.incoming_branch_name));
+            let inc_inner = inc_block.inner(comp_chunks[1]);
+            frame.render_widget(inc_block, comp_chunks[1]);
+
+            let inc_lines: Vec<Line> = hunk
+                .incoming_lines
+                .iter()
+                .map(|l| Line::from(Span::styled(l, Style::default().fg(theme.diff_mod_fg))))
+                .collect();
+            frame.render_widget(Paragraph::new(inc_lines), inc_inner);
+
+            // 3. Resolution preview
+            let prev_block = Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(Style::default().fg(theme.success))
+                .title(" Merged Result Preview ");
+            let prev_inner = prev_block.inner(chunks[2]);
+            frame.render_widget(prev_block, chunks[2]);
+
+            let resolved = hunk.resolved_lines();
+            let res_lines: Vec<Line> = resolved
+                .iter()
+                .map(|l| Line::from(Span::styled(l.clone(), Style::default().fg(theme.fg))))
+                .collect();
+            frame.render_widget(Paragraph::new(res_lines), prev_inner);
+        }
+
+        // 4. Action toolbar
+        let actions = vec![Line::from(vec![
+            Span::styled(
+                "[ 1: Current ] ",
+                Style::default()
+                    .fg(theme.primary)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "[ 2: Incoming ] ",
+                Style::default()
+                    .fg(Color::Rgb(163, 113, 247))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("[ 3: Both ] ", Style::default().fg(theme.fg)),
+            Span::styled(
+                "[ 4/Ctrl+M: AI Smart Merge ] ",
+                Style::default()
+                    .fg(theme.accent)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "[ Enter: Save ] ",
+                Style::default()
+                    .fg(theme.success)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("[ Esc: Cancel ]", Style::default().fg(theme.dim_fg)),
+        ])];
+        frame.render_widget(Paragraph::new(actions), chunks[3]);
+    }
+}
