@@ -40,13 +40,11 @@ where
     R: Send,
 {
     match tokio::runtime::Handle::try_current() {
-        Ok(handle) => {
-            std::thread::scope(|s| {
-                s.spawn(|| handle.block_on(future))
-                    .join()
-                    .expect("async execution thread panicked")
-            })
-        }
+        Ok(handle) => std::thread::scope(|s| {
+            s.spawn(|| handle.block_on(future))
+                .join()
+                .expect("async execution thread panicked")
+        }),
         Err(_) => {
             let rt = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
@@ -548,10 +546,9 @@ impl App {
                         let lang = self.config.language;
                         if let Some(sender) = self.event_sender.clone() {
                             tokio::spawn(async move {
-                                let res =
-                                    smart_merge_conflict(&path, &hunk, client.as_ref(), lang)
-                                        .await
-                                        .map_err(|e| e.to_string());
+                                let res = smart_merge_conflict(&path, &hunk, client.as_ref(), lang)
+                                    .await
+                                    .map_err(|e| e.to_string());
                                 let _ = sender.send(AppEvent::AiMergeResolved(res));
                             });
                         } else if tokio::runtime::Handle::try_current().is_err() {

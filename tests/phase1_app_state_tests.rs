@@ -124,4 +124,3 @@ async fn test_app_initialization_inside_tokio_runtime() {
     let app = App::new(Config::default());
     assert!(!app.should_quit);
 }
-
