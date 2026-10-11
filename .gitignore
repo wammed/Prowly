@@ -26,3 +26,5 @@ rustc-ice-*.txt
 # blueprints
 Design.md
 implementation_roadmap.md
+HANDOVER.md
+HANDOVER.ja.md
