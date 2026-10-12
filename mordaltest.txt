@@ -1,21 +1,98 @@
-MIT License
+#!/usr/bin/env python3
+"""
+SecretMasker Interactive Test Tool
+リアルタイム端末マスク機能およびエディタ監視機能の検証用スクリプト
+"""
 
-Copyright (c) 2026 wammed
+import os
+import sys
+import time
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+# テスト用ダミーシークレット定義（外部サービス無効の安全な文字列）
+TEST_SECRETS = {
+    "GitHub PAT (ghp_)": "ghp_AbCdEfGhIjKlMnOpQrStUvWxYz0123456789",
+    "GitHub Fine-grained PAT": "github_pat_11ABCD12345_67890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890",
+    "AWS Access Key ID": "AKIAIOSFODNN7EXAMPLE",
+    "AWS Secret Access Key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+    "OpenAI API Key (Classic)": "sk-abc1234567890def1234567890abcdef1234",
+    "OpenAI Project Key": "sk-proj-abc1234567890abcdef1234567890abcdef1234567890abcdef1234567890abc",
+    "Slack Bot Token": "xoxb-123456789012-1234567890123-abcdefghijklmnopqrstuvwx",
+    "Slack User Token": "xoxp-123456789012-1234567890123-abcdefghijklmnopqrstuvwx",
+    "JSON Web Token (JWT)": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
+    "SSH Private Key Header": "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAACFwAAAAdzc2gtcn\n-----END OPENSSH PRIVATE KEY-----"
+}
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+def generate_log_lines():
+    """典型的なCI/CDや開発ログの文脈にシークレットを埋め込んだテスト行を生成"""
+    return [
+        f"[INFO] 2026-09-16 12:00:01 Authenticating to GitHub with token: {TEST_SECRETS['GitHub PAT (ghp_)']}",
+        f"[DEBUG] Git remote setup with fine-grained credential: {TEST_SECRETS['GitHub Fine-grained PAT']}",
+        f"[INFO] 2026-09-16 12:00:02 Initializing AWS Session: AWS_ACCESS_KEY_ID={TEST_SECRETS['AWS Access Key ID']} AWS_SECRET_ACCESS_KEY={TEST_SECRETS['AWS Secret Access Key']}",
+        f"[DEBUG] OpenAI client initialized with base_key={TEST_SECRETS['OpenAI API Key (Classic)']}",
+        f"[DEBUG] Project scoped key detected: OPENAI_API_KEY={TEST_SECRETS['OpenAI Project Key']}",
+        f"[INFO] 2026-09-16 12:00:03 Slack WebClient config: SLACK_BOT_TOKEN={TEST_SECRETS['Slack Bot Token']}",
+        f"[INFO] 2026-09-16 12:00:03 User context: token={TEST_SECRETS['Slack User Token']}",
+        f"[TRACE] Authorization: Bearer {TEST_SECRETS['JSON Web Token (JWT)']}",
+        f"[WARN] 2026-09-16 12:00:04 Exporting identity key file:\n{TEST_SECRETS['SSH Private Key Header']}",
+        "[SUCCESS] 2026-09-16 12:00:05 Pipeline execution completed."
+    ]
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+def run_terminal_stream_mode():
+    """1行ずつディレイを設けて標準出力へ流し、リアルタイムマスクの即時検知をテスト"""
+    print("\n--- [ターミナル ストリーミング テスト開始] ---")
+    print("※ リアルタイムマスク機能が有効な場合、即座に ***MASKED*** へ置換されるか確認してください。\n")
+    time.sleep(1)
+
+    lines = generate_log_lines()
+    for line in lines:
+        sys.stdout.write(line + "\n")
+        sys.stdout.flush()
+        time.sleep(0.8)
+
+    print("\n--- [ストリーミング 終了] ---\n")
+
+def run_file_generation_mode():
+    """エディタ（VS Code / Neovim等）で開くための平文ファイルを生成"""
+    filename = "secret_masker_test.log"
+    print(f"\n--- [ファイル生成モード] ---")
+    
+    lines = generate_log_lines()
+    full_content = "\n".join(lines) + "\n"
+    
+    with open(filename, "w", encoding="utf-8") as f:
+        f.write(full_content)
+
+    abs_path = os.path.abspath(filename)
+    print(f"ファイルを作成しました: {abs_path}")
+    print("\n検証手順:")
+    print(f"  1. お使いのエディタで `{filename}` を開く")
+    print("  2. SecretMaskerプラグイン/機能が平文のキーをインラインまたはハイライトでマスクするか確認")
+    print(f"  3. テスト後はファイルを削除: rm {filename}\n")
+
+def main():
+    while True:
+        print("=" * 50)
+        print(" SecretMasker Verification Tool")
+        print("=" * 50)
+        print("1. ターミナル出力テスト (逐次ストリーミング出力)")
+        print("2. ファイル保存テスト (エディタ検知・マスキング検証用)")
+        print("3. 両方を一括実行")
+        print("q. 終了")
+        
+        choice = input("\n選択肢を入力してください (1/2/3/q): ").strip().lower()
+        
+        if choice == "1":
+            run_terminal_stream_mode()
+        elif choice == "2":
+            run_file_generation_mode()
+        elif choice == "3":
+            run_terminal_stream_mode()
+            run_file_generation_mode()
+        elif choice in ("q", "quit", "exit"):
+            print("終了します。")
+            break
+        else:
+            print("無効な入力です。再度選択してください。\n")
+
+if __name__ == "__main__":
+    main()
