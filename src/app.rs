@@ -169,6 +169,9 @@ pub struct App {
 
     // Channel sender for background async tasks
     pub event_sender: Option<tokio::sync::mpsc::UnboundedSender<AppEvent>>,
+
+    /// Flag requesting full terminal clear and buffer reset on next frame
+    pub needs_clear: bool,
 }
 
 impl App {
@@ -191,6 +194,7 @@ impl App {
         }
 
         if let Some(ref git) = git_service {
+            let _ = std::env::set_current_dir(git.workdir());
             config.add_recent_repository(git.workdir().display().to_string());
         }
 
@@ -233,6 +237,7 @@ impl App {
             all_repo_files: Vec::new(),
             show_all_files: false,
             event_sender: None,
+            needs_clear: false,
         };
 
         app.refresh_git_status();
@@ -287,6 +292,7 @@ impl App {
     pub fn switch_repository(&mut self, path: &std::path::Path) {
         match GitService::open(path) {
             Ok(git) => {
+                let _ = std::env::set_current_dir(git.workdir());
                 let p_str = git.workdir().display().to_string();
                 self.config.add_recent_repository(p_str.clone());
                 let _ = self.config.save();
@@ -440,6 +446,7 @@ impl App {
             AppEvent::Mouse(mouse) => self.handle_mouse(mouse),
             AppEvent::Resize(w, h) => {
                 self.layout_areas = LayoutAreas::compute(Rect::new(0, 0, w, h));
+                self.needs_clear = true;
             }
             AppEvent::Tick => {}
             AppEvent::StatusMessage(msg) => {
@@ -934,6 +941,11 @@ impl App {
                 // Ctrl+,: Open Settings
                 KeyCode::Char(',') => {
                     self.open_settings();
+                    return;
+                }
+                // Ctrl+L: Redraw / clear terminal screen
+                KeyCode::Char('l') => {
+                    self.needs_clear = true;
                     return;
                 }
                 _ => {}
@@ -1802,12 +1814,17 @@ impl App {
     pub fn open_selected_in_editor(&mut self) {
         let filtered = self.filtered_files();
         if let Some(item) = filtered.get(self.changes_view.file_scroll.selected_index) {
-            let path = std::path::PathBuf::from(&item.path);
+            let full_path = if let Some(git) = &self.git_service {
+                git.workdir().join(&item.path)
+            } else {
+                std::path::PathBuf::from(&item.path)
+            };
             let pref = self.config.editor.command.as_deref();
-            if open_external_editor_with_preference(&path, pref).is_ok() {
+            if open_external_editor_with_preference(&full_path, pref).is_ok() {
                 self.refresh_git_status();
                 self.last_status = Some(format!("Edited {}", item.path));
             }
+            self.needs_clear = true;
         }
     }
 
@@ -1815,8 +1832,12 @@ impl App {
     pub fn reveal_selected_in_file_manager(&mut self) {
         let filtered = self.filtered_files();
         if let Some(item) = filtered.get(self.changes_view.file_scroll.selected_index) {
-            let path = std::path::PathBuf::from(&item.path);
-            if reveal_in_file_manager(&path).is_ok() {
+            let full_path = if let Some(git) = &self.git_service {
+                git.workdir().join(&item.path)
+            } else {
+                std::path::PathBuf::from(&item.path)
+            };
+            if reveal_in_file_manager(&full_path).is_ok() {
                 self.last_status = Some(format!("Opened in file manager: {}", item.path));
             }
         }
