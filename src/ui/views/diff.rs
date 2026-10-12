@@ -62,19 +62,35 @@ impl DiffView {
 
     /// Render visible portion of the diff into frame.
     pub fn render(&mut self, frame: &mut Frame, diff: &FileDiff, theme: &Theme, area: Rect) {
+        let mut title_spans = vec![
+            Span::styled(
+                " 󰈔 Diff: ",
+                Style::default()
+                    .fg(theme.primary)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                format!("{}  ", diff.file_path),
+                Style::default()
+                    .fg(theme.fg)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ];
+        title_spans.extend(crate::ui::capsule::diff_stat_bar(
+            diff.stats_added,
+            diff.stats_deleted,
+            theme.diff_add_fg,
+            theme.diff_del_fg,
+            theme.dim_fg,
+            theme.bg,
+        ));
+        title_spans.push(Span::raw(" "));
+
         let block = Block::default()
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(theme.border))
-            .title(Span::styled(
-                format!(
-                    " Diff: {} (+{} -{}) ",
-                    diff.file_path, diff.stats_added, diff.stats_deleted
-                ),
-                Style::default()
-                    .fg(theme.primary)
-                    .add_modifier(Modifier::BOLD),
-            ))
+            .title(Line::from(title_spans))
             .style(Style::default().bg(theme.bg));
 
         let inner = block.inner(area);

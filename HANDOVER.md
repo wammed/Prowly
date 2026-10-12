@@ -96,3 +96,11 @@ Last Updated: 2026-10-12
     3. Generous responsive sizing (up to 96 columns x 34 rows) with mouse wheel and keyboard scrolling for the Settings modal (`src/ui/modals/settings.rs`).
     4. Full bilingual documentation (`README.md` & `README.ja.md`).
     5. Complete automated test suite coverage with 66 tests passing.
+  - **Phase 7 (Modern GUI-Like Rich & Luxurious Aesthetic Elevation)**:
+    1. Capsule and pill badge rendering engine leveraging rounded Nerd Font powerline glyphs (`` / ``) with fallback (`src/ui/capsule.rs`).
+    2. Fully encapsulated top navigation bar (`PROWLY` brand badge, repository breadcrumb, branch & sync status split pill, AI status badge, desktop button capsules).
+    3. macOS Segmented Control-style tab bar with vibrant highlighted active pill and muted inactive capsules.
+    4. Pane focus accent and glowing corner indicator (`● ACTIVE`) on rounded window frames.
+    5. GitHub Desktop-style visual diff addition/deletion ratio gauge (`+N -M ■■■■□`), file status pills (`[M]`, `[+]`, `[-]`), and active row cursor bar (`▎`).
+    6. Native desktop-style bottom status bar with `NORMAL` mode badge, rounded keycap shortcuts (`[Tab] Panes`, `[Space] Stage`), AI co-pilot status, theme, and language chips.
+

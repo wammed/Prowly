@@ -273,6 +273,20 @@ impl OpenRepoModal {
         }
 
         let rect = self.modal_rect(viewport);
+
+        // Drop shadow behind open repo modal
+        if viewport.width > rect.width + 1 && viewport.height > rect.height + 1 {
+            let shadow_rect = Rect {
+                x: (rect.x + 1).min(viewport.width.saturating_sub(1)),
+                y: (rect.y + 1).min(viewport.height.saturating_sub(1)),
+                width: rect.width.min(viewport.width.saturating_sub(rect.x + 1)),
+                height: rect.height.min(viewport.height.saturating_sub(rect.y + 1)),
+            };
+            let shadow_block = Block::default()
+                .style(Style::default().bg(ratatui::style::Color::Rgb(12, 14, 20)));
+            frame.render_widget(shadow_block, shadow_rect);
+        }
+
         frame.render_widget(Clear, rect);
 
         let block = Block::default()

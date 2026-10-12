@@ -158,16 +158,26 @@ impl DirectoryMap {
             theme.border
         };
 
+        let mut title_spans = vec![Span::styled(
+            format!(" {} DIRECTORY MAP ", icons.folder_open()),
+            Style::default()
+                .fg(theme.primary)
+                .add_modifier(Modifier::BOLD),
+        )];
+        if is_focused {
+            title_spans.push(Span::styled(
+                " ● ACTIVE ",
+                Style::default()
+                    .fg(theme.border_focused)
+                    .add_modifier(Modifier::BOLD),
+            ));
+        }
+
         let block = Block::default()
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(border_color))
-            .title(Span::styled(
-                format!(" {} DIRECTORY MAP ", icons.folder_open()),
-                Style::default()
-                    .fg(theme.primary)
-                    .add_modifier(Modifier::BOLD),
-            ))
+            .title(Line::from(title_spans))
             .style(Style::default().bg(theme.bg));
 
         let inner = block.inner(area);

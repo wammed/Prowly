@@ -265,12 +265,12 @@ impl ChangesView {
                 };
 
                 let badge = item.status.badge();
-                let status_style = match badge {
-                    "M" => Style::default().fg(theme.diff_mod_fg),
-                    "+" => Style::default().fg(theme.diff_add_fg),
-                    "-" => Style::default().fg(theme.diff_del_fg),
-                    "!" => Style::default().fg(theme.conflict_fg),
-                    _ => Style::default().fg(theme.untracked_fg),
+                let (badge_fg, badge_bg) = match badge {
+                    "M" => (theme.bg, theme.diff_mod_fg),
+                    "+" => (theme.bg, theme.diff_add_fg),
+                    "-" => (theme.bg, theme.diff_del_fg),
+                    "!" => (theme.bg, theme.conflict_fg),
+                    _ => (theme.bg, theme.untracked_fg),
                 };
 
                 let line_style = if is_sel {
@@ -282,11 +282,29 @@ impl ChangesView {
                     Style::default().fg(theme.fg)
                 };
 
-                Line::from(vec![
+                let cursor_bar = if is_sel {
+                    Span::styled("▎", Style::default().fg(theme.primary).bg(theme.selection_bg))
+                } else {
+                    Span::styled(" ", Style::default().bg(theme.bg))
+                };
+
+                let parent_bg = if is_sel { theme.selection_bg } else { theme.bg };
+                let mut row_spans = vec![
+                    cursor_bar,
                     Span::styled(format!(" {} ", checkbox), line_style),
-                    Span::styled(format!("[{}] ", badge), status_style),
-                    Span::styled(item.path.clone(), line_style),
-                ])
+                ];
+                row_spans.extend(crate::ui::capsule::pill(
+                    None,
+                    badge,
+                    badge_fg,
+                    badge_bg,
+                    parent_bg,
+                    icons.use_nerd_font,
+                ));
+                row_spans.push(Span::raw(" "));
+                row_spans.push(Span::styled(item.path.clone(), line_style));
+
+                Line::from(row_spans)
             })
             .collect();
 
@@ -412,34 +430,52 @@ impl ChangesView {
         ]);
         frame.render_widget(Paragraph::new(desc_line), chunks[1]);
 
-        // Action buttons bar
-        let buttons = vec![
-            Span::styled(
-                format!(" [ {} Commit & Sync ] ", icons.commit()),
-                Style::default()
-                    .fg(theme.success)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                format!(" [ {} AI Generate ] ", icons.ai_sparkle()),
-                Style::default().fg(theme.ai_sparkle),
-            ),
-            Span::styled(
-                format!(" [ {} AI Review ] ", icons.ai_sparkle()),
-                Style::default().fg(theme.info),
-            ),
-            Span::styled(
-                format!(" [ {} Stash All ] ", icons.stash()),
-                Style::default().fg(theme.secondary),
-            ),
-            Span::styled(
-                format!(
-                    " [ {} Discard (Safe) ] ",
-                    icons.get(crate::ui::IconId::Trash)
-                ),
-                Style::default().fg(theme.error),
-            ),
-        ];
+        // Action buttons bar with GUI pills
+        let mut buttons = Vec::new();
+        buttons.extend(crate::ui::capsule::pill(
+            Some(icons.commit()),
+            "Commit & Sync",
+            theme.bg,
+            theme.success,
+            theme.bg,
+            icons.use_nerd_font,
+        ));
+        buttons.push(Span::raw(" "));
+        buttons.extend(crate::ui::capsule::pill(
+            Some(icons.ai_sparkle()),
+            "AI Generate",
+            theme.ai_sparkle,
+            theme.selection_bg,
+            theme.bg,
+            icons.use_nerd_font,
+        ));
+        buttons.push(Span::raw(" "));
+        buttons.extend(crate::ui::capsule::pill(
+            Some(icons.ai_sparkle()),
+            "AI Review",
+            theme.info,
+            theme.selection_bg,
+            theme.bg,
+            icons.use_nerd_font,
+        ));
+        buttons.push(Span::raw(" "));
+        buttons.extend(crate::ui::capsule::pill(
+            Some(icons.stash()),
+            "Stash All",
+            theme.secondary,
+            theme.selection_bg,
+            theme.bg,
+            icons.use_nerd_font,
+        ));
+        buttons.push(Span::raw(" "));
+        buttons.extend(crate::ui::capsule::pill(
+            Some(icons.get(crate::ui::IconId::Trash)),
+            "Discard (Safe)",
+            theme.error,
+            theme.selection_bg,
+            theme.bg,
+            icons.use_nerd_font,
+        ));
         frame.render_widget(Paragraph::new(Line::from(buttons)), chunks[2]);
     }
 }
