@@ -746,6 +746,8 @@ impl App {
                 KeyCode::Esc => self.command_palette.close(),
                 KeyCode::Up => self.command_palette.previous(),
                 KeyCode::Down => self.command_palette.next(),
+                KeyCode::PageUp => self.command_palette.page_up(10),
+                KeyCode::PageDown => self.command_palette.page_down(10),
                 KeyCode::Backspace => self.command_palette.pop_char(),
                 KeyCode::Enter => {
                     if let Some(cmd) = self.command_palette.ai_suggestion.take() {
@@ -1257,6 +1259,21 @@ impl App {
     pub fn handle_mouse(&mut self, mouse: MouseEvent) {
         let (x, y) = (mouse.column, mouse.row);
 
+        // 0. Command Palette wheel
+        if self.command_palette.is_open {
+            match mouse.kind {
+                MouseEventKind::ScrollUp => {
+                    self.command_palette.previous();
+                    return;
+                }
+                MouseEventKind::ScrollDown => {
+                    self.command_palette.next();
+                    return;
+                }
+                _ => {}
+            }
+        }
+
         // 1. Settings Modal clicks & wheel
         if self.settings_modal.is_open {
             match mouse.kind {
@@ -1682,6 +1699,23 @@ impl App {
             "rebase" => {
                 self.open_rebase_modal();
             }
+            "discard_changes" => self.safe_discard_selected(),
+            "stage_selected" => self.toggle_stage_selected(),
+            "stash_selected" => self.stash_selected_file(),
+            "open_editor" => self.open_selected_in_editor(),
+            "reveal_file_manager" => self.reveal_selected_in_file_manager(),
+            "refresh" => {
+                self.refresh_git_status();
+                self.refresh_worktrees();
+                self.refresh_github();
+                self.last_status = Some("Refreshed repository status and GitHub data".to_string());
+            }
+            "ai_ci_failure" => self.trigger_ai_ci_analysis(),
+            "ai_assistant" => {
+                let ctx = self.capture_ai_context();
+                self.ai_modal.open_with_context(&ctx);
+            }
+            "ai_pr_draft" => self.trigger_ai_pr_draft(),
             "tab_changes" => self.active_tab = AppTab::Changes,
             "tab_prs" => self.active_tab = AppTab::Prs,
             "tab_actions" => self.active_tab = AppTab::Actions,
