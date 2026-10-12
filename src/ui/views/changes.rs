@@ -135,15 +135,25 @@ impl ChangesView {
         x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height
     }
 
-    /// Check if an input area or file list was clicked.
+    /// Check if a commit input area was clicked.
     pub fn hit_test_inputs(&self, x: u16, y: u16) -> Option<ChangesFocus> {
         let in_rect = |r: Rect| x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height;
         if in_rect(self.summary_input_area) {
             Some(ChangesFocus::CommitSummary)
         } else if in_rect(self.desc_input_area) {
             Some(ChangesFocus::CommitDescription)
-        } else if in_rect(self.file_list_area) {
-            Some(ChangesFocus::FileList)
+        } else {
+            None
+        }
+    }
+
+    /// Check if the file list (middle pane) was clicked, returning relative visual row index and whether checkbox area was hit.
+    pub fn hit_test_file_list(&self, x: u16, y: u16) -> Option<(usize, bool)> {
+        let r = self.file_list_area;
+        if x > r.x && x < r.x + r.width.saturating_sub(1) && y > r.y && y < r.y + r.height.saturating_sub(1) {
+            let inner_y = y.saturating_sub(r.y + 1) as usize;
+            let is_checkbox = x <= r.x + 5;
+            Some((inner_y, is_checkbox))
         } else {
             None
         }
@@ -370,12 +380,10 @@ impl ChangesView {
         let is_summary_focused = self.focus == ChangesFocus::CommitSummary;
         let summary_text = if self.commit_summary.is_empty() {
             if is_summary_focused {
-                "|".to_string()
+                String::new()
             } else {
                 i18n.t("changes.commit_placeholder").to_string()
             }
-        } else if is_summary_focused {
-            format!("{}|", self.commit_summary)
         } else {
             self.commit_summary.clone()
         };
@@ -406,16 +414,21 @@ impl ChangesView {
         ]);
         frame.render_widget(Paragraph::new(summary_line), chunks[0]);
 
+        if is_summary_focused {
+            let label_len = 9u16; // " Commit: "
+            let text_w = unicode_width::UnicodeWidthStr::width(self.commit_summary.as_str()) as u16;
+            let cur_x = (chunks[0].x + label_len + text_w).min(chunks[0].x + chunks[0].width.saturating_sub(1));
+            frame.set_cursor_position((cur_x, chunks[0].y));
+        }
+
         // Description Input (optional)
         let is_desc_focused = self.focus == ChangesFocus::CommitDescription;
         let desc_text = if self.commit_description.is_empty() {
             if is_desc_focused {
-                "|".to_string()
+                String::new()
             } else {
                 i18n.t("changes.commit_desc_placeholder").to_string()
             }
-        } else if is_desc_focused {
-            format!("{}|", self.commit_description)
         } else {
             self.commit_description.clone()
         };
@@ -438,6 +451,13 @@ impl ChangesView {
             Span::styled(desc_text, desc_style),
         ]);
         frame.render_widget(Paragraph::new(desc_line), chunks[1]);
+
+        if is_desc_focused {
+            let label_len = 9u16; // " Desc:   "
+            let text_w = unicode_width::UnicodeWidthStr::width(self.commit_description.as_str()) as u16;
+            let cur_x = (chunks[1].x + label_len + text_w).min(chunks[1].x + chunks[1].width.saturating_sub(1));
+            frame.set_cursor_position((cur_x, chunks[1].y));
+        }
 
         // Action buttons bar with GUI pills
         let mut buttons = Vec::new();

@@ -106,10 +106,10 @@ impl FileDiff {
             .collect();
         let total_lines = content.lines().count();
         Self {
-            file_path: format!("{} ({} lines)", path, total_lines),
+            file_path: path.to_string(),
             is_binary: false,
             hunks: vec![DiffHunk {
-                header: format!("@@ Content: {} @@", path),
+                header: format!("@@ Content: {} ({} lines) @@", path, total_lines),
                 lines,
             }],
             stats_added: 0,

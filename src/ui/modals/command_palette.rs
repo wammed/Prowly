@@ -720,9 +720,13 @@ impl CommandPaletteModal {
                     .add_modifier(Modifier::BOLD),
             ),
             Span::styled(&self.query, Style::default().fg(theme.fg)),
-            Span::styled("█", Style::default().fg(theme.cursor)),
         ]);
         frame.render_widget(Paragraph::new(prompt_line), input_inner);
+
+        let prefix_w = unicode_width::UnicodeWidthStr::width(prompt_prefix) as u16;
+        let query_w = unicode_width::UnicodeWidthStr::width(self.query.as_str()) as u16;
+        let cur_x = (input_inner.x + prefix_w + query_w).min(input_inner.x + input_inner.width.saturating_sub(1));
+        frame.set_cursor_position((cur_x, input_inner.y));
 
         // 2. Body Viewport based on Layer
         match &self.layer {

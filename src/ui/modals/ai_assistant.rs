@@ -167,10 +167,15 @@ impl AiAssistantModal {
             .border_style(Style::default().fg(theme.border_focused))
             .title(input_title);
 
+        let input_inner = input_block.inner(chunks[2]);
         let input_p = Paragraph::new(self.input_query.as_str())
             .block(input_block)
             .style(Style::default().fg(theme.fg));
         frame.render_widget(input_p, chunks[2]);
+
+        let query_w = unicode_width::UnicodeWidthStr::width(self.input_query.as_str()) as u16;
+        let cur_x = (input_inner.x + query_w).min(input_inner.x + input_inner.width.saturating_sub(1));
+        frame.set_cursor_position((cur_x, input_inner.y));
 
         // 4. Action bar: [ Apply ] [ Discard / Esc ]
         let action_spans = vec![

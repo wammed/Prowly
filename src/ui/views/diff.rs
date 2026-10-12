@@ -62,7 +62,8 @@ impl DiffView {
 
     /// Resolve syntax definition from file path without disk access, supporting modern language aliases.
     pub fn find_syntax_for_path(path_str: &str) -> &'static syntect::parsing::SyntaxReference {
-        let path = std::path::Path::new(path_str);
+        let clean = path_str.split_whitespace().next().unwrap_or(path_str);
+        let path = std::path::Path::new(clean);
         let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
 
@@ -163,14 +164,25 @@ impl DiffView {
         // Determine syntax definition by file extension and name with modern language aliases
         let syntax = Self::find_syntax_for_path(&diff.file_path);
 
-        let syn_theme = &THEME_SET.themes["base16-ocean.dark"];
+        let syn_theme = if theme.is_dark {
+            THEME_SET.themes.get("base16-ocean.dark")
+        } else {
+            THEME_SET.themes.get("base16-ocean.light")
+        }
+        .or_else(|| THEME_SET.themes.get("base16-ocean.dark"))
+        .unwrap_or_else(|| THEME_SET.themes.values().next().expect("ThemeSet has at least one theme"));
+
         let mut highlighter = HighlightLines::new(syntax, syn_theme);
 
         let visible = self.scroll.visible_range();
         let mut rendered_lines = Vec::with_capacity(visible.len());
 
-        for idx in visible {
-            let (old_num, new_num, _origin, line_type, content) = &flat_lines[idx];
+        for (idx, (old_num, new_num, _origin, line_type, content)) in flat_lines.iter().enumerate() {
+            if idx >= visible.end {
+                break;
+            }
+
+            let is_visible = idx >= visible.start;
 
             let (bg, fg, prefix) = match line_type {
                 DiffLineType::Added => (theme.diff_add_bg, theme.diff_add_fg, "+"),
@@ -178,6 +190,17 @@ impl DiffView {
                 DiffLineType::HunkHeader => (theme.diff_hunk_bg, theme.diff_hunk_fg, "@"),
                 DiffLineType::Context => (theme.bg, theme.fg, " "),
             };
+
+            let line_with_nl = format!("{}\n", content);
+            let highlighted = if *line_type != DiffLineType::HunkHeader {
+                highlighter.highlight_line(&line_with_nl, &SYNTAX_SET).ok()
+            } else {
+                None
+            };
+
+            if !is_visible {
+                continue;
+            }
 
             let old_str = old_num
                 .map(|n| format!("{:4}", n))
@@ -195,37 +218,31 @@ impl DiffView {
                 Span::styled(format!("{} ", prefix), marker_style),
             ];
 
-            // Highlight all code lines (Context, Added, Deleted); HunkHeader uses dedicated header styling
-            if *line_type != DiffLineType::HunkHeader {
-                if let Some(cached) = self.highlight_cache.get(content) {
-                    for (c, text) in cached {
-                        spans.push(Span::styled(text.clone(), Style::default().bg(bg).fg(*c)));
+            if let Some(ranges) = highlighted {
+                for (style, text) in ranges {
+                    let text_clean = text.trim_end_matches(['\n', '\r']);
+                    if text_clean.is_empty() {
+                        continue;
                     }
-                } else if let Ok(ranges) = highlighter.highlight_line(content, &SYNTAX_SET) {
-                    let mut cached_ranges = Vec::new();
-                    for (style, text) in ranges {
-                        let c = ratatui::style::Color::Rgb(
-                            style.foreground.r,
-                            style.foreground.g,
-                            style.foreground.b,
-                        );
-                        cached_ranges.push((c, text.to_string()));
-                        spans.push(Span::styled(
-                            text.to_string(),
-                            Style::default().bg(bg).fg(c),
-                        ));
-                    }
-                    self.highlight_cache.put(content.clone(), cached_ranges);
-                } else {
+                    let c = ratatui::style::Color::Rgb(
+                        style.foreground.r,
+                        style.foreground.g,
+                        style.foreground.b,
+                    );
                     spans.push(Span::styled(
-                        content.clone(),
-                        Style::default().bg(bg).fg(fg),
+                        text_clean.to_string(),
+                        Style::default().bg(bg).fg(c),
                     ));
                 }
-            } else {
+            } else if *line_type == DiffLineType::HunkHeader {
                 spans.push(Span::styled(
                     content.clone(),
                     Style::default().bg(bg).fg(fg).add_modifier(Modifier::BOLD),
+                ));
+            } else {
+                spans.push(Span::styled(
+                    content.clone(),
+                    Style::default().bg(bg).fg(fg),
                 ));
             }
 

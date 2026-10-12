@@ -433,5 +433,12 @@ impl OpenRepoModal {
         ]));
 
         frame.render_widget(Paragraph::new(lines), inner);
+
+        if self.active_section == OpenRepoSection::Input {
+            let label_w = 8u16; // " Path:  "
+            let text_w = unicode_width::UnicodeWidthStr::width(self.path_input.as_str()) as u16;
+            let cur_x = (inner.x + label_w + text_w).min(inner.x + inner.width.saturating_sub(1));
+            frame.set_cursor_position((cur_x, inner.y + 2));
+        }
     }
 }

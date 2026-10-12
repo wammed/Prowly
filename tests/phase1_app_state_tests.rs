@@ -124,3 +124,53 @@ async fn test_app_initialization_inside_tokio_runtime() {
     let app = App::new(Config::default());
     assert!(!app.should_quit);
 }
+
+#[test]
+fn test_middle_pane_mouse_click_select_file() {
+    use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+    use ratatui::layout::Rect;
+
+    let mut app = App::new(Config::default());
+    app.active_tab = AppTab::Changes;
+    app.layout_areas = prowly::ui::LayoutAreas::compute(Rect::new(0, 0, 120, 40));
+
+    // Simulate dummy files
+    app.repo_status.files = vec![
+        prowly::git::GitFileItem {
+            path: "file1.rs".to_string(),
+            status: prowly::git::FileStatus::Modified,
+            staged: false,
+        },
+        prowly::git::GitFileItem {
+            path: "file2.rs".to_string(),
+            status: prowly::git::FileStatus::Untracked,
+            staged: false,
+        },
+    ];
+    app.changes_view.file_scroll.set_total_items(2);
+
+    // Setup changes view areas
+    app.changes_view.file_list_area = Rect {
+        x: app.layout_areas.right_content.x,
+        y: app.layout_areas.right_content.y,
+        width: 30,
+        height: 20,
+    };
+
+    // Click on row 1 (the 2nd item, "file2.rs")
+    // Border is at y, so row 0 is y+1, row 1 is y+2.
+    let click_x = app.changes_view.file_list_area.x + 10;
+    let click_y = app.changes_view.file_list_area.y + 2;
+
+    let mouse = MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        column: click_x,
+        row: click_y,
+        modifiers: KeyModifiers::NONE,
+    };
+
+    app.handle_mouse(mouse);
+
+    assert_eq!(app.changes_view.file_scroll.selected_index, 1);
+}
+

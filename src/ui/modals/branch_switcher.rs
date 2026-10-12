@@ -186,5 +186,10 @@ impl BranchSwitcherModal {
 
         let p = Paragraph::new(lines);
         frame.render_widget(p, inner);
+
+        let label_w = 9u16; // " Filter: "
+        let query_w = unicode_width::UnicodeWidthStr::width(self.query.as_str()) as u16;
+        let cur_x = (inner.x + label_w + query_w).min(inner.x + inner.width.saturating_sub(1));
+        frame.set_cursor_position((cur_x, inner.y));
     }
 }
