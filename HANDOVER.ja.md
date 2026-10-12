@@ -103,4 +103,13 @@
     4. アクティブペインの発光インジケータ（`● ACTIVE`）と丸角ボーダー。
     5. GitHub Desktop風のDiff増減比率ゲージバー（`+N -M ■■■■□`）およびファイル状態カラーピル (`[M]`, `[+]`, `[-]`)、選択中カーソルバー (`▎`)。
     6. デスクトップアプリ風の最下部ステータスバー（`NORMAL` モードピル、キーボードショートカット用キーキャップバッジ `[Tab] Panes`, `[Space] Stage`、AI・テーマ・言語バッジ）。
+  - **Phase 8 (3層積層コマンドパレット、110+ Gitカタログ、Tabフラグ補完 & セーフティガード)**:
+    1. 3層積層アーキテクチャの導入（1層: Prowly内蔵機能、2層: 110+標準Git CLIサブコマンドカタログ、3層: 引数直接入力 & 代表フラグプレビュー）(`src/ui/modals/git_subcommands.rs`, `src/ui/modals/command_palette.rs`)。
+    2. 13件制限のない全件仮想スクロールおよびヘッダーボタン `[ 󰘳 Commands ]` の新設。
+    3. パンくずリスト表示（`Command Palette ❯ git ❯ <subcommand>`）およびプロンプトコンテキスト表示。
+    4. 階層ナビゲーション: Escキーおよび空入力状態でのBackspaceによる親階層ロールバック。
+    5. ダイレクトショートカット: 第1層からの `git cherry-pick --continue` や `cherry-pick` 直打ちジャンプ。
+    6. セーフティガード: `push --force` / `-f`、`reset --hard`、`clean -fdx`、`branch -D` 等の破壊的操作に対する警告および2段階Enter確認プロテクション。
+    7. 第3層におけるTabキーによる代表フラグの巡回自動補完。
+    8. 全機能網羅の手動テストチェックリスト作成 (`MANUAL_TEST_CHECKLIST.md`) および全70件の自動テストスイートによる品質検証完了。
 
