@@ -14,6 +14,7 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, Clear, Paragraph},
     Frame,
 };
+use unicode_width::UnicodeWidthStr;
 
 /// Active input field focused for text editing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -251,13 +252,16 @@ impl SettingsModal {
         let inner_x = x.saturating_sub(rect.x + 1);
         let inner_y = y.saturating_sub(rect.y + 1);
         let content_y = inner_y + self.scroll_offset;
+        let inner_w = rect.width.saturating_sub(2);
 
         // Header Action Buttons (Row 0 or Screen Top): [ 💾 Save ] and [ ❌ Cancel ]
         if inner_y == 0 || content_y == 0 {
-            if inner_x >= rect.width.saturating_sub(24) && inner_x < rect.width.saturating_sub(12) {
+            let cancel_x = inner_w.saturating_sub(15);
+            let save_x = cancel_x.saturating_sub(14);
+            if inner_x >= save_x && inner_x < cancel_x {
                 return Some(SettingsAction::SaveAndApply);
             }
-            if inner_x >= rect.width.saturating_sub(12) {
+            if inner_x >= cancel_x {
                 return Some(SettingsAction::Close);
             }
         }
@@ -274,7 +278,7 @@ impl SettingsModal {
             ];
             let mut cur_x = 10;
             for (tid, name) in themes {
-                let btn_w = name.len() as u16 + 4;
+                let btn_w = name.len() as u16 + 6;
                 if inner_x >= cur_x && inner_x < cur_x + btn_w {
                     self.theme = tid;
                     return None;
@@ -285,16 +289,16 @@ impl SettingsModal {
 
         // Row 3: Language & Nerd Font
         if content_y == 3 {
-            // [ English ] (10..22), [ 日本語 ] (23..34)
-            if inner_x >= 10 && inner_x < 22 {
+            // [ English ] (10..23), [ 日本語 ] (23..34)
+            if inner_x >= 10 && inner_x < 23 {
                 self.language = Language::En;
             } else if inner_x >= 23 && inner_x < 34 {
                 self.language = Language::Ja;
             }
-            // Nerd Font: [ ON ] (50..57), [ OFF ] (58..66)
-            if inner_x >= 50 && inner_x < 57 {
+            // Nerd Font: [ ON ] (52..60), [ OFF ] (60..69)
+            if inner_x >= 52 && inner_x < 60 {
                 self.use_nerd_font = true;
-            } else if inner_x >= 58 && inner_x < 66 {
+            } else if inner_x >= 60 && inner_x < 69 {
                 self.use_nerd_font = false;
             }
         }
@@ -308,9 +312,9 @@ impl SettingsModal {
                 (AiProvider::Ollama, "Ollama"),
                 (AiProvider::Custom, "Custom"),
             ];
-            let mut cur_x = 12;
+            let mut cur_x = 10;
             for (prov, label) in providers {
-                let w = label.len() as u16 + 4;
+                let w = label.len() as u16 + 6;
                 if inner_x >= cur_x && inner_x < cur_x + w {
                     self.ai_provider = prov;
                     self.ai_model = prov.default_model().to_string();
@@ -331,9 +335,9 @@ impl SettingsModal {
                 AiProvider::Ollama => &["llama3.2:latest", "deepseek-r1:latest", "codellama"],
                 AiProvider::Custom => &["default", "local-model"],
             };
-            let mut cur_x = 12;
+            let mut cur_x = 10;
             for model_name in presets {
-                let w = model_name.len() as u16 + 4;
+                let w = model_name.len() as u16 + 6;
                 if inner_x >= cur_x && inner_x < cur_x + w {
                     self.ai_model = model_name.to_string();
                     return None;
@@ -343,86 +347,84 @@ impl SettingsModal {
         }
 
         // Row 8: Model Input
-        if content_y == 8 && inner_x >= 12 && inner_x < rect.width.saturating_sub(4) {
+        if content_y == 8 && inner_x >= 10 && inner_x < inner_w.saturating_sub(4) {
             self.focused_input = Some(SettingsInputFocus::AiModel);
             return None;
         }
 
-        // Row 10: API Key Input & Buttons
-        if content_y == 10 {
-            // Mask toggle button [ Show / Hide ] at end of row
-            let show_btn_x = rect.width.saturating_sub(18);
-            if inner_x >= show_btn_x && inner_x < show_btn_x + 8 {
+        // Row 9: API Key Input & Buttons
+        if content_y == 9 {
+            // [ Show / Hide ] (40..50), [ Clear ] (50..63)
+            if inner_x >= 40 && inner_x < 50 {
                 self.show_api_key = !self.show_api_key;
                 return None;
             }
-            let clear_btn_x = rect.width.saturating_sub(9);
-            if inner_x >= clear_btn_x {
+            if inner_x >= 50 && inner_x < 63 {
                 self.ai_api_key.clear();
                 return None;
             }
-            if inner_x >= 12 && inner_x < show_btn_x {
+            if inner_x >= 10 && inner_x < 40 {
                 self.focused_input = Some(SettingsInputFocus::AiApiKey);
                 return None;
             }
         }
 
-        // Row 12: Endpoint Base URL & Reset Default
-        if content_y == 12 {
-            let reset_btn_x = rect.width.saturating_sub(16);
-            if inner_x >= reset_btn_x {
+        // Row 10: Endpoint Base URL & Reset Default
+        if content_y == 10 {
+            // [ Default ] (50..63)
+            if inner_x >= 50 && inner_x < 63 {
                 self.ai_api_base.clear();
                 return None;
             }
-            if inner_x >= 12 && inner_x < reset_btn_x {
+            if inner_x >= 10 && inner_x < 50 {
                 self.focused_input = Some(SettingsInputFocus::AiApiBase);
                 return None;
             }
         }
 
-        // Row 15: Git Soft Discard & Auto Fetch
-        if content_y == 15 {
-            // Soft Discard: [ ON ] (16..23), [ OFF ] (24..32)
-            if inner_x >= 16 && inner_x < 23 {
+        // Row 12: Git Soft Discard & Auto Fetch
+        if content_y == 12 {
+            // Soft Discard: [ ON ] (14..22), [ OFF ] (22..31)
+            if inner_x >= 14 && inner_x < 22 {
                 self.git_soft_discard = true;
-            } else if inner_x >= 24 && inner_x < 32 {
+            } else if inner_x >= 22 && inner_x < 31 {
                 self.git_soft_discard = false;
             }
-            // Auto Fetch: [ Off ] (48..55), [ 30s ] (56..63), [ 60s ] (64..71)
-            if inner_x >= 48 && inner_x < 55 {
+            // Auto Fetch: [ Off ] (48..57), [ 30s ] (57..66), [ 60s ] (66..75)
+            if inner_x >= 48 && inner_x < 57 {
                 self.git_auto_fetch_secs = 0;
-            } else if inner_x >= 56 && inner_x < 63 {
+            } else if inner_x >= 57 && inner_x < 66 {
                 self.git_auto_fetch_secs = 30;
-            } else if inner_x >= 64 && inner_x < 71 {
+            } else if inner_x >= 66 && inner_x < 75 {
                 self.git_auto_fetch_secs = 60;
             }
         }
 
-        // Row 17: Editor Command
-        if content_y == 17 {
-            // Presets: [ nvim ] (34..43), [ code ] (44..53), [ nano ] (54..63)
-            if inner_x >= 34 && inner_x < 43 {
+        // Row 13: Editor Command
+        if content_y == 13 {
+            // Presets: [ nvim ] (40..50), [ code ] (50..60), [ nano ] (60..70)
+            if inner_x >= 40 && inner_x < 50 {
                 self.editor_command = "nvim".to_string();
                 return None;
-            } else if inner_x >= 44 && inner_x < 53 {
+            } else if inner_x >= 50 && inner_x < 60 {
                 self.editor_command = "code".to_string();
                 return None;
-            } else if inner_x >= 54 && inner_x < 63 {
+            } else if inner_x >= 60 && inner_x < 70 {
                 self.editor_command = "nano".to_string();
                 return None;
             }
-            if inner_x >= 12 && inner_x < 32 {
+            if inner_x >= 10 && inner_x < 30 {
                 self.focused_input = Some(SettingsInputFocus::EditorCommand);
                 return None;
             }
         }
 
-        // Bottom Action Bar: Row height - 4, or content_y >= 19
-        if content_y >= 19 || inner_y >= rect.height.saturating_sub(4) {
-            if inner_x >= 4 && inner_x < 36 {
+        // Bottom Action Bar: content_y == 15 or inner_y near bottom
+        if content_y == 15 || inner_y >= rect.height.saturating_sub(4) {
+            if inner_x >= 1 && inner_x < 38 {
                 return Some(SettingsAction::SaveAndApply);
             }
-            if inner_x >= 36 && inner_x < 58 {
+            if inner_x >= 38 && inner_x < 65 {
                 return Some(SettingsAction::Close);
             }
         }
@@ -485,9 +487,10 @@ impl SettingsModal {
 
         let card_header = |icon_and_title: &str, is_top: bool| -> Line<'static> {
             let prefix = if is_top { "╭─ " } else { "├─ " };
-            let title_len = icon_and_title.chars().count();
+            let title_len = UnicodeWidthStr::width(icon_and_title);
+            let prefix_w = UnicodeWidthStr::width(prefix);
             let total_w = inner.width as usize;
-            let bar_len = total_w.saturating_sub(prefix.chars().count() + title_len + 4);
+            let bar_len = total_w.saturating_sub(prefix_w + title_len + 4);
             let bar = "─".repeat(bar_len);
             let suffix = if is_top { "╮" } else { "┤" };
             Line::from(vec![
@@ -521,12 +524,16 @@ impl SettingsModal {
             .fg(theme.bg)
             .add_modifier(Modifier::BOLD);
         let cancel_style = Style::default().fg(theme.dim_fg);
+        let title_w = UnicodeWidthStr::width("Preferences & AI Integration");
+        let save_w = UnicodeWidthStr::width(" [ 💾 Save ] ");
+        let cancel_w = UnicodeWidthStr::width(" [ ❌ Cancel ] ");
+        let pad = (inner.width as usize).saturating_sub(title_w + save_w + cancel_w + 1);
         lines.push(Line::from(vec![
             Span::styled(
                 "Preferences & AI Integration",
                 Style::default().fg(theme.dim_fg),
             ),
-            Span::raw(" ".repeat((inner.width as usize).saturating_sub(50))),
+            Span::raw(" ".repeat(pad)),
             Span::styled(" [ 💾 Save ] ", save_style),
             Span::raw(" "),
             Span::styled(" [ ❌ Cancel ] ", cancel_style),
@@ -700,8 +707,6 @@ impl SettingsModal {
             Span::styled(" (Click or Tab to edit)", Style::default().fg(theme.dim_fg)),
         ]));
 
-        lines.push(Line::from(""));
-
         // 7. API Key Input
         let key_focus_style = if self.focused_input == Some(SettingsInputFocus::AiApiKey) {
             Style::default()
@@ -737,8 +742,6 @@ impl SettingsModal {
             ),
             Span::styled(" [ 󰆴 Clear ] ", Style::default().fg(theme.error)),
         ]));
-
-        lines.push(Line::from(""));
 
         // 8. Custom Base URL
         let base_focus_style = if self.focused_input == Some(SettingsInputFocus::AiApiBase) {
@@ -814,8 +817,6 @@ impl SettingsModal {
             Span::styled(" [ 30s ] ", af_30),
             Span::styled(" [ 60s ] ", af_60),
         ]));
-
-        lines.push(Line::from(""));
 
         // 10. Editor Preferences
         let editor_focus_style = if self.focused_input == Some(SettingsInputFocus::EditorCommand) {

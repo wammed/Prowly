@@ -98,26 +98,35 @@ impl ChangesView {
     }
 
     /// Check which action button was clicked at (x, y).
-    pub fn hit_test_action_buttons(&self, x: u16, y: u16) -> Option<ChangesButtonAction> {
+    pub fn hit_test_action_buttons(&self, x: u16, y: u16, use_nerd_font: bool) -> Option<ChangesButtonAction> {
         let area = self.actions_bar_area;
         if y != area.y || x < area.x || x >= area.x + area.width {
             return None;
         }
 
         let rel_x = x.saturating_sub(area.x);
-        // Buttons layout approx:
-        // [ Commit & Sync ] (19) [ AI Generate ] (17) [ AI Review ] (15) [ Stash All ] (15) [ Discard (Safe) ] (18)
-        if rel_x < 20 {
-            Some(ChangesButtonAction::CommitAndSync)
-        } else if rel_x < 38 {
-            Some(ChangesButtonAction::AiGenerate)
-        } else if rel_x < 54 {
-            Some(ChangesButtonAction::AiReview)
-        } else if rel_x < 70 {
-            Some(ChangesButtonAction::StashAll)
-        } else {
-            Some(ChangesButtonAction::DiscardSafe)
+        // Pill widths depending on nerd font mode
+        let buttons = [
+            ("Commit & Sync", ChangesButtonAction::CommitAndSync),
+            ("AI Generate", ChangesButtonAction::AiGenerate),
+            ("AI Review", ChangesButtonAction::AiReview),
+            ("Stash All", ChangesButtonAction::StashAll),
+            ("Discard (Safe)", ChangesButtonAction::DiscardSafe),
+        ];
+
+        let mut cur_x = 0;
+        for (text, action) in buttons {
+            let w = if use_nerd_font {
+                text.len() as u16 + 5
+            } else {
+                text.len() as u16 + 6
+            };
+            if rel_x >= cur_x && rel_x < cur_x + w {
+                return Some(action);
+            }
+            cur_x += w + 1; // plus space separator
         }
+        None
     }
 
     /// Check if the file list header menu button was clicked.

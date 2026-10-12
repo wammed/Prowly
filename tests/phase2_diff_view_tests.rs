@@ -60,3 +60,18 @@ fn test_flatten_diff_lines_structure() {
     assert_eq!(flat[3].0, None);
     assert_eq!(flat[3].1, Some(2));
 }
+
+#[test]
+fn test_find_syntax_for_path_resolution() {
+    let toml_syntax = DiffView::find_syntax_for_path(".gitleaks.toml");
+    assert_ne!(toml_syntax.name, "Plain Text");
+
+    let rs_syntax = DiffView::find_syntax_for_path("src/main.rs");
+    assert_eq!(rs_syntax.name, "Rust");
+
+    let ts_syntax = DiffView::find_syntax_for_path("src/App.tsx");
+    assert_ne!(ts_syntax.name, "Plain Text");
+
+    let docker_syntax = DiffView::find_syntax_for_path("Dockerfile");
+    assert_ne!(docker_syntax.name, "Plain Text");
+}

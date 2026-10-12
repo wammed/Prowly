@@ -17,6 +17,7 @@ use std::collections::{BTreeMap, BTreeSet};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DirMapNode {
     pub display_name: String,
+    pub tree_prefix: String, // e.g. "├── " or "│   └── "
     pub path_prefix: String, // e.g. "" for root, "src/", "src/ui/"
     pub change_count: usize,
     pub is_root: bool,
@@ -84,36 +85,88 @@ impl DirectoryMap {
         let root_label = format!("/ (root) [{}]", changed_files_count);
         nodes.push(DirMapNode {
             display_name: root_label,
+            tree_prefix: String::new(),
             path_prefix: "".to_string(),
             change_count: changed_files_count,
             is_root: true,
             depth: 0,
         });
 
-        // Hierarchical directory nodes
-        for dir in all_dirs {
-            let count = dir_counts.get(&dir).copied().unwrap_or(0);
-            let depth = dir.matches('/').count();
+        // Group directories by their immediate parent prefix
+        let mut children_by_parent: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        for dir in &all_dirs {
             let trimmed = dir.trim_end_matches('/');
-            let leaf_name = trimmed.rsplit('/').next().unwrap_or(trimmed);
-
-            let indent = "  ".repeat(depth.saturating_sub(1));
-            let tree_prefix = if depth == 1 {
-                "├─ "
-            } else {
-                "│  ├─ "
+            let parent = match trimmed.rfind('/') {
+                Some(idx) => format!("{}/", &trimmed[..idx]),
+                None => String::new(),
             };
-
-            let display_name = format!("{}{}{}/ [{}]", indent, tree_prefix, leaf_name, count);
-
-            nodes.push(DirMapNode {
-                display_name,
-                path_prefix: dir,
-                change_count: count,
-                is_root: false,
-                depth,
-            });
+            children_by_parent
+                .entry(parent)
+                .or_default()
+                .push(dir.clone());
         }
+
+        // Depth-first traversal to build correctly branched tree nodes
+        fn build_nodes(
+            parent: &str,
+            children_by_parent: &BTreeMap<String, Vec<String>>,
+            dir_counts: &BTreeMap<String, usize>,
+            ancestors_is_last: &mut Vec<bool>,
+            nodes: &mut Vec<DirMapNode>,
+        ) {
+            if let Some(children) = children_by_parent.get(parent) {
+                let count = children.len();
+                for (i, child) in children.iter().enumerate() {
+                    let is_last = i + 1 == count;
+                    let depth = child.matches('/').count();
+                    let trimmed = child.trim_end_matches('/');
+                    let leaf_name = trimmed.rsplit('/').next().unwrap_or(trimmed);
+                    let change_count = dir_counts.get(child).copied().unwrap_or(0);
+
+                    let mut prefix = String::new();
+                    for &anc_last in ancestors_is_last.iter() {
+                        if anc_last {
+                            prefix.push_str("    ");
+                        } else {
+                            prefix.push_str("│   ");
+                        }
+                    }
+                    if is_last {
+                        prefix.push_str("└── ");
+                    } else {
+                        prefix.push_str("├── ");
+                    }
+
+                    nodes.push(DirMapNode {
+                        display_name: format!("{}/ [{}]", leaf_name, change_count),
+                        tree_prefix: prefix,
+                        path_prefix: child.clone(),
+                        change_count,
+                        is_root: false,
+                        depth,
+                    });
+
+                    ancestors_is_last.push(is_last);
+                    build_nodes(
+                        child,
+                        children_by_parent,
+                        dir_counts,
+                        ancestors_is_last,
+                        nodes,
+                    );
+                    ancestors_is_last.pop();
+                }
+            }
+        }
+
+        let mut ancestors_is_last = Vec::new();
+        build_nodes(
+            "",
+            &children_by_parent,
+            &dir_counts,
+            &mut ancestors_is_last,
+            &mut nodes,
+        );
 
         self.scroll.set_total_items(nodes.len());
         self.nodes = nodes;
@@ -239,10 +292,20 @@ impl DirectoryMap {
                     Style::default().fg(theme.fg)
                 };
 
-                Line::from(vec![
-                    Span::styled(format!(" {} ", icon_str), style),
-                    Span::styled(node.display_name.clone(), style),
-                ])
+                let spans = if node.is_root {
+                    vec![
+                        Span::styled(format!(" {} ", icon_str), style),
+                        Span::styled(node.display_name.clone(), style),
+                    ]
+                } else {
+                    vec![
+                        Span::styled(format!(" {}", node.tree_prefix), style),
+                        Span::styled(format!("{} ", icon_str), style),
+                        Span::styled(node.display_name.clone(), style),
+                    ]
+                };
+
+                Line::from(spans)
             })
             .collect();
 

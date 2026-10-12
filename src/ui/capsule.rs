@@ -4,11 +4,17 @@
 
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::Span;
+use unicode_width::UnicodeWidthStr;
 
 /// Left rounded cap glyph (Nerd Font U+E0B6).
 pub const CAP_LEFT: &str = "\u{e0b6}";
 /// Right rounded cap glyph (Nerd Font U+E0B4).
 pub const CAP_RIGHT: &str = "\u{e0b4}";
+
+/// Calculate the total terminal display width of a list of Spans.
+pub fn spans_width(spans: &[Span]) -> usize {
+    spans.iter().map(|s| UnicodeWidthStr::width(s.content.as_ref())).sum()
+}
 
 /// Create a single capsule/pill badge.
 ///

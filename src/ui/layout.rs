@@ -77,11 +77,11 @@ impl LayoutAreas {
         };
 
         // Top right buttons:
-        // [? Help] (8), [  Settings ] (14), [ 󰍜 Menu ] (10), [ 󱚣 AI: ... ] (26)
-        let help_width = 8;
+        // [? Help] (10), [  Settings ] (14), [ 󰍜 Menu ] (10), [ 󱚣 AI: ... ] (34)
+        let help_width = 10;
         let settings_width = 14;
         let menu_width = 10;
-        let ai_width = 28;
+        let ai_width = 34;
 
         let help_x = header_top.x + header_top.width.saturating_sub(help_width);
         let settings_x = help_x.saturating_sub(settings_width);

@@ -60,6 +60,58 @@ impl DiffView {
         lines
     }
 
+    /// Resolve syntax definition from file path without disk access, supporting modern language aliases.
+    pub fn find_syntax_for_path(path_str: &str) -> &'static syntect::parsing::SyntaxReference {
+        let path = std::path::Path::new(path_str);
+        let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+
+        // 1. Direct extension lookup in syntect default set
+        if !ext.is_empty() {
+            if let Some(syntax) = SYNTAX_SET.find_syntax_by_extension(ext) {
+                return syntax;
+            }
+        }
+
+        // 2. Direct filename / token lookup
+        if let Some(syntax) = SYNTAX_SET.find_syntax_by_extension(file_name) {
+            return syntax;
+        }
+
+        // 3. Fallback mappings for modern file types not present in default syntax set
+        let mapped = match ext.to_lowercase().as_str() {
+            "toml" => Some("yaml"),
+            "ts" | "tsx" | "jsx" | "mjs" | "cjs" => Some("js"),
+            "jsonc" | "json5" => Some("json"),
+            "yml" => Some("yaml"),
+            "rs" => Some("rs"),
+            "py" | "pyi" => Some("py"),
+            "md" | "markdown" => Some("md"),
+            "sh" | "bash" | "zsh" => Some("sh"),
+            "sql" => Some("sql"),
+            "html" | "htm" => Some("html"),
+            "css" | "scss" | "sass" | "less" => Some("css"),
+            _ => match file_name.to_lowercase().as_str() {
+                "dockerfile" | "containerfile" => Some("sh"),
+                ".gitignore" | ".gitleaksignore" | ".env" | ".dockerignore" => Some("sh"),
+                "cargo.lock" | ".gitleaks.toml" => Some("yaml"),
+                _ => None,
+            },
+        };
+
+        if let Some(mapped_ext) = mapped {
+            if let Some(syntax) = SYNTAX_SET.find_syntax_by_extension(mapped_ext) {
+                return syntax;
+            }
+        }
+
+        if let Some(syntax) = SYNTAX_SET.find_syntax_by_token(file_name) {
+            return syntax;
+        }
+
+        SYNTAX_SET.find_syntax_plain_text()
+    }
+
     /// Render visible portion of the diff into frame.
     pub fn render(&mut self, frame: &mut Frame, diff: &FileDiff, theme: &Theme, area: Rect) {
         let mut title_spans = vec![
@@ -108,12 +160,8 @@ impl DiffView {
             return;
         }
 
-        // Determine syntax definition by file extension
-        let syntax = SYNTAX_SET
-            .find_syntax_for_file(&diff.file_path)
-            .ok()
-            .flatten()
-            .unwrap_or_else(|| SYNTAX_SET.find_syntax_plain_text());
+        // Determine syntax definition by file extension and name with modern language aliases
+        let syntax = Self::find_syntax_for_path(&diff.file_path);
 
         let syn_theme = &THEME_SET.themes["base16-ocean.dark"];
         let mut highlighter = HighlightLines::new(syntax, syn_theme);
@@ -147,8 +195,8 @@ impl DiffView {
                 Span::styled(format!("{} ", prefix), marker_style),
             ];
 
-            // For context lines, attempt syntect highlight with LRU caching
-            if *line_type == DiffLineType::Context {
+            // Highlight all code lines (Context, Added, Deleted); HunkHeader uses dedicated header styling
+            if *line_type != DiffLineType::HunkHeader {
                 if let Some(cached) = self.highlight_cache.get(content) {
                     for (c, text) in cached {
                         spans.push(Span::styled(text.clone(), Style::default().bg(bg).fg(*c)));
@@ -177,7 +225,7 @@ impl DiffView {
             } else {
                 spans.push(Span::styled(
                     content.clone(),
-                    Style::default().bg(bg).fg(fg),
+                    Style::default().bg(bg).fg(fg).add_modifier(Modifier::BOLD),
                 ));
             }
 

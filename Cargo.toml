@@ -10,6 +10,7 @@ license = "MIT"
 # TUI & Terminal
 ratatui = { version = "0.29", features = ["serde", "crossterm"] }
 crossterm = { version = "0.28", features = ["event-stream"] }
+unicode-width = "0.2"
 
 # Async runtime & concurrency
 tokio = { version = "1", features = ["full"] }

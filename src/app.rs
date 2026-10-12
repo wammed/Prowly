@@ -1397,14 +1397,35 @@ impl App {
         if self.layout_areas.hits_tabs(x, y)
             && mouse.kind == MouseEventKind::Down(MouseButton::Left)
         {
-            let tab_width = 16;
             let rel_x = x.saturating_sub(self.layout_areas.right_tabs.x);
-            let clicked_tab_idx = (rel_x / tab_width) as usize;
-            if clicked_tab_idx < AppTab::ALL.len() {
-                self.active_tab = AppTab::from_index(clicked_tab_idx);
-                if self.active_tab == AppTab::Worktrees {
-                    self.refresh_worktrees();
+            let mut cur_x = 1; // initial space
+            for tab in AppTab::ALL {
+                let key = tab.title_key();
+                let text = self.i18n.t(key);
+                let icon_str = match tab {
+                    AppTab::Changes => self.icons.branch(),
+                    AppTab::Prs => self.icons.pr_open(),
+                    AppTab::Actions => self.icons.check_success(),
+                    AppTab::Alerts => self.icons.get(crate::ui::IconId::Alert),
+                    AppTab::Worktrees => self.icons.worktree(),
+                };
+                let pill_spans = pill(
+                    Some(icon_str),
+                    &text,
+                    self.theme.bg,
+                    self.theme.primary,
+                    self.theme.bg,
+                    self.icons.use_nerd_font,
+                );
+                let pill_w = crate::ui::capsule::spans_width(&pill_spans) as u16;
+                if rel_x >= cur_x && rel_x < cur_x + pill_w {
+                    self.active_tab = *tab;
+                    if self.active_tab == AppTab::Worktrees {
+                        self.refresh_worktrees();
+                    }
+                    return;
                 }
+                cur_x += pill_w + 1;
             }
             return;
         }
@@ -1481,7 +1502,7 @@ impl App {
                                     .map(|f| f.path.clone());
                                 self.context_menu.open_at(sel_file, x, y + 1);
                             } else if let Some(btn_action) =
-                                self.changes_view.hit_test_action_buttons(x, y)
+                                self.changes_view.hit_test_action_buttons(x, y, self.icons.use_nerd_font)
                             {
                                 match btn_action {
                                     ChangesButtonAction::CommitAndSync => self.commit_staged(),
@@ -2281,7 +2302,7 @@ impl App {
         }
     }
 
-    fn render_header(&self, frame: &mut Frame) {
+    fn render_header(&mut self, frame: &mut Frame) {
         let top_area = self.layout_areas.header_top;
         let bottom_area = self.layout_areas.header_bottom;
 
@@ -2328,25 +2349,36 @@ impl App {
         let mut top_spans = Vec::new();
         top_spans.push(Span::raw(" "));
         // 1. Brand Capsule (vibrant accent)
-        top_spans.extend(pill(
+        let brand_spans = pill(
             Some("󰄛"),
             "PROWLY",
             self.theme.bg,
             self.theme.primary,
             self.theme.header_bg,
             self.icons.use_nerd_font,
-        ));
+        );
+        let brand_w = crate::ui::capsule::spans_width(&brand_spans) as u16;
+        top_spans.extend(brand_spans);
         top_spans.push(Span::raw(" "));
 
         // 2. Repo Path Capsule
-        top_spans.extend(pill(
+        let repo_spans = pill(
             Some(""),
             &repo_path,
             self.theme.fg,
             self.theme.selection_bg,
             self.theme.header_bg,
             self.icons.use_nerd_font,
-        ));
+        );
+        let repo_w = crate::ui::capsule::spans_width(&repo_spans) as u16;
+        let open_repo_x = top_area.x + 1 + brand_w + 1;
+        self.layout_areas.open_repo_button = Rect {
+            x: open_repo_x,
+            y: top_area.y,
+            width: repo_w.min(top_area.width.saturating_sub(open_repo_x)),
+            height: 1,
+        };
+        top_spans.extend(repo_spans);
         top_spans.push(Span::raw(" "));
 
         // 3. Git Branch & Sync status Split Capsule
@@ -2354,7 +2386,7 @@ impl App {
             "↑{} ↓{}",
             self.repo_status.ahead, self.repo_status.behind
         );
-        top_spans.extend(split_pill(
+        let branch_spans = split_pill(
             Some(self.icons.branch()),
             &self.repo_status.branch,
             self.theme.bg,
@@ -2364,18 +2396,36 @@ impl App {
             self.theme.selection_bg,
             self.theme.header_bg,
             self.icons.use_nerd_font,
-        ));
+        );
+        let branch_w = crate::ui::capsule::spans_width(&branch_spans) as u16;
+        let branch_x = open_repo_x + repo_w + 1;
+        self.layout_areas.branch_button = Rect {
+            x: branch_x,
+            y: top_area.y,
+            width: branch_w.min(top_area.width.saturating_sub(branch_x)),
+            height: 1,
+        };
+        top_spans.extend(branch_spans);
         top_spans.push(Span::raw(" "));
 
         // 4. Sync State Capsule
-        top_spans.extend(pill(
+        let sync_spans = pill(
             Some(sync_icon),
             sync_label,
             self.theme.bg,
             sync_color,
             self.theme.header_bg,
             self.icons.use_nerd_font,
-        ));
+        );
+        let sync_w = crate::ui::capsule::spans_width(&sync_spans) as u16;
+        let sync_x = branch_x + branch_w + 1;
+        self.layout_areas.sync_button = Rect {
+            x: sync_x,
+            y: top_area.y,
+            width: sync_w.min(top_area.width.saturating_sub(sync_x)),
+            height: 1,
+        };
+        top_spans.extend(sync_spans);
 
         frame.render_widget(
             Paragraph::new(Line::from(top_spans)).style(Style::default().bg(self.theme.header_bg)),
@@ -2403,25 +2453,15 @@ impl App {
             )
         };
 
-        let ai_spans = pill(
-            Some(ai_icon),
-            &ai_label,
-            ai_fg,
+        let help_spans = pill(
+            Some(""),
+            "Help",
+            self.theme.dim_fg,
             self.theme.selection_bg,
             self.theme.header_bg,
             self.icons.use_nerd_font,
         );
-        frame.render_widget(Paragraph::new(Line::from(ai_spans)), self.layout_areas.ai_status_button);
-
-        let menu_spans = pill(
-            Some("󰍜"),
-            "Menu",
-            self.theme.secondary,
-            self.theme.selection_bg,
-            self.theme.header_bg,
-            self.icons.use_nerd_font,
-        );
-        frame.render_widget(Paragraph::new(Line::from(menu_spans)), self.layout_areas.menu_button);
+        let help_w = crate::ui::capsule::spans_width(&help_spans) as u16;
 
         let settings_spans = pill(
             Some(""),
@@ -2431,16 +2471,42 @@ impl App {
             self.theme.header_bg,
             self.icons.use_nerd_font,
         );
-        frame.render_widget(Paragraph::new(Line::from(settings_spans)), self.layout_areas.settings_button);
+        let settings_w = crate::ui::capsule::spans_width(&settings_spans) as u16;
 
-        let help_spans = pill(
-            Some(""),
-            "Help",
-            self.theme.dim_fg,
+        let menu_spans = pill(
+            Some("󰍜"),
+            "Menu",
+            self.theme.secondary,
             self.theme.selection_bg,
             self.theme.header_bg,
             self.icons.use_nerd_font,
         );
+        let menu_w = crate::ui::capsule::spans_width(&menu_spans) as u16;
+
+        let ai_spans = pill(
+            Some(ai_icon),
+            &ai_label,
+            ai_fg,
+            self.theme.selection_bg,
+            self.theme.header_bg,
+            self.icons.use_nerd_font,
+        );
+        let ai_w = crate::ui::capsule::spans_width(&ai_spans) as u16;
+
+        let help_x = top_area.x + top_area.width.saturating_sub(help_w);
+        let settings_x = help_x.saturating_sub(settings_w);
+        let menu_x = settings_x.saturating_sub(menu_w);
+        let ai_x = menu_x.saturating_sub(ai_w);
+
+        self.layout_areas.help_button = Rect { x: help_x, y: top_area.y, width: help_w, height: 1 };
+        self.layout_areas.settings_button = Rect { x: settings_x, y: top_area.y, width: settings_w, height: 1 };
+        self.layout_areas.menu_button = Rect { x: menu_x, y: top_area.y, width: menu_w, height: 1 };
+        self.layout_areas.ai_status_button = Rect { x: ai_x, y: top_area.y, width: ai_w, height: 1 };
+        self.layout_areas.ask_ai_button = self.layout_areas.ai_status_button;
+
+        frame.render_widget(Paragraph::new(Line::from(ai_spans)), self.layout_areas.ai_status_button);
+        frame.render_widget(Paragraph::new(Line::from(menu_spans)), self.layout_areas.menu_button);
+        frame.render_widget(Paragraph::new(Line::from(settings_spans)), self.layout_areas.settings_button);
         frame.render_widget(Paragraph::new(Line::from(help_spans)), self.layout_areas.help_button);
 
         // Bottom Header Row with Metadata Capsules
@@ -2732,8 +2798,8 @@ impl App {
         ));
         right_spans.push(Span::raw(" "));
 
-        let left_len: usize = left_spans.iter().map(|s| s.content.chars().count()).sum();
-        let right_len: usize = right_spans.iter().map(|s| s.content.chars().count()).sum();
+        let left_len = crate::ui::capsule::spans_width(&left_spans);
+        let right_len = crate::ui::capsule::spans_width(&right_spans);
         let width = self.layout_areas.footer.width as usize;
         let pad = width.saturating_sub(left_len + right_len);
 
