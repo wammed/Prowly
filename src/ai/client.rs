@@ -495,17 +495,28 @@ impl OllamaClient {
             client: reqwest::Client::new(),
         }
     }
-}
 
-#[async_trait]
-impl AiClient for OllamaClient {
-    async fn complete(&self, prompt: &AiPrompt) -> Result<AiResponse, AiError> {
+    /// Construct the full chat endpoint URL, ensuring `/api/chat` is correctly targeted
+    /// even if the user configured `api_base` without the `/api` path suffix.
+    pub fn chat_url(&self) -> String {
         let base = self
             .config
             .api_base
             .as_deref()
             .unwrap_or_else(|| self.config.provider.default_endpoint());
-        let url = format!("{}/chat", base.trim_end_matches('/'));
+        let trimmed = base.trim_end_matches('/');
+        if trimmed.ends_with("/api") {
+            format!("{}/chat", trimmed)
+        } else {
+            format!("{}/api/chat", trimmed)
+        }
+    }
+}
+
+#[async_trait]
+impl AiClient for OllamaClient {
+    async fn complete(&self, prompt: &AiPrompt) -> Result<AiResponse, AiError> {
+        let url = self.chat_url();
 
         let messages: Vec<_> = prompt
             .messages

@@ -1,7 +1,39 @@
 use prowly::ai::{
-    AiClient, AiContext, AiPrompt, CiContext, ConflictContext, MockAiClient, PrContext,
+    AiClient, AiConfig, AiContext, AiPrompt, AiProvider, CiContext, ConflictContext, MockAiClient,
+    OllamaClient, PrContext,
 };
 use prowly::i18n::Language;
+
+#[test]
+fn test_ollama_chat_url_resolution() {
+    let mut cfg = AiConfig::default();
+    cfg.provider = AiProvider::Ollama;
+
+    // 1. Default (None) -> http://localhost:11434/api/chat
+    cfg.api_base = None;
+    let client = OllamaClient::new(cfg.clone());
+    assert_eq!(client.chat_url(), "http://localhost:11434/api/chat");
+
+    // 2. Host with port without /api
+    cfg.api_base = Some("http://127.0.0.1:11434".to_string());
+    let client = OllamaClient::new(cfg.clone());
+    assert_eq!(client.chat_url(), "http://127.0.0.1:11434/api/chat");
+
+    // 3. Host with trailing slash
+    cfg.api_base = Some("http://127.0.0.1:11434/".to_string());
+    let client = OllamaClient::new(cfg.clone());
+    assert_eq!(client.chat_url(), "http://127.0.0.1:11434/api/chat");
+
+    // 4. Host explicitly with /api
+    cfg.api_base = Some("http://127.0.0.1:11434/api".to_string());
+    let client = OllamaClient::new(cfg.clone());
+    assert_eq!(client.chat_url(), "http://127.0.0.1:11434/api/chat");
+
+    // 5. Host explicitly with /api/
+    cfg.api_base = Some("http://127.0.0.1:11434/api/".to_string());
+    let client = OllamaClient::new(cfg);
+    assert_eq!(client.chat_url(), "http://127.0.0.1:11434/api/chat");
+}
 
 #[tokio::test]
 async fn test_mock_ai_client() {

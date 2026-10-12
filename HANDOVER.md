@@ -25,7 +25,7 @@ Last Updated: 2026-10-12
 | **Async Engine** | `tokio`. UI rendering thread is cleanly decoupled from Git/GitHub API/AI background tasks using mpsc channels. |
 | **Git Engine** | **Hybrid Architecture (`git2` + local `git` CLI)**.<br>Status inspection, diff parsing, and tree traversal are handled in-process for peak speed.<br>SSH agent auth, credential helpers, GPG signing, and push/pull are safely delegated to the local `git` CLI to eliminate authentication hurdles. |
 | **Performance** | **Virtual Scrolling & LRU Cache**.<br>Even with tens of thousands of diff/CI log lines, only the lines within the viewport are highlighted on-demand via `syntect` and rendered, maintaining a fluid 60 FPS. |
-| **Omnipresent AI** | **First-Class Citizen throughout the application**.<br>Accessible everywhere (Diff, PR, CI logs, Conflicts, Command Palette, Header, Errors) via `Ctrl+A` / `[ 󱚣 Ask AI ]`.<br>Automatically injects screen context (selection, diffs, raw logs) and requires safety confirmation (`[ Apply ]`).<br>BYOK (OpenAI, Anthropic, Gemini, Ollama, Custom) multi-provider support. |
+| **Omnipresent AI** | **First-Class Citizen throughout the application**.<br>Accessible everywhere (Diff, PR, CI logs, Conflicts, Command Palette, Header, Errors) via `Ctrl+A` / `[ 󱚣 Ask AI ]`.<br>Automatically injects screen context (selection, diffs, raw logs) and requires safety confirmation (`[ Apply ]`).<br>BYOK (OpenAI, Anthropic, Gemini, Ollama, Custom) multi-provider support. Local Ollama needs no API key and communicates directly with native `/api/chat` (auto-normalizing port-only URLs). |
 | **Safety Net** | **Soft-Discard Mechanism**. Automatically creates hidden stashes / temporary backups before executing changes discard to prevent accidental loss of code. |
 | **Git Extensions** | Git Worktree management, GPG/SSH commit signature verification badges, visual conflict resolution, and quick interactive rebase (Fixup / Squash / Reword). |
 | **Design System** | High-definition Nerd Font glyphs with an automatic ASCII/simple-Unicode fallback for non-Nerd Font environments. 21 preconfigured rich color themes. |
@@ -52,7 +52,7 @@ Last Updated: 2026-10-12
 ## 4. Current Status & Milestone Achievements
 
 - **Current Status**: **All Phases (Phase 0 through Phase 6) Completed Successfully**.
-- **Automated Test Suite**: **65 Automated Tests Passing (100% Pass Rate)** across all unit and integration test suites.
+- **Automated Test Suite**: **66 Automated Tests Passing (100% Pass Rate)** across all unit and integration test suites.
 - **Architectural Note on Async Runtime**: Background GitHub and AI operations are fully non-blocking and decoupled via `AppEvent` channels and `tokio::spawn`, eliminating runtime nesting panics (`block_on` inside Tokio).
 - **Phase-by-Phase Achievements**:
   - **Phase 0 (Foundations)**:
@@ -90,8 +90,9 @@ Last Updated: 2026-10-12
     2. Quick Interactive Rebase with squash, reword, and fixup (`src/git/rebase.rs`).
     3. Fuzzy Command Palette with natural language to Git command translation (`src/ui/modals/command_palette.rs`, `src/ai/command.rs`).
     4. Terminal Suspend / Resume escape hatch for `$EDITOR` (`src/services/terminal.rs`).
-  - **Phase 6 (Installers, Desktop Launcher & Bilingual Documentation)**:
+  - **Phase 6 (Installers, Desktop Launcher, Settings Modal Improvements & Bilingual Documentation)**:
     1. Automated installation script (`scripts/install.sh`) building release binary, registering scalable SVG icon, and generating FreeDesktop `.desktop` entry with `Terminal=true` for default system terminal launch.
     2. Uninstallation script (`scripts/uninstall.sh`) and Windows PowerShell script (`scripts/install.ps1`).
-    3. Full bilingual documentation (`README.md` & `README.ja.md`).
-    4. Complete automated test suite coverage with 64 tests passing.
+    3. Generous responsive sizing (up to 96 columns x 34 rows) with mouse wheel and keyboard scrolling for the Settings modal (`src/ui/modals/settings.rs`).
+    4. Full bilingual documentation (`README.md` & `README.ja.md`).
+    5. Complete automated test suite coverage with 66 tests passing.

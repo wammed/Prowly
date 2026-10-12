@@ -1244,31 +1244,40 @@ impl App {
     pub fn handle_mouse(&mut self, mouse: MouseEvent) {
         let (x, y) = (mouse.column, mouse.row);
 
-        // 1. Settings Modal clicks
+        // 1. Settings Modal clicks & wheel
         if self.settings_modal.is_open {
-            if mouse.kind == MouseEventKind::Down(MouseButton::Left) {
-                if let Some(action) = self
-                    .settings_modal
-                    .handle_click(x, y, self.layout_areas.root)
-                {
-                    match action {
-                        SettingsAction::SaveAndApply => {
-                            self.settings_modal.apply_to_config(&mut self.config);
-                            if let Err(e) = self.config.save() {
-                                self.last_status = Some(format!("Save config error: {}", e));
-                            } else {
-                                self.theme = Theme::get(self.config.theme);
-                                self.i18n = I18n::new(self.config.language);
-                                self.icons = Icons::new(self.config.use_nerd_font);
-                                self.last_status = Some(
-                                    "Saved settings to ~/.config/prowly/config.toml".to_string(),
-                                );
+            match mouse.kind {
+                MouseEventKind::Down(MouseButton::Left) => {
+                    if let Some(action) = self
+                        .settings_modal
+                        .handle_click(x, y, self.layout_areas.root)
+                    {
+                        match action {
+                            SettingsAction::SaveAndApply => {
+                                self.settings_modal.apply_to_config(&mut self.config);
+                                if let Err(e) = self.config.save() {
+                                    self.last_status = Some(format!("Save config error: {}", e));
+                                } else {
+                                    self.theme = Theme::get(self.config.theme);
+                                    self.i18n = I18n::new(self.config.language);
+                                    self.icons = Icons::new(self.config.use_nerd_font);
+                                    self.last_status = Some(
+                                        "Saved settings to ~/.config/prowly/config.toml".to_string(),
+                                    );
+                                }
+                                self.settings_modal.close();
                             }
-                            self.settings_modal.close();
+                            SettingsAction::Close => self.settings_modal.close(),
                         }
-                        SettingsAction::Close => self.settings_modal.close(),
                     }
                 }
+                MouseEventKind::ScrollUp => {
+                    self.settings_modal.scroll_up();
+                }
+                MouseEventKind::ScrollDown => {
+                    self.settings_modal.scroll_down(self.layout_areas.root);
+                }
+                _ => {}
             }
             return;
         }

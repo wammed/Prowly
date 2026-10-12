@@ -42,15 +42,18 @@ model = "gpt-4o-mini"
 # API Key:
 # You can set it here, or via environment variables:
 #   OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY (or GOOGLE_API_KEY)
+# Note: For Ollama, no API key is required.
 # api_key = "your-api-key-here"
 
 # API Base / Endpoint URL (optional override):
 #   OpenAI default:    https://api.openai.com/v1
 #   Anthropic default: https://api.anthropic.com/v1
 #   Gemini default:    https://generativelanguage.googleapis.com/v1beta
-#   Ollama default:    http://localhost:11434/api
+#   Ollama default:    http://localhost:11434/api (or http://localhost:11434)
 #   Custom default:    http://localhost:8080/v1
-# api_base = "http://localhost:11434/api"
+# Note: Prowly calls Ollama's native /api/chat. Both http://localhost:11434 and
+#       http://localhost:11434/api are supported. For OpenAI-compatible /v1, use provider = "custom".
+# api_base = "http://localhost:11434"
 
 # Generation temperature (0.0 to 1.0, lower is more deterministic)
 temperature = 0.3

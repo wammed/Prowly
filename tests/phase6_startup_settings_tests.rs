@@ -1,3 +1,4 @@
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use prowly::config::Config;
 use prowly::git::GitService;
 use prowly::i18n::Language;
@@ -79,6 +80,46 @@ fn test_settings_modal_interaction_and_save() {
     assert_eq!(reloaded.theme, ThemeId::TokyoNight);
     assert_eq!(reloaded.language, Language::Ja);
     assert_eq!(reloaded.ai.provider, prowly::ai::AiProvider::Anthropic);
+}
+
+#[test]
+fn test_settings_modal_responsive_sizing_and_scrolling() {
+    let mut modal = SettingsModal::new();
+    let config = Config::default();
+    modal.open_with_config(&config);
+
+    // 1. Large viewport (140x45) should expand beyond the old 76x28 hard limits
+    let large_viewport = Rect::new(0, 0, 140, 45);
+    let large_rect = modal.modal_rect(large_viewport);
+    assert!(
+        large_rect.width >= 90,
+        "Modal width should expand to at least 90 on large screens (got {})",
+        large_rect.width
+    );
+    assert!(
+        large_rect.height >= 32,
+        "Modal height should expand to at least 32 on large screens (got {})",
+        large_rect.height
+    );
+
+    // 2. Compact viewport (80x24) should support scrolling
+    let small_viewport = Rect::new(0, 0, 80, 24);
+    assert_eq!(modal.scroll_offset, 0);
+
+    modal.scroll_down(small_viewport);
+    assert_eq!(modal.scroll_offset, 1);
+
+    modal.scroll_up();
+    assert_eq!(modal.scroll_offset, 0);
+
+    // Keyboard scrolling (j/k)
+    let key_down = KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE);
+    modal.handle_key(key_down);
+    assert_eq!(modal.scroll_offset, 1);
+
+    let key_up = KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE);
+    modal.handle_key(key_up);
+    assert_eq!(modal.scroll_offset, 0);
 }
 
 #[test]

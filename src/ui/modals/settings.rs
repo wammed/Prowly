@@ -48,6 +48,7 @@ pub struct SettingsModal {
     pub show_api_key: bool,
     pub focused_input: Option<SettingsInputFocus>,
     pub status_banner: Option<String>,
+    pub scroll_offset: u16,
 }
 
 impl Default for SettingsModal {
@@ -73,6 +74,7 @@ impl SettingsModal {
             show_api_key: false,
             focused_input: None,
             status_banner: None,
+            scroll_offset: 0,
         }
     }
 
@@ -92,6 +94,23 @@ impl SettingsModal {
         self.show_api_key = false;
         self.focused_input = None;
         self.status_banner = None;
+        self.scroll_offset = 0;
+    }
+
+    /// Scroll up one line.
+    pub fn scroll_up(&mut self) {
+        self.scroll_offset = self.scroll_offset.saturating_sub(1);
+    }
+
+    /// Scroll down one line, constrained by modal viewport height.
+    pub fn scroll_down(&mut self, viewport: Rect) {
+        let rect = self.modal_rect(viewport);
+        let inner_height = rect.height.saturating_sub(2);
+        let total_lines = 21;
+        let max_scroll = (total_lines as u16).saturating_sub(inner_height);
+        if self.scroll_offset < max_scroll {
+            self.scroll_offset += 1;
+        }
     }
 
     /// Close settings dialog.
@@ -145,6 +164,22 @@ impl SettingsModal {
                     None
                 }
             }
+            KeyCode::Up | KeyCode::Char('k') if self.focused_input.is_none() => {
+                self.scroll_up();
+                None
+            }
+            KeyCode::Down | KeyCode::Char('j') if self.focused_input.is_none() => {
+                self.scroll_offset = self.scroll_offset.saturating_add(1).min(12);
+                None
+            }
+            KeyCode::PageUp if self.focused_input.is_none() => {
+                self.scroll_offset = self.scroll_offset.saturating_sub(5);
+                None
+            }
+            KeyCode::PageDown if self.focused_input.is_none() => {
+                self.scroll_offset = self.scroll_offset.saturating_add(5).min(12);
+                None
+            }
             KeyCode::Tab => {
                 self.focused_input = match self.focused_input {
                     None => Some(SettingsInputFocus::AiModel),
@@ -188,9 +223,14 @@ impl SettingsModal {
     }
 
     /// Calculate modal bounding box in viewport.
+    /// Adapts generously to larger terminal sizes up to 96 columns wide and 34 rows high.
     pub fn modal_rect(&self, viewport: Rect) -> Rect {
-        let width = 76.min(viewport.width.saturating_sub(4));
-        let height = 28.min(viewport.height.saturating_sub(2));
+        let ideal_w = (viewport.width * 88 / 100).clamp(76, 96);
+        let width = ideal_w.min(viewport.width.saturating_sub(2));
+
+        let ideal_h = (viewport.height * 92 / 100).clamp(24, 34);
+        let height = ideal_h.min(viewport.height.saturating_sub(2));
+
         let x = (viewport.width.saturating_sub(width)) / 2;
         let y = (viewport.height.saturating_sub(height)) / 2;
         Rect {
@@ -210,9 +250,10 @@ impl SettingsModal {
 
         let inner_x = x.saturating_sub(rect.x + 1);
         let inner_y = y.saturating_sub(rect.y + 1);
+        let content_y = inner_y + self.scroll_offset;
 
-        // Header Action Buttons (Row 0): [ 💾 Save ] and [ ❌ Cancel ]
-        if inner_y == 0 {
+        // Header Action Buttons (Row 0 or Screen Top): [ 💾 Save ] and [ ❌ Cancel ]
+        if inner_y == 0 || content_y == 0 {
             if inner_x >= rect.width.saturating_sub(24) && inner_x < rect.width.saturating_sub(12) {
                 return Some(SettingsAction::SaveAndApply);
             }
@@ -222,7 +263,7 @@ impl SettingsModal {
         }
 
         // Row 2: Theme selection
-        if inner_y == 2 {
+        if content_y == 2 {
             let themes = [
                 (ThemeId::CatppuccinMocha, "Mocha"),
                 (ThemeId::TokyoNight, "TokyoNight"),
@@ -243,7 +284,7 @@ impl SettingsModal {
         }
 
         // Row 3: Language & Nerd Font
-        if inner_y == 3 {
+        if content_y == 3 {
             // [ English ] (10..22), [ 日本語 ] (23..34)
             if inner_x >= 10 && inner_x < 22 {
                 self.language = Language::En;
@@ -259,7 +300,7 @@ impl SettingsModal {
         }
 
         // Row 5: AI Provider Chips
-        if inner_y == 5 {
+        if content_y == 5 {
             let providers = [
                 (AiProvider::OpenAi, "OpenAI"),
                 (AiProvider::Anthropic, "Anthropic"),
@@ -280,7 +321,7 @@ impl SettingsModal {
         }
 
         // Row 7: Model Presets
-        if inner_y == 7 {
+        if content_y == 7 {
             let presets: &[&str] = match self.ai_provider {
                 AiProvider::OpenAi => &["gpt-4o-mini", "gpt-4o", "o3-mini"],
                 AiProvider::Anthropic => {
@@ -302,13 +343,13 @@ impl SettingsModal {
         }
 
         // Row 8: Model Input
-        if inner_y == 8 && inner_x >= 12 && inner_x < rect.width.saturating_sub(4) {
+        if content_y == 8 && inner_x >= 12 && inner_x < rect.width.saturating_sub(4) {
             self.focused_input = Some(SettingsInputFocus::AiModel);
             return None;
         }
 
         // Row 10: API Key Input & Buttons
-        if inner_y == 10 {
+        if content_y == 10 {
             // Mask toggle button [ Show / Hide ] at end of row
             let show_btn_x = rect.width.saturating_sub(18);
             if inner_x >= show_btn_x && inner_x < show_btn_x + 8 {
@@ -327,7 +368,7 @@ impl SettingsModal {
         }
 
         // Row 12: Endpoint Base URL & Reset Default
-        if inner_y == 12 {
+        if content_y == 12 {
             let reset_btn_x = rect.width.saturating_sub(16);
             if inner_x >= reset_btn_x {
                 self.ai_api_base.clear();
@@ -340,7 +381,7 @@ impl SettingsModal {
         }
 
         // Row 15: Git Soft Discard & Auto Fetch
-        if inner_y == 15 {
+        if content_y == 15 {
             // Soft Discard: [ ON ] (16..23), [ OFF ] (24..32)
             if inner_x >= 16 && inner_x < 23 {
                 self.git_soft_discard = true;
@@ -358,7 +399,7 @@ impl SettingsModal {
         }
 
         // Row 17: Editor Command
-        if inner_y == 17 {
+        if content_y == 17 {
             // Presets: [ nvim ] (34..43), [ code ] (44..53), [ nano ] (54..63)
             if inner_x >= 34 && inner_x < 43 {
                 self.editor_command = "nvim".to_string();
@@ -376,12 +417,12 @@ impl SettingsModal {
             }
         }
 
-        // Bottom Action Bar: Row height - 3
-        if inner_y >= rect.height.saturating_sub(4) {
-            if inner_x >= 4 && inner_x < 34 {
+        // Bottom Action Bar: Row height - 4, or content_y >= 19
+        if content_y >= 19 || inner_y >= rect.height.saturating_sub(4) {
+            if inner_x >= 4 && inner_x < 36 {
                 return Some(SettingsAction::SaveAndApply);
             }
-            if inner_x >= 36 && inner_x < 56 {
+            if inner_x >= 36 && inner_x < 58 {
                 return Some(SettingsAction::Close);
             }
         }
@@ -405,7 +446,13 @@ impl SettingsModal {
         let rect = self.modal_rect(viewport);
         frame.render_widget(Clear, rect);
 
-        let title = format!(" {} SETTINGS / 設定 ", icons.settings());
+        let inner_height = rect.height.saturating_sub(2);
+        let scroll_hint = if (inner_height as usize) < 21 {
+            format!(" [ ▲▼ Scroll: j/k ]")
+        } else {
+            String::new()
+        };
+        let title = format!(" {} SETTINGS / 設定{} ", icons.settings(), scroll_hint);
         let block = Block::default()
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
@@ -515,8 +562,9 @@ impl SettingsModal {
             Span::styled(" [ OFF ] ", nf_off_style),
         ]));
 
+        let sep_len = (inner.width as usize).min(90);
         lines.push(Line::from(Span::styled(
-            "────────────────────────────────────────────────────────────────────────",
+            "─".repeat(sep_len),
             Style::default().fg(theme.border),
         )));
 
@@ -625,7 +673,11 @@ impl SettingsModal {
         let displayed_key = if self.show_api_key {
             self.ai_api_key.clone()
         } else if self.ai_api_key.is_empty() {
-            "(No API Key configured)".to_string()
+            if self.ai_provider == AiProvider::Ollama {
+                "(Not required for Ollama)".to_string()
+            } else {
+                "(No API Key configured)".to_string()
+            }
         } else {
             let len = self.ai_api_key.len();
             format!("•••••••••••••••• ({})", len)
@@ -668,7 +720,7 @@ impl SettingsModal {
         ]));
 
         lines.push(Line::from(Span::styled(
-            "────────────────────────────────────────────────────────────────────────",
+            "─".repeat(sep_len),
             Style::default().fg(theme.border),
         )));
 
@@ -768,6 +820,6 @@ impl SettingsModal {
             ),
         ]));
 
-        frame.render_widget(Paragraph::new(lines), inner);
+        frame.render_widget(Paragraph::new(lines).scroll((self.scroll_offset, 0)), inner);
     }
 }

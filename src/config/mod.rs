@@ -119,10 +119,12 @@ provider = "openai"
 model = "gpt-4o-mini"
 
 # API Key (or set OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY env vars)
+# Note: For Ollama, no API key is required.
 # api_key = "your-api-key-here"
 
 # Custom API Base / Endpoint (optional override)
-# api_base = "http://localhost:11434/api"
+# Supports http://localhost:11434 and http://localhost:11434/api for Ollama.
+# api_base = "http://localhost:11434"
 
 temperature = 0.3
 max_tokens = 2048

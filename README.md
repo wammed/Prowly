@@ -200,6 +200,22 @@ auto_review = true
 token = "ghp_..."
 ```
 
+### Local Ollama Setup
+When using a locally running [Ollama](https://ollama.com/) instance, no API key is required.
+
+```toml
+[ai]
+provider = "ollama"
+# Model name installed in your local Ollama (e.g. "llama3.2:latest", "deepseek-r1:latest", "ornith-1.5:35b")
+model = "ornith-1.5:35b"
+# Endpoint URL (supports both http://127.0.0.1:11434 and http://127.0.0.1:11434/api)
+api_base = "http://127.0.0.1:11434"
+```
+
+> **Note (Endpoint Specification):**  
+> While many other tools or agents use Ollama's OpenAI-compatible endpoint (`http://127.0.0.1:11434/v1`), Prowly's `provider = "ollama"` communicates directly with Ollama's native `/api/chat` for lightweight, dependency-free execution. Prowly automatically normalizes `http://127.0.0.1:11434` to the correct endpoint.  
+> If you prefer using Ollama's OpenAI-compatible `/v1` endpoint, you can set `provider = "custom"` with `api_base = "http://127.0.0.1:11434/v1"`.
+
 ---
 
 ## Color Themes

@@ -13,7 +13,7 @@ pub mod pr;
 pub use ci::{analyze_ci_failure, CiFailureAnalysis};
 pub use client::{
     create_ai_client, AiClient, AiConfig, AiError, AiMessage, AiPrompt, AiProvider, AiResponse,
-    AiRole, MockAiClient,
+    AiRole, MockAiClient, OllamaClient,
 };
 pub use command::{translate_natural_language_to_git, CommandRiskLevel, SuggestedGitCommand};
 pub use commit::{generate_commit_message, review_changes, GeneratedCommit};

@@ -200,6 +200,22 @@ auto_review = true
 token = "ghp_..."
 ```
 
+### ローカル Ollama の利用設定
+ローカルで動作している [Ollama](https://ollama.com/) を利用する場合、API キーは不要です。
+
+```toml
+[ai]
+provider = "ollama"
+# ローカルの Ollama にインストールされているモデル名を指定 (例: "llama3.2:latest", "deepseek-r1:latest", "ornith-1.5:35b")
+model = "ornith-1.5:35b"
+# エンドポイント (http://127.0.0.1:11434 または http://127.0.0.1:11434/api のどちらも指定可能)
+api_base = "http://127.0.0.1:11434"
+```
+
+> **Note (エンドポイント仕様について):**  
+> 他のエージェントやツールでは OpenAI 互換 API (`/v1`) を使用するために `http://127.0.0.1:11434/v1` と指定することが多いですが、Prowly の `provider = "ollama"` は Ollama ネイティブの `/api/chat` を直接呼び出す軽量設計となっています。ベース URL に `http://127.0.0.1:11434` を指定した場合も自動的に正規化されます。  
+> ※ OpenAI 互換エンドポイント（`/v1`）経由で接続したい場合は、`provider = "custom"` を指定し `api_base = "http://127.0.0.1:11434/v1"` を設定してください。
+
 ---
 
 ## カラーテーマ (全21種類)
