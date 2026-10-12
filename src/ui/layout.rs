@@ -13,6 +13,7 @@ pub struct LayoutAreas {
     pub branch_button: Rect,
     pub sync_button: Rect,
     pub ai_status_button: Rect,
+    pub palette_button: Rect,
     pub settings_button: Rect,
     pub menu_button: Rect,
     pub help_button: Rect,
@@ -77,15 +78,17 @@ impl LayoutAreas {
         };
 
         // Top right buttons:
-        // [? Help] (10), [  Settings ] (14), [ 󰍜 Menu ] (10), [ 󱚣 AI: ... ] (34)
+        // [? Help] (10), [  Settings ] (14), [ 󰘳 Palette ] (13), [ 󰍜 Menu ] (10), [ 󱚣 AI: ... ] (34)
         let help_width = 10;
         let settings_width = 14;
+        let palette_width = 13;
         let menu_width = 10;
         let ai_width = 34;
 
         let help_x = header_top.x + header_top.width.saturating_sub(help_width);
         let settings_x = help_x.saturating_sub(settings_width);
-        let menu_x = settings_x.saturating_sub(menu_width);
+        let palette_x = settings_x.saturating_sub(palette_width);
+        let menu_x = palette_x.saturating_sub(menu_width);
         let ai_x = menu_x.saturating_sub(ai_width);
 
         let help_button = Rect {
@@ -99,6 +102,13 @@ impl LayoutAreas {
             x: settings_x,
             y: header_top.y,
             width: settings_width.min(header_top.width),
+            height: 1,
+        };
+
+        let palette_button = Rect {
+            x: palette_x,
+            y: header_top.y,
+            width: palette_width.min(header_top.width),
             height: 1,
         };
 
@@ -146,6 +156,7 @@ impl LayoutAreas {
             branch_button,
             sync_button,
             ai_status_button,
+            palette_button,
             settings_button,
             menu_button,
             help_button,
@@ -167,6 +178,11 @@ impl LayoutAreas {
     /// Check if coordinates (x, y) hit the Ask AI / AI status button in header.
     pub fn hits_ask_ai(&self, x: u16, y: u16) -> bool {
         contains_point(self.ai_status_button, x, y)
+    }
+
+    /// Check if coordinates (x, y) hit the Command Palette button in header.
+    pub fn hits_palette(&self, x: u16, y: u16) -> bool {
+        contains_point(self.palette_button, x, y)
     }
 
     /// Check if coordinates (x, y) hit the Settings button in header.

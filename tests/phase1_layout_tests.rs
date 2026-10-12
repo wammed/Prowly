@@ -50,6 +50,12 @@ fn test_mouse_hit_testing() {
     assert!(layout.hits_help(help_x, help_y));
     assert!(!layout.hits_ask_ai(help_x, help_y));
 
+    // Test Palette button hit
+    let pal_x = layout.palette_button.x + 1;
+    let pal_y = layout.palette_button.y;
+    assert!(layout.hits_palette(pal_x, pal_y));
+    assert!(!layout.hits_help(pal_x, pal_y));
+
     // Test Left Directory Pane hit
     let left_x = layout.left_pane.x + 5;
     let left_y = layout.left_pane.y + 5;
