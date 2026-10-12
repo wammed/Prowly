@@ -46,6 +46,11 @@ Whether you prefer keyboard shortcuts or intuitive mouse interactions (clicking,
   - Rate-limit aware with intelligent in-memory TTL caching.
 - ⚔️ **Visual Merge Conflict Resolver**: Side-by-side comparison of `Current` vs `Incoming` branches with interactive hunk resolution and AI smart merge.
 - 🔀 **Quick Interactive Rebase**: Fast squash, reword, and fixup without fighting interactive Vim buffers.
+- 🧭 **3-Layer Hierarchical Command Palette (`:` / `F1` / `Ctrl+P`)**:
+  - Layer 1: Prowly Native Actions with instant fuzzy search & smooth full virtual scrolling.
+  - Layer 2: 110+ Standard Git CLI Subcommands Catalog with category badges & descriptions.
+  - Layer 3: Direct argument/option input with Tab flag autocompletion.
+  - Features breadcrumbs navigation, Esc/Backspace hierarchical rollback, direct shortcut jumps, and a safety guard with two-step Enter confirmation for destructive operations.
 - 🎨 **21 Curated Color Themes**: Tokyo Night, Catppuccin, Gruvbox, Nord, Dracula, Solarized, Everforest, Cyberpunk, and more.
 - 🌐 **Full Bilingual Support**: Instant switching between English and Japanese (`l`).
 - 🚀 **App Launcher Integration**: Seamless FreeDesktop integration with `Terminal=true` to automatically launch in your desktop environment's default terminal.
