@@ -174,3 +174,53 @@ fn test_middle_pane_mouse_click_select_file() {
     assert_eq!(app.changes_view.file_scroll.selected_index, 1);
 }
 
+#[test]
+fn test_app_commit_staged_auto_stages_and_prevents_empty() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let repo_path = temp_dir.path();
+    let repo = git2::Repository::init(repo_path).unwrap();
+
+    let mut config = repo.config().unwrap();
+    config.set_str("user.name", "Tester").unwrap();
+    config.set_str("user.email", "tester@test.local").unwrap();
+
+    // Initial commit
+    let file = repo_path.join("file.txt");
+    std::fs::write(&file, "initial").unwrap();
+    let mut index = repo.index().unwrap();
+    index.add_path(std::path::Path::new("file.txt")).unwrap();
+    let tree_oid = index.write_tree().unwrap();
+    index.write().unwrap();
+    let tree = repo.find_tree(tree_oid).unwrap();
+    let sig = repo.signature().unwrap();
+    repo.commit(Some("HEAD"), &sig, &sig, "init", &tree, &[]).unwrap();
+
+    let mut app = App::new(Config::default());
+    app.switch_repository(repo_path);
+
+    // 1. Without any changes, commit_staged should report "No changes to commit"
+    app.changes_view.commit_summary = "Trying empty commit".to_string();
+    app.commit_staged();
+    assert_eq!(app.last_status.as_deref(), Some("No changes to commit"));
+
+    // 2. Modify file without staging it
+    std::fs::write(&file, "modified content").unwrap();
+    app.refresh_git_status();
+
+    // Verify file is unstaged
+    assert_eq!(app.repo_status.files.len(), 1);
+    assert!(!app.repo_status.files[0].staged);
+
+    // 3. Call commit_staged() with commit summary
+    app.changes_view.commit_summary = "feat: auto staged change".to_string();
+    app.commit_staged();
+
+    // Status should be committed (even without prior manual staging!)
+    let status_str = app.last_status.unwrap_or_default();
+    assert!(status_str.starts_with("Committed:"), "Expected Committed: prefix, got: {}", status_str);
+
+    // After commit, working directory and files should be clean
+    assert!(app.repo_status.files.is_empty());
+}
+
+

@@ -1904,6 +1904,29 @@ impl App {
         };
 
         if let Some(git) = &self.git_service {
+            // Check staging status:
+            // If nothing is staged, but unstaged changed files exist,
+            // automatically stage all changes so Commit & Sync works seamlessly
+            // like GitHub Desktop or VS Code.
+            let status = git.get_status().ok();
+            let staged_count = status
+                .as_ref()
+                .map(|s| s.files.iter().filter(|f| f.staged).count())
+                .unwrap_or(0);
+            let unstaged_count = status
+                .as_ref()
+                .map(|s| s.files.iter().filter(|f| !f.staged).count())
+                .unwrap_or(0);
+
+            if staged_count == 0 {
+                if unstaged_count > 0 {
+                    let _ = git.stage_all();
+                } else {
+                    self.last_status = Some("No changes to commit".to_string());
+                    return;
+                }
+            }
+
             match git.commit_with_description(&summary, desc) {
                 Ok(oid) => {
                     let short_oid = &oid.to_string()[..7.min(oid.to_string().len())];

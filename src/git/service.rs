@@ -365,6 +365,13 @@ impl GitService {
             Err(_) => Vec::new(),
         };
 
+        // Guard against creating accidental empty commits
+        if let Some(parent) = parents.first() {
+            if parent.tree_id() == tree_oid {
+                return Err(GitError::Cli("No staged changes to commit".to_string()));
+            }
+        }
+
         let parent_refs: Vec<&git2::Commit> = parents.iter().collect();
         let commit_oid =
             self.repo
@@ -454,7 +461,20 @@ impl GitService {
 
     /// Invoke Git CLI for push (ensuring SSH agent / Credential Helper / GPG compatibility).
     pub fn cli_push(&self) -> Result<String, GitError> {
-        self.run_git_cli(&["push"])
+        match self.run_git_cli(&["push"]) {
+            Ok(output) => Ok(output),
+            Err(e) => {
+                let err_str = e.to_string();
+                if err_str.contains("no upstream") || err_str.contains("set-upstream") {
+                    if let Ok(head) = self.repo.head() {
+                        if let Some(branch) = head.shorthand() {
+                            return self.run_git_cli(&["push", "-u", "origin", branch]);
+                        }
+                    }
+                }
+                Err(e)
+            }
+        }
     }
 
     /// Invoke Git CLI for pull.

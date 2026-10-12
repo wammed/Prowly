@@ -97,3 +97,106 @@ fn test_git_diff_generation() {
     assert!(!diff.hunks.is_empty());
     assert!(diff.stats_added > 0 || diff.stats_deleted > 0);
 }
+
+#[test]
+fn test_git_cli_push_and_ahead_status() {
+    let temp_dir = TempDir::new().unwrap();
+    let remote_dir = TempDir::new().unwrap();
+
+    // 1. Create bare remote repo
+    git2::Repository::init_bare(remote_dir.path()).unwrap();
+
+    // 2. Init local repo
+    let repo_path = temp_dir.path();
+    let repo = git2::Repository::init(repo_path).unwrap();
+    let mut config = repo.config().unwrap();
+    config.set_str("user.name", "Tester").unwrap();
+    config.set_str("user.email", "tester@test.local").unwrap();
+
+    // Commit a file
+    let file = repo_path.join("file.txt");
+    fs::write(&file, "hello").unwrap();
+    let mut index = repo.index().unwrap();
+    index.add_path(std::path::Path::new("file.txt")).unwrap();
+    let tree_oid = index.write_tree().unwrap();
+    index.write().unwrap();
+    let tree = repo.find_tree(tree_oid).unwrap();
+    let sig = repo.signature().unwrap();
+    repo.commit(Some("HEAD"), &sig, &sig, "Initial commit", &tree, &[]).unwrap();
+
+    // Add remote
+    repo.remote("origin", remote_dir.path().to_str().unwrap()).unwrap();
+
+    let git = GitService::open(repo_path).unwrap();
+
+    // First push via CLI and set upstream
+    std::process::Command::new("git")
+        .current_dir(repo_path)
+        .args(&["push", "-u", "origin", "main"])
+        .output()
+        .unwrap();
+
+    let status = git.get_status().unwrap();
+    println!("Status after initial push: ahead={}, behind={}", status.ahead, status.behind);
+
+    // Make new commit
+    fs::write(&file, "hello 2").unwrap();
+    git.stage_file("file.txt").unwrap();
+    git.commit("second commit").unwrap();
+
+    let status_before_push = git.get_status().unwrap();
+    println!("Status before push: ahead={}, behind={}", status_before_push.ahead, status_before_push.behind);
+    assert_eq!(status_before_push.ahead, 1);
+
+    // Now call cli_push()
+    let push_res = git.cli_push();
+    assert!(push_res.is_ok());
+
+    let status_after_push = git.get_status().unwrap();
+    assert_eq!(status_after_push.ahead, 0);
+
+    // Verify empty commit prevention
+    let empty_commit_res = git.commit("should fail empty commit");
+    assert!(empty_commit_res.is_err());
+}
+
+#[test]
+fn test_git_cli_push_auto_upstream_fallback() {
+    let temp_dir = TempDir::new().unwrap();
+    let remote_dir = TempDir::new().unwrap();
+
+    // 1. Create bare remote repo
+    git2::Repository::init_bare(remote_dir.path()).unwrap();
+
+    // 2. Init local repo
+    let repo_path = temp_dir.path();
+    let repo = git2::Repository::init(repo_path).unwrap();
+    let mut config = repo.config().unwrap();
+    config.set_str("user.name", "Tester").unwrap();
+    config.set_str("user.email", "tester@test.local").unwrap();
+
+    // Commit a file
+    let file = repo_path.join("file.txt");
+    fs::write(&file, "hello branch").unwrap();
+    let mut index = repo.index().unwrap();
+    index.add_path(std::path::Path::new("file.txt")).unwrap();
+    let tree_oid = index.write_tree().unwrap();
+    index.write().unwrap();
+    let tree = repo.find_tree(tree_oid).unwrap();
+    let sig = repo.signature().unwrap();
+    repo.commit(Some("HEAD"), &sig, &sig, "Initial commit", &tree, &[]).unwrap();
+
+    // Add remote
+    repo.remote("origin", remote_dir.path().to_str().unwrap()).unwrap();
+
+    let git = GitService::open(repo_path).unwrap();
+
+    // Call cli_push() without upstream configured! Should auto fallback to -u origin <branch>
+    let push_res = git.cli_push();
+    assert!(push_res.is_ok(), "Push without upstream should succeed via auto-fallback: {:?}", push_res);
+
+    let status = git.get_status().unwrap();
+    assert_eq!(status.ahead, 0);
+}
+
+
