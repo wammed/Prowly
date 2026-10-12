@@ -83,3 +83,150 @@ fn test_rebase_command_search_and_scrolling() {
     assert!(palette.selected_action().is_some());
 }
 
+#[test]
+fn test_multi_layer_navigation_and_rollback() {
+    use prowly::ui::modals::command_palette::{PaletteEnterResult, PaletteLayer};
+
+    let mut palette = CommandPaletteModal::new();
+    palette.open();
+    assert_eq!(palette.layer, PaletteLayer::Root);
+
+    // Filter and select "browse_git_cli"
+    for c in "browse".chars() {
+        palette.push_char(c);
+    }
+    assert_eq!(palette.selected_action().unwrap().id, "browse_git_cli");
+
+    // Press Enter to enter Layer 2
+    let res = palette.handle_enter();
+    assert_eq!(res, PaletteEnterResult::LayerChanged);
+    assert_eq!(palette.layer, PaletteLayer::GitSubcommand);
+    assert!(palette.filtered_subcommands().len() >= 100);
+
+    // Search for "bisect" in Layer 2
+    for c in "bisect".chars() {
+        palette.push_char(c);
+    }
+    let subs = palette.filtered_subcommands();
+    assert!(!subs.is_empty());
+    assert_eq!(subs[0].name, "bisect");
+
+    // Press Enter to enter Layer 3
+    let res = palette.handle_enter();
+    assert_eq!(res, PaletteEnterResult::LayerChanged);
+    match &palette.layer {
+        PaletteLayer::ArgsInput { subcommand, .. } => assert_eq!(subcommand, "bisect"),
+        _ => panic!("Expected ArgsInput layer"),
+    }
+
+    // When query is empty, pop_char() acts as Backspace rollback to Layer 2
+    palette.pop_char();
+    assert_eq!(palette.layer, PaletteLayer::GitSubcommand);
+
+    // pop_char() again with empty query rolls back to Layer 1 (Root)
+    palette.pop_char();
+    assert_eq!(palette.layer, PaletteLayer::Root);
+
+    // Esc navigation test
+    palette.handle_enter(); // browse_git_cli -> Layer 2
+    assert_eq!(palette.layer, PaletteLayer::GitSubcommand);
+    assert!(palette.handle_esc()); // back to Root
+    assert_eq!(palette.layer, PaletteLayer::Root);
+    assert!(!palette.handle_esc()); // Esc at Root returns false (to close)
+}
+
+#[test]
+fn test_tab_flag_autocomplete() {
+    use prowly::ui::modals::command_palette::PaletteLayer;
+
+    let mut palette = CommandPaletteModal::new();
+    palette.open();
+
+    // Enter Layer 3 for "commit"
+    palette.layer = PaletteLayer::ArgsInput {
+        subcommand: "commit".to_string(),
+        description: "Record changes to repository".to_string(),
+        common_flags: vec!["-m".to_string(), "--amend".to_string(), "-a".to_string()],
+    };
+
+    // First tab inserts "-m"
+    palette.handle_tab();
+    assert_eq!(palette.query, "-m");
+
+    // Second tab appends next flag
+    palette.handle_tab();
+    assert_eq!(palette.query, "-m --amend");
+}
+
+#[test]
+fn test_direct_shortcut_jump() {
+    use prowly::ui::modals::command_palette::{PaletteEnterResult, PaletteLayer};
+
+    let mut palette = CommandPaletteModal::new();
+    palette.open();
+
+    // Shortcut jump with args: `git cherry-pick --continue`
+    for c in "git cherry-pick --continue".chars() {
+        palette.push_char(c);
+    }
+    let res = palette.handle_enter();
+    assert_eq!(
+        res,
+        PaletteEnterResult::ExecuteGitCommand {
+            subcommand: "cherry-pick".to_string(),
+            args: "--continue".to_string(),
+        }
+    );
+
+    // Shortcut jump without args: `cherry-pick` directly opens Layer 3
+    palette.open();
+    for c in "cherry-pick".chars() {
+        palette.push_char(c);
+    }
+    let res = palette.handle_enter();
+    assert_eq!(res, PaletteEnterResult::LayerChanged);
+    match &palette.layer {
+        PaletteLayer::ArgsInput { subcommand, .. } => assert_eq!(subcommand, "cherry-pick"),
+        _ => panic!("Expected ArgsInput layer"),
+    }
+}
+
+#[test]
+fn test_safety_guard_destructive_actions() {
+    use prowly::ui::modals::command_palette::{PaletteEnterResult, PaletteLayer};
+
+    let mut palette = CommandPaletteModal::new();
+    palette.open();
+
+    palette.layer = PaletteLayer::ArgsInput {
+        subcommand: "push".to_string(),
+        description: "Update remote refs".to_string(),
+        common_flags: vec!["--force".to_string()],
+    };
+
+    // User types dangerous flag
+    for c in "--force origin main".chars() {
+        palette.push_char(c);
+    }
+
+    // First Enter triggers safety guard
+    let res1 = palette.handle_enter();
+    match res1 {
+        PaletteEnterResult::DangerWarning(msg) => {
+            assert!(msg.contains("Force push"));
+        }
+        _ => panic!("Expected DangerWarning"),
+    }
+    assert!(palette.is_confirmed_danger());
+
+    // Second Enter proceeds with execution
+    let res2 = palette.handle_enter();
+    assert_eq!(
+        res2,
+        PaletteEnterResult::ExecuteGitCommand {
+            subcommand: "push".to_string(),
+            args: "--force origin main".to_string(),
+        }
+    );
+}
+

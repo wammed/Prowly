@@ -1,0 +1,697 @@
+//! Comprehensive catalog of Git CLI subcommands, descriptions, and common flags.
+
+/// Definition of a Git CLI subcommand.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GitSubcommandDef {
+    pub name: &'static str,
+    pub description: &'static str,
+    pub category: &'static str,
+    pub common_flags: &'static [&'static str],
+}
+
+impl GitSubcommandDef {
+    /// Full catalog of standard Git subcommands (main porcelain, ancillary, plumbing).
+    pub const ALL: &'static [GitSubcommandDef] = &[
+        // --- Main Porcelain Commands ---
+        GitSubcommandDef {
+            name: "add",
+            description: "Add file contents to the staging index",
+            category: "Main",
+            common_flags: &["-p", "--patch", "-u", "--update", "-A", "--all", "-n", "--dry-run"],
+        },
+        GitSubcommandDef {
+            name: "am",
+            description: "Apply a series of patches from a mailbox",
+            category: "Main",
+            common_flags: &["--signoff", "--resolved", "--skip", "--abort"],
+        },
+        GitSubcommandDef {
+            name: "archive",
+            description: "Create an archive of files from a named tree",
+            category: "Main",
+            common_flags: &["--format=zip", "--format=tar", "-o", "--prefix="],
+        },
+        GitSubcommandDef {
+            name: "bisect",
+            description: "Use binary search to find the commit that introduced a bug",
+            category: "Main",
+            common_flags: &["start", "bad", "good", "reset", "skip", "log", "run"],
+        },
+        GitSubcommandDef {
+            name: "branch",
+            description: "List, create, or delete branches",
+            category: "Main",
+            common_flags: &["-a", "--all", "-r", "--remotes", "-d", "-D", "-m", "-M", "--merged", "--no-merged"],
+        },
+        GitSubcommandDef {
+            name: "bundle",
+            description: "Move objects and refs by archive",
+            category: "Main",
+            common_flags: &["create", "verify", "list-heads", "unbundle"],
+        },
+        GitSubcommandDef {
+            name: "checkout",
+            description: "Switch branches or restore working tree files",
+            category: "Main",
+            common_flags: &["-b", "-B", "--track", "--detach", "--force", "-p", "--patch"],
+        },
+        GitSubcommandDef {
+            name: "cherry-pick",
+            description: "Apply the changes introduced by some existing commits",
+            category: "Main",
+            common_flags: &["-e", "--edit", "-n", "--no-commit", "-x", "--abort", "--continue", "--skip"],
+        },
+        GitSubcommandDef {
+            name: "citool",
+            description: "Graphical alternative to git-commit",
+            category: "Main",
+            common_flags: &["--amend"],
+        },
+        GitSubcommandDef {
+            name: "clean",
+            description: "Remove untracked files from the working tree",
+            category: "Main",
+            common_flags: &["-n", "--dry-run", "-f", "--force", "-d", "-x", "-X"],
+        },
+        GitSubcommandDef {
+            name: "clone",
+            description: "Clone a repository into a new directory",
+            category: "Main",
+            common_flags: &["--depth 1", "--branch", "--recurse-submodules", "--bare", "--single-branch"],
+        },
+        GitSubcommandDef {
+            name: "commit",
+            description: "Record changes to the repository",
+            category: "Main",
+            common_flags: &["-m", "--amend", "--no-edit", "-a", "--all", "--fixup=", "--squash=", "-v", "--verbose"],
+        },
+        GitSubcommandDef {
+            name: "describe",
+            description: "Give an object a human readable name based on an available ref",
+            category: "Main",
+            common_flags: &["--tags", "--always", "--abbrev=", "--dirty"],
+        },
+        GitSubcommandDef {
+            name: "diff",
+            description: "Show changes between commits, commit and working tree, etc",
+            category: "Main",
+            common_flags: &["--staged", "--cached", "--stat", "--name-only", "--word-diff", "-w", "--color-words"],
+        },
+        GitSubcommandDef {
+            name: "fetch",
+            description: "Download objects and refs from another repository",
+            category: "Main",
+            common_flags: &["--all", "--prune", "--tags", "--depth=", "--force"],
+        },
+        GitSubcommandDef {
+            name: "format-patch",
+            description: "Prepare patches for e-mail submission",
+            category: "Main",
+            common_flags: &["-n", "--output-directory", "--stdout", "-1", "HEAD~1"],
+        },
+        GitSubcommandDef {
+            name: "gc",
+            description: "Cleanup unnecessary files and optimize the local repository",
+            category: "Main",
+            common_flags: &["--prune=now", "--aggressive", "--auto"],
+        },
+        GitSubcommandDef {
+            name: "grep",
+            description: "Print lines matching a pattern",
+            category: "Main",
+            common_flags: &["-n", "-i", "-w", "-E", "-l", "--count"],
+        },
+        GitSubcommandDef {
+            name: "init",
+            description: "Create an empty Git repository or reinitialize an existing one",
+            category: "Main",
+            common_flags: &["--bare", "--initial-branch=main", "-q", "--quiet"],
+        },
+        GitSubcommandDef {
+            name: "log",
+            description: "Show commit logs and history",
+            category: "Main",
+            common_flags: &["--oneline", "--graph", "--decorate", "-n 10", "--stat", "--author=", "--since="],
+        },
+        GitSubcommandDef {
+            name: "maintenance",
+            description: "Run tasks to optimize Git repository data",
+            category: "Main",
+            common_flags: &["run", "start", "stop", "register", "unregister"],
+        },
+        GitSubcommandDef {
+            name: "merge",
+            description: "Join two or more development histories together",
+            category: "Main",
+            common_flags: &["--no-ff", "--squash", "--abort", "--continue", "-m", "--strategy="],
+        },
+        GitSubcommandDef {
+            name: "mv",
+            description: "Move or rename a file, a directory, or a symlink",
+            category: "Main",
+            common_flags: &["-f", "--force", "-k", "-v"],
+        },
+        GitSubcommandDef {
+            name: "notes",
+            description: "Add or inspect object notes",
+            category: "Main",
+            common_flags: &["add", "show", "edit", "remove", "prune", "list"],
+        },
+        GitSubcommandDef {
+            name: "pull",
+            description: "Fetch from and integrate with another repository or branch",
+            category: "Main",
+            common_flags: &["--rebase", "--no-rebase", "--ff-only", "--autostash"],
+        },
+        GitSubcommandDef {
+            name: "push",
+            description: "Update remote refs along with associated objects",
+            category: "Main",
+            common_flags: &["-u", "--set-upstream", "--force-with-lease", "--tags", "--dry-run", "--delete"],
+        },
+        GitSubcommandDef {
+            name: "range-diff",
+            description: "Compare two commit ranges (e.g. two versions of a branch)",
+            category: "Main",
+            common_flags: &["--stat", "-s"],
+        },
+        GitSubcommandDef {
+            name: "rebase",
+            description: "Reapply commits on top of another base tip",
+            category: "Main",
+            common_flags: &["-i", "--interactive", "--onto", "--continue", "--abort", "--skip", "--autosquash"],
+        },
+        GitSubcommandDef {
+            name: "reset",
+            description: "Reset current HEAD to the specified state",
+            category: "Main",
+            common_flags: &["--soft", "--mixed", "--hard", "HEAD~1", "--merge", "--keep"],
+        },
+        GitSubcommandDef {
+            name: "restore",
+            description: "Restore working tree files",
+            category: "Main",
+            common_flags: &["--staged", "--worktree", "--source=", "-p", "--patch"],
+        },
+        GitSubcommandDef {
+            name: "revert",
+            description: "Revert some existing commits by creating new inverse commits",
+            category: "Main",
+            common_flags: &["-n", "--no-commit", "--abort", "--continue", "--edit"],
+        },
+        GitSubcommandDef {
+            name: "rm",
+            description: "Remove files from the working tree and from the index",
+            category: "Main",
+            common_flags: &["--cached", "-r", "-f", "--force"],
+        },
+        GitSubcommandDef {
+            name: "scalar",
+            description: "Manage large Git repositories with optimized defaults",
+            category: "Main",
+            common_flags: &["register", "unregister", "run", "diagnose"],
+        },
+        GitSubcommandDef {
+            name: "shortlog",
+            description: "Summarize git log output grouped by author",
+            category: "Main",
+            common_flags: &["-s", "-n", "-e", "--all"],
+        },
+        GitSubcommandDef {
+            name: "show",
+            description: "Show various types of objects (commits, tags, trees)",
+            category: "Main",
+            common_flags: &["--stat", "--oneline", "--format=full", "HEAD"],
+        },
+        GitSubcommandDef {
+            name: "sparse-checkout",
+            description: "Reduce working tree size to a subset of directories",
+            category: "Main",
+            common_flags: &["set", "init", "add", "list", "disable", "reapply"],
+        },
+        GitSubcommandDef {
+            name: "stash",
+            description: "Stash the changes in a dirty working directory away",
+            category: "Main",
+            common_flags: &["push -m", "pop", "list", "apply", "drop", "show -p", "--include-untracked"],
+        },
+        GitSubcommandDef {
+            name: "status",
+            description: "Show the working tree status",
+            category: "Main",
+            common_flags: &["-s", "--short", "-b", "--branch", "-uall", "--ignored"],
+        },
+        GitSubcommandDef {
+            name: "submodule",
+            description: "Initialize, update or inspect submodules",
+            category: "Main",
+            common_flags: &["update --init --recursive", "status", "sync", "add", "deinit"],
+        },
+        GitSubcommandDef {
+            name: "switch",
+            description: "Switch branches",
+            category: "Main",
+            common_flags: &["-c", "-C", "--detach", "--guess", "-"],
+        },
+        GitSubcommandDef {
+            name: "tag",
+            description: "Create, list, delete or verify a tag object signed with GPG",
+            category: "Main",
+            common_flags: &["-a", "-m", "-d", "-l", "-n", "--sort=-creatordate"],
+        },
+        GitSubcommandDef {
+            name: "worktree",
+            description: "Manage multiple working trees attached to the same repository",
+            category: "Main",
+            common_flags: &["list", "add", "remove", "prune", "lock", "unlock"],
+        },
+
+        // --- Ancillary Manipulators & Interrogators ---
+        GitSubcommandDef {
+            name: "annotate",
+            description: "Annotate file lines with commit information",
+            category: "Ancillary",
+            common_flags: &["-L", "-w"],
+        },
+        GitSubcommandDef {
+            name: "blame",
+            description: "Show what revision and author last modified each line of a file",
+            category: "Ancillary",
+            common_flags: &["-L", "-w", "-C", "-M", "--show-email"],
+        },
+        GitSubcommandDef {
+            name: "bugreport",
+            description: "Collect information for user to file a bug report",
+            category: "Ancillary",
+            common_flags: &["--output-directory", "--diagnose="],
+        },
+        GitSubcommandDef {
+            name: "count-objects",
+            description: "Count unpacked number of objects and their disk consumption",
+            category: "Ancillary",
+            common_flags: &["-v", "-H"],
+        },
+        GitSubcommandDef {
+            name: "diagnose",
+            description: "Generate a zip archive of diagnostic information",
+            category: "Ancillary",
+            common_flags: &["--mode=", "-s"],
+        },
+        GitSubcommandDef {
+            name: "difftool",
+            description: "Show changes using common diff tools (vimdiff, meld, etc)",
+            category: "Ancillary",
+            common_flags: &["--tool=", "-y", "--no-prompt", "--dir-diff"],
+        },
+        GitSubcommandDef {
+            name: "fsck",
+            description: "Verifies the connectivity and validity of objects in the database",
+            category: "Ancillary",
+            common_flags: &["--unreachable", "--full", "--strict"],
+        },
+        GitSubcommandDef {
+            name: "help",
+            description: "Display help information about Git",
+            category: "Ancillary",
+            common_flags: &["-a", "--all", "-g", "--guides"],
+        },
+        GitSubcommandDef {
+            name: "mergetool",
+            description: "Run merge conflict resolution tools to resolve merge conflicts",
+            category: "Ancillary",
+            common_flags: &["--tool=", "-y", "--no-prompt"],
+        },
+        GitSubcommandDef {
+            name: "prune",
+            description: "Prune all unreachable objects from the object database",
+            category: "Ancillary",
+            common_flags: &["-n", "--dry-run", "-v", "--progress"],
+        },
+        GitSubcommandDef {
+            name: "reflog",
+            description: "Manage reflog information (HEAD reference movements)",
+            category: "Ancillary",
+            common_flags: &["show", "expire --all", "delete", "exists"],
+        },
+        GitSubcommandDef {
+            name: "remote",
+            description: "Manage set of tracked repositories",
+            category: "Ancillary",
+            common_flags: &["-v", "add", "remove", "rename", "set-url", "prune", "show"],
+        },
+        GitSubcommandDef {
+            name: "repack",
+            description: "Pack unpacked objects in a repository",
+            category: "Ancillary",
+            common_flags: &["-a", "-d", "-f", "-F"],
+        },
+        GitSubcommandDef {
+            name: "replace",
+            description: "Create, list, delete refs to replace objects",
+            category: "Ancillary",
+            common_flags: &["-l", "-d", "--edit", "-f"],
+        },
+        GitSubcommandDef {
+            name: "request-pull",
+            description: "Generates a summary of pending changes to send via email",
+            category: "Ancillary",
+            common_flags: &["-p"],
+        },
+        GitSubcommandDef {
+            name: "rerere",
+            description: "Reuse recorded resolution of conflicted merges",
+            category: "Ancillary",
+            common_flags: &["status", "diff", "clear", "forget", "remaining"],
+        },
+        GitSubcommandDef {
+            name: "send-email",
+            description: "Send a collection of patches as emails",
+            category: "Ancillary",
+            common_flags: &["--to=", "--confirm=always", "--dry-run"],
+        },
+        GitSubcommandDef {
+            name: "version",
+            description: "Display version information about Git",
+            category: "Ancillary",
+            common_flags: &["--build-options"],
+        },
+
+        // --- Low-Level / Plumbing Commands ---
+        GitSubcommandDef {
+            name: "apply",
+            description: "Apply a patch to files and/or to the index",
+            category: "Plumbing",
+            common_flags: &["--check", "--stat", "--index", "-3", "--3way", "--reverse"],
+        },
+        GitSubcommandDef {
+            name: "cat-file",
+            description: "Provide content or type and size information for repository objects",
+            category: "Plumbing",
+            common_flags: &["-p", "-t", "-s", "-e"],
+        },
+        GitSubcommandDef {
+            name: "check-ignore",
+            description: "Debug gitignore / exclude files",
+            category: "Plumbing",
+            common_flags: &["-v", "--verbose", "-n", "--non-matching"],
+        },
+        GitSubcommandDef {
+            name: "commit-graph",
+            description: "Write and verify Git commit-graph files",
+            category: "Plumbing",
+            common_flags: &["write", "verify"],
+        },
+        GitSubcommandDef {
+            name: "config",
+            description: "Get and set repository or global options",
+            category: "Plumbing",
+            common_flags: &["--global", "--local", "--list", "-e", "--get"],
+        },
+        GitSubcommandDef {
+            name: "for-each-ref",
+            description: "Output information on each ref",
+            category: "Plumbing",
+            common_flags: &["--sort=-committerdate", "--format="],
+        },
+        GitSubcommandDef {
+            name: "hash-object",
+            description: "Compute object ID and optionally creates a blob from a file",
+            category: "Plumbing",
+            common_flags: &["-w", "-t blob", "--stdin"],
+        },
+        GitSubcommandDef {
+            name: "ls-files",
+            description: "Show information about files in the index and the working tree",
+            category: "Plumbing",
+            common_flags: &["-m", "--modified", "-o", "--others", "-d", "--deleted", "--stage"],
+        },
+        GitSubcommandDef {
+            name: "ls-remote",
+            description: "List references in a remote repository",
+            category: "Plumbing",
+            common_flags: &["--heads", "--tags", "origin"],
+        },
+        GitSubcommandDef {
+            name: "ls-tree",
+            description: "List the contents of a tree object",
+            category: "Plumbing",
+            common_flags: &["-r", "--name-only", "-l", "HEAD"],
+        },
+        GitSubcommandDef {
+            name: "merge-base",
+            description: "Find as good common ancestors as possible for a merge",
+            category: "Plumbing",
+            common_flags: &["--is-ancestor", "--fork-point"],
+        },
+        GitSubcommandDef {
+            name: "rev-parse",
+            description: "Pick out and massage parameters (e.g. resolve HEAD, git dir)",
+            category: "Plumbing",
+            common_flags: &["--show-toplevel", "--abbrev-ref HEAD", "--git-dir", "--verify"],
+        },
+        GitSubcommandDef {
+            name: "show-ref",
+            description: "List references in a local repository",
+            category: "Plumbing",
+            common_flags: &["--heads", "--tags", "-d"],
+        },
+        GitSubcommandDef {
+            name: "update-index",
+            description: "Register file contents in the working tree to the index",
+            category: "Plumbing",
+            common_flags: &["--assume-unchanged", "--no-assume-unchanged", "--skip-worktree", "--refresh"],
+        },
+        GitSubcommandDef {
+            name: "update-ref",
+            description: "Update the object name stored in a ref safely",
+            category: "Plumbing",
+            common_flags: &["-m", "-d", "--create-reflog"],
+        },
+        GitSubcommandDef {
+            name: "write-tree",
+            description: "Create a tree object from the current index",
+            category: "Plumbing",
+            common_flags: &["--missing-ok", "--prefix="],
+        },
+        GitSubcommandDef {
+            name: "commit-tree",
+            description: "Create a new commit object from a tree",
+            category: "Plumbing",
+            common_flags: &["-m", "-p", "-F"],
+        },
+        GitSubcommandDef {
+            name: "read-tree",
+            description: "Reads tree information into the index",
+            category: "Plumbing",
+            common_flags: &["-m", "-u", "-v", "--reset"],
+        },
+        GitSubcommandDef {
+            name: "checkout-index",
+            description: "Copy files from the index to the working tree",
+            category: "Plumbing",
+            common_flags: &["-a", "-f", "-u", "--prefix="],
+        },
+        GitSubcommandDef {
+            name: "symbolic-ref",
+            description: "Read, modify and delete symbolic refs",
+            category: "Plumbing",
+            common_flags: &["-m", "-d", "--short", "HEAD"],
+        },
+        GitSubcommandDef {
+            name: "rev-list",
+            description: "Lists commit objects in reverse chronological order",
+            category: "Plumbing",
+            common_flags: &["--all", "--count", "--oneline", "-n 10", "--max-count="],
+        },
+        GitSubcommandDef {
+            name: "name-rev",
+            description: "Find symbolic names for given revs",
+            category: "Plumbing",
+            common_flags: &["--name-only", "--tags", "--refs="],
+        },
+        GitSubcommandDef {
+            name: "diff-files",
+            description: "Compares files in the working tree and the index",
+            category: "Plumbing",
+            common_flags: &["-p", "-q", "-u", "--raw"],
+        },
+        GitSubcommandDef {
+            name: "diff-index",
+            description: "Compare a tree to the working tree or index",
+            category: "Plumbing",
+            common_flags: &["-p", "--cached", "-m", "HEAD"],
+        },
+        GitSubcommandDef {
+            name: "diff-tree",
+            description: "Compares the content and mode of blobs found via two tree objects",
+            category: "Plumbing",
+            common_flags: &["-p", "-r", "--no-commit-id", "--name-only"],
+        },
+        GitSubcommandDef {
+            name: "cherry",
+            description: "Find commits yet to be applied to upstream",
+            category: "Plumbing",
+            common_flags: &["-v", "upstream", "head"],
+        },
+        GitSubcommandDef {
+            name: "merge-file",
+            description: "Run a three-way file merge",
+            category: "Plumbing",
+            common_flags: &["-p", "-q", "-L"],
+        },
+        GitSubcommandDef {
+            name: "merge-tree",
+            description: "Perform merge without touching index or working tree",
+            category: "Plumbing",
+            common_flags: &["--write-tree", "--trivial"],
+        },
+        GitSubcommandDef {
+            name: "rerere",
+            description: "Reuse recorded resolution of conflicted merges",
+            category: "Plumbing",
+            common_flags: &["status", "diff", "clear", "forget", "remaining"],
+        },
+        GitSubcommandDef {
+            name: "pack-objects",
+            description: "Create a packed archive of objects",
+            category: "Plumbing",
+            common_flags: &["--all", "--stdout", "--progress"],
+        },
+        GitSubcommandDef {
+            name: "unpack-objects",
+            description: "Unpack objects from a packed archive",
+            category: "Plumbing",
+            common_flags: &["-q", "-r"],
+        },
+        GitSubcommandDef {
+            name: "index-pack",
+            description: "Build pack index file for an existing packed archive",
+            category: "Plumbing",
+            common_flags: &["-v", "-o", "--stdin"],
+        },
+        GitSubcommandDef {
+            name: "multi-pack-index",
+            description: "Write and verify multi-pack-indexes",
+            category: "Plumbing",
+            common_flags: &["write", "verify", "expire", "repack"],
+        },
+        GitSubcommandDef {
+            name: "fsck",
+            description: "Verifies the connectivity and validity of the objects in the database",
+            category: "Maintenance",
+            common_flags: &["--full", "--unreachable", "--lost-found"],
+        },
+        GitSubcommandDef {
+            name: "count-objects",
+            description: "Count unpacked number of objects and their disk consumption",
+            category: "Maintenance",
+            common_flags: &["-v", "-H", "--human-readable"],
+        },
+        GitSubcommandDef {
+            name: "diagnose",
+            description: "Generate a zip archive of diagnostic information",
+            category: "Maintenance",
+            common_flags: &["--mode=stats", "--mode=all", "-s"],
+        },
+        GitSubcommandDef {
+            name: "bugreport",
+            description: "Collect information for user to file a bug report",
+            category: "Maintenance",
+            common_flags: &["--diagnose", "--suffix="],
+        },
+        GitSubcommandDef {
+            name: "verify-commit",
+            description: "Check the GPG signature of commits",
+            category: "Ancillary",
+            common_flags: &["-v", "--verbose", "--raw"],
+        },
+        GitSubcommandDef {
+            name: "verify-tag",
+            description: "Check the GPG signature of tags",
+            category: "Ancillary",
+            common_flags: &["-v", "--verbose", "--raw"],
+        },
+        GitSubcommandDef {
+            name: "show-branch",
+            description: "Show branches and their commits",
+            category: "Ancillary",
+            common_flags: &["-a", "--all", "-r", "--remotes", "--current"],
+        },
+        GitSubcommandDef {
+            name: "whatchanged",
+            description: "Show logs with differences each commit introduces",
+            category: "Ancillary",
+            common_flags: &["-p", "--since=", "-n 10"],
+        },
+        GitSubcommandDef {
+            name: "request-pull",
+            description: "Generates a summary of pending changes for upstream",
+            category: "Collaboration",
+            common_flags: &["-p", "start", "url", "end"],
+        },
+        GitSubcommandDef {
+            name: "send-email",
+            description: "Send a collection of patches as emails",
+            category: "Collaboration",
+            common_flags: &["--to=", "--annotate", "--dry-run", "--confirm=always"],
+        },
+        GitSubcommandDef {
+            name: "check-attr",
+            description: "Display gitattributes information for paths",
+            category: "Plumbing",
+            common_flags: &["--all", "-a", "--cached"],
+        },
+        GitSubcommandDef {
+            name: "check-ref-format",
+            description: "Ensures that a reference name is well formed",
+            category: "Plumbing",
+            common_flags: &["--branch", "--normalize"],
+        },
+        GitSubcommandDef {
+            name: "check-mailmap",
+            description: "Show canonical names and email addresses of contacts",
+            category: "Plumbing",
+            common_flags: &["--stdin"],
+        },
+        GitSubcommandDef {
+            name: "hook",
+            description: "Run Git hooks",
+            category: "Plumbing",
+            common_flags: &["run", "--ignore-missing"],
+        },
+        GitSubcommandDef {
+            name: "interpret-trailers",
+            description: "Add or parse metadata in commit messages",
+            category: "Plumbing",
+            common_flags: &["--trailer", "--in-place", "--trim-empty"],
+        },
+        GitSubcommandDef {
+            name: "stripspace",
+            description: "Remove unnecessary whitespace from input",
+            category: "Plumbing",
+            common_flags: &["-s", "--strip-comments", "-c", "--comment-lines"],
+        },
+        GitSubcommandDef {
+            name: "var",
+            description: "Show a Git logical variable",
+            category: "Plumbing",
+            common_flags: &["-l", "GIT_AUTHOR_IDENT", "GIT_COMMITTER_IDENT", "GIT_EDITOR"],
+        },
+        GitSubcommandDef {
+            name: "version",
+            description: "Display Git version information",
+            category: "Main",
+            common_flags: &["--build-options"],
+        },
+    ];
+
+    /// Find subcommand definition by name.
+    pub fn find(name: &str) -> Option<&'static GitSubcommandDef> {
+        Self::ALL.iter().find(|s| s.name.eq_ignore_ascii_case(name))
+    }
+
+    /// Check if a string is known git subcommand.
+    pub fn is_known_subcommand(name: &str) -> bool {
+        Self::find(name).is_some()
+    }
+}
