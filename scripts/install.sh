@@ -56,6 +56,16 @@ else
     echo -e "${YELLOW}Warning: images/Prowly-Icon.svg not found. Skipping icon installation.${RESET}"
 fi
 
+# 4.5. Install Config Template if not present
+CONFIG_DIR="${HOME}/.config/prowly"
+if [ ! -f "${CONFIG_DIR}/config.toml" ]; then
+    echo -e "\n${BOLD}${YELLOW}[*] Initializing default configuration at ${CONFIG_DIR}/config.toml...${RESET}"
+    mkdir -p "${CONFIG_DIR}"
+    if [ -f "${PROJECT_DIR}/config.toml.example" ]; then
+        cp "${PROJECT_DIR}/config.toml.example" "${CONFIG_DIR}/config.toml"
+    fi
+fi
+
 # 5. Create FreeDesktop .desktop entry
 echo -e "\n${BOLD}${YELLOW}[4/4] Creating desktop launcher at ${APPS_DIR}/prowly.desktop...${RESET}"
 mkdir -p "${APPS_DIR}"

@@ -111,6 +111,96 @@ impl GitService {
         })
     }
 
+    /// List all repository files (both clean and modified).
+    pub fn list_all_repo_files(&self) -> Result<Vec<GitFileItem>, GitError> {
+        let status = self.get_status()?;
+        let status_map: std::collections::HashMap<String, (bool, FileStatus)> = status
+            .files
+            .into_iter()
+            .map(|f| (f.path, (f.staged, f.status)))
+            .collect();
+
+        let mut paths = std::collections::BTreeSet::new();
+
+        // 1. Files in git index
+        if let Ok(index) = self.repo.index() {
+            for entry in index.iter() {
+                if let Ok(path) = std::str::from_utf8(&entry.path) {
+                    paths.insert(path.to_string());
+                }
+            }
+        }
+
+        // 2. Any changed or untracked files
+        for k in status_map.keys() {
+            paths.insert(k.clone());
+        }
+
+        let mut items = Vec::new();
+        for path in paths {
+            if let Some(&(staged, s)) = status_map.get(&path) {
+                items.push(GitFileItem {
+                    path,
+                    staged,
+                    status: s,
+                });
+            } else {
+                items.push(GitFileItem {
+                    path,
+                    staged: false,
+                    status: FileStatus::Clean,
+                });
+            }
+        }
+        Ok(items)
+    }
+
+    /// Recursively discover project directories (up to depth 4, ignoring .git, target, node_modules).
+    pub fn list_all_directories(&self) -> Vec<String> {
+        let mut dirs = std::collections::BTreeSet::new();
+        Self::scan_dirs_recursive(&self.workdir, "", 0, &mut dirs);
+        dirs.into_iter().collect()
+    }
+
+    fn scan_dirs_recursive(
+        base: &Path,
+        rel: &str,
+        depth: usize,
+        out: &mut std::collections::BTreeSet<String>,
+    ) {
+        if depth > 4 {
+            return;
+        }
+        let current_path = if rel.is_empty() {
+            base.to_path_buf()
+        } else {
+            base.join(rel)
+        };
+        if let Ok(entries) = std::fs::read_dir(current_path) {
+            for entry in entries.flatten() {
+                if let Ok(file_type) = entry.file_type() {
+                    if file_type.is_dir() {
+                        let name = entry.file_name().to_string_lossy().to_string();
+                        if name.starts_with('.')
+                            || name == "target"
+                            || name == "node_modules"
+                            || name == "vendor"
+                        {
+                            continue;
+                        }
+                        let next_rel = if rel.is_empty() {
+                            format!("{}/", name)
+                        } else {
+                            format!("{}{}/", rel, name)
+                        };
+                        out.insert(next_rel.clone());
+                        Self::scan_dirs_recursive(base, &next_rel, depth + 1, out);
+                    }
+                }
+            }
+        }
+    }
+
     /// Stage a file into the index.
     pub fn stage_file(&self, path: &str) -> Result<(), GitError> {
         let mut index = self.repo.index()?;
@@ -290,7 +380,9 @@ impl GitService {
         description: Option<&str>,
     ) -> Result<git2::Oid, GitError> {
         let full_message = match description {
-            Some(desc) if !desc.trim().is_empty() => format!("{}\n\n{}", summary.trim(), desc.trim()),
+            Some(desc) if !desc.trim().is_empty() => {
+                format!("{}\n\n{}", summary.trim(), desc.trim())
+            }
             _ => summary.trim().to_string(),
         };
         self.commit(&full_message)

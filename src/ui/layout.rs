@@ -9,10 +9,14 @@ pub struct LayoutAreas {
     pub header: Rect,
     pub header_top: Rect,
     pub header_bottom: Rect,
-    pub ask_ai_button: Rect,
-    pub help_button: Rect,
+    pub open_repo_button: Rect,
     pub branch_button: Rect,
     pub sync_button: Rect,
+    pub ai_status_button: Rect,
+    pub settings_button: Rect,
+    pub menu_button: Rect,
+    pub help_button: Rect,
+    pub ask_ai_button: Rect,
     pub body: Rect,
     pub left_pane: Rect,
     pub right_pane: Rect,
@@ -47,16 +51,24 @@ impl LayoutAreas {
         let header_bottom = header_rows[1];
 
         // Header buttons on the left/middle:
-        // Prowly title (10), Path (~18), Branch button (~22), Sync status (~14)
-        let branch_x = header_top.x + 30;
-        let branch_button = Rect {
-            x: branch_x.min(header_top.width),
+        // Prowly title (10), Open Repo / Path (~22), Branch button (~22), Sync status (~14)
+        let open_repo_x = header_top.x + 10;
+        let open_repo_button = Rect {
+            x: open_repo_x.min(header_top.width),
             y: header_top.y,
-            width: 24.min(header_top.width.saturating_sub(branch_x)),
+            width: 22.min(header_top.width.saturating_sub(open_repo_x)),
             height: 1,
         };
 
-        let sync_x = branch_x + 25;
+        let branch_x = open_repo_x + 23;
+        let branch_button = Rect {
+            x: branch_x.min(header_top.width),
+            y: header_top.y,
+            width: 22.min(header_top.width.saturating_sub(branch_x)),
+            height: 1,
+        };
+
+        let sync_x = branch_x + 23;
         let sync_button = Rect {
             x: sync_x.min(header_top.width),
             y: header_top.y,
@@ -64,21 +76,17 @@ impl LayoutAreas {
             height: 1,
         };
 
-        // Top right buttons: [ 󱚣 Ask AI ] (13 cols) and [? Help] (9 cols)
-        let ask_ai_width = 13;
-        let help_width = 9;
-        let ask_ai_x = header_top.x
-            + header_top
-                .width
-                .saturating_sub(ask_ai_width + help_width + 1);
-        let help_x = header_top.x + header_top.width.saturating_sub(help_width);
+        // Top right buttons:
+        // [? Help] (8), [  Settings ] (14), [ 󰍜 Menu ] (10), [ 󱚣 AI: ... ] (26)
+        let help_width = 8;
+        let settings_width = 14;
+        let menu_width = 10;
+        let ai_width = 28;
 
-        let ask_ai_button = Rect {
-            x: ask_ai_x,
-            y: header_top.y,
-            width: ask_ai_width.min(header_top.width),
-            height: 1,
-        };
+        let help_x = header_top.x + header_top.width.saturating_sub(help_width);
+        let settings_x = help_x.saturating_sub(settings_width);
+        let menu_x = settings_x.saturating_sub(menu_width);
+        let ai_x = menu_x.saturating_sub(ai_width);
 
         let help_button = Rect {
             x: help_x,
@@ -86,6 +94,29 @@ impl LayoutAreas {
             width: help_width.min(header_top.width),
             height: 1,
         };
+
+        let settings_button = Rect {
+            x: settings_x,
+            y: header_top.y,
+            width: settings_width.min(header_top.width),
+            height: 1,
+        };
+
+        let menu_button = Rect {
+            x: menu_x,
+            y: header_top.y,
+            width: menu_width.min(header_top.width),
+            height: 1,
+        };
+
+        let ai_status_button = Rect {
+            x: ai_x,
+            y: header_top.y,
+            width: ai_width.min(header_top.width),
+            height: 1,
+        };
+
+        let ask_ai_button = ai_status_button;
 
         // Horizontal split for Body: Left Directory Map (26 cols or 25%) -> Right Main View
         let left_width = (body.width / 4).clamp(22, 34);
@@ -111,10 +142,14 @@ impl LayoutAreas {
             header,
             header_top,
             header_bottom,
-            ask_ai_button,
-            help_button,
+            open_repo_button,
             branch_button,
             sync_button,
+            ai_status_button,
+            settings_button,
+            menu_button,
+            help_button,
+            ask_ai_button,
             body,
             left_pane,
             right_pane,
@@ -124,9 +159,24 @@ impl LayoutAreas {
         }
     }
 
-    /// Check if coordinates (x, y) hit the Ask AI button in header.
+    /// Check if coordinates (x, y) hit the Open Repo button in header.
+    pub fn hits_open_repo(&self, x: u16, y: u16) -> bool {
+        contains_point(self.open_repo_button, x, y)
+    }
+
+    /// Check if coordinates (x, y) hit the Ask AI / AI status button in header.
     pub fn hits_ask_ai(&self, x: u16, y: u16) -> bool {
-        contains_point(self.ask_ai_button, x, y)
+        contains_point(self.ai_status_button, x, y)
+    }
+
+    /// Check if coordinates (x, y) hit the Settings button in header.
+    pub fn hits_settings(&self, x: u16, y: u16) -> bool {
+        contains_point(self.settings_button, x, y)
+    }
+
+    /// Check if coordinates (x, y) hit the Menu button in header.
+    pub fn hits_menu(&self, x: u16, y: u16) -> bool {
+        contains_point(self.menu_button, x, y)
     }
 
     /// Check if coordinates (x, y) hit the Help button in header.

@@ -28,6 +28,7 @@ pub enum FileStatus {
     Renamed,
     Untracked,
     Conflicted,
+    Clean,
 }
 
 impl FileStatus {
@@ -39,6 +40,7 @@ impl FileStatus {
             Self::Renamed => "R",
             Self::Untracked => "?",
             Self::Conflicted => "!",
+            Self::Clean => " ",
         }
     }
 }
@@ -85,6 +87,35 @@ pub struct FileDiff {
     pub hunks: Vec<DiffHunk>,
     pub stats_added: usize,
     pub stats_deleted: usize,
+}
+
+impl FileDiff {
+    /// Create a preview diff representation from raw file content.
+    pub fn from_file_content(path: &str, content: &str) -> Self {
+        let lines: Vec<DiffLine> = content
+            .lines()
+            .take(500)
+            .enumerate()
+            .map(|(idx, line)| DiffLine {
+                origin: ' ',
+                content: line.to_string(),
+                old_lineno: Some((idx + 1) as u32),
+                new_lineno: Some((idx + 1) as u32),
+                line_type: DiffLineType::Context,
+            })
+            .collect();
+        let total_lines = content.lines().count();
+        Self {
+            file_path: format!("{} ({} lines)", path, total_lines),
+            is_binary: false,
+            hunks: vec![DiffHunk {
+                header: format!("@@ Content: {} @@", path),
+                lines,
+            }],
+            stats_added: 0,
+            stats_deleted: 0,
+        }
+    }
 }
 
 /// Overall repository status summary.

@@ -54,6 +54,7 @@ pub enum IconId {
     Copy,
     CheckboxChecked,
     CheckboxUnchecked,
+    Settings,
 }
 
 /// Collection of glyph strings for the active display mode.
@@ -143,6 +144,7 @@ impl Icons {
             IconId::Copy => "󰆏",
             IconId::CheckboxChecked => "",
             IconId::CheckboxUnchecked => "",
+            IconId::Settings => "",
         }
     }
 
@@ -198,6 +200,7 @@ impl Icons {
             IconId::Copy => "y",
             IconId::CheckboxChecked => "[x]",
             IconId::CheckboxUnchecked => "[ ]",
+            IconId::Settings => "[*]",
         }
     }
 
@@ -261,5 +264,8 @@ impl Icons {
     }
     pub fn checkbox_unchecked(&self) -> &'static str {
         self.get(IconId::CheckboxUnchecked)
+    }
+    pub fn settings(&self) -> &'static str {
+        self.get(IconId::Settings)
     }
 }

@@ -36,6 +36,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    // Positional directory path argument: prowly [path]
+    let mut skip_next = false;
+    for arg in args.iter().skip(1) {
+        if skip_next {
+            skip_next = false;
+            continue;
+        }
+        if arg == "--lang" || arg == "--theme" {
+            skip_next = true;
+            continue;
+        }
+        if !arg.starts_with('-') {
+            let p = std::path::PathBuf::from(arg);
+            if p.is_dir() {
+                let _ = std::env::set_current_dir(&p);
+                break;
+            }
+        }
+    }
+
     // Diagnostic/Information mode without taking over terminal
     if args
         .iter()

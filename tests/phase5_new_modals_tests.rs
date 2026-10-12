@@ -13,7 +13,11 @@ fn test_branch_switcher_filtering_and_selection() {
         "fix/clippy-warning".to_string(),
     ];
 
-    switcher.open("main".to_string(), branches, Some("feat/user-auth".to_string()));
+    switcher.open(
+        "main".to_string(),
+        branches,
+        Some("feat/user-auth".to_string()),
+    );
     assert!(switcher.is_open);
     assert_eq!(switcher.branches.len(), 4);
 

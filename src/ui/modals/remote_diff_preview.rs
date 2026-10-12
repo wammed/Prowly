@@ -24,12 +24,7 @@ impl RemoteDiffPreviewModal {
         Self::default()
     }
 
-    pub fn open(
-        &mut self,
-        unpushed: Vec<String>,
-        unpulled: Vec<String>,
-        upstream: Option<String>,
-    ) {
+    pub fn open(&mut self, unpushed: Vec<String>, unpulled: Vec<String>, upstream: Option<String>) {
         self.is_open = true;
         self.unpushed_commits = unpushed;
         self.unpulled_commits = unpulled;
@@ -53,7 +48,10 @@ impl RemoteDiffPreviewModal {
 
         frame.render_widget(Clear, rect);
 
-        let upstream_str = self.upstream_name.as_deref().unwrap_or("No upstream configured");
+        let upstream_str = self
+            .upstream_name
+            .as_deref()
+            .unwrap_or("No upstream configured");
         let title = format!(" {} Remote Sync Status ({}) ", icons.sync(), upstream_str);
 
         let block = Block::default()
@@ -72,12 +70,16 @@ impl RemoteDiffPreviewModal {
         let mut lines = Vec::new();
 
         // 1. Unpushed section
-        lines.push(Line::from(vec![
-            Span::styled(
-                format!("{} Unpushed Commits ({}) :", icons.arrow_up(), self.unpushed_commits.len()),
-                Style::default().fg(theme.primary).add_modifier(Modifier::BOLD),
+        lines.push(Line::from(vec![Span::styled(
+            format!(
+                "{} Unpushed Commits ({}) :",
+                icons.arrow_up(),
+                self.unpushed_commits.len()
             ),
-        ]));
+            Style::default()
+                .fg(theme.primary)
+                .add_modifier(Modifier::BOLD),
+        )]));
         if self.unpushed_commits.is_empty() {
             lines.push(Line::from(Span::styled(
                 "  • Clean (Everything pushed to remote)",
@@ -95,12 +97,16 @@ impl RemoteDiffPreviewModal {
         lines.push(Line::from(""));
 
         // 2. Unpulled section
-        lines.push(Line::from(vec![
-            Span::styled(
-                format!("{} Unpulled Commits ({}) :", icons.arrow_down(), self.unpulled_commits.len()),
-                Style::default().fg(theme.warning).add_modifier(Modifier::BOLD),
+        lines.push(Line::from(vec![Span::styled(
+            format!(
+                "{} Unpulled Commits ({}) :",
+                icons.arrow_down(),
+                self.unpulled_commits.len()
             ),
-        ]));
+            Style::default()
+                .fg(theme.warning)
+                .add_modifier(Modifier::BOLD),
+        )]));
         if self.unpulled_commits.is_empty() {
             lines.push(Line::from(Span::styled(
                 "  • Clean (Up to date with remote)",

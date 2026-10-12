@@ -97,25 +97,46 @@ impl ContextMenu {
         ContextMenuAction::ALL[self.selected_index]
     }
 
+    /// Calculate bounding rectangle of popup menu.
+    pub fn menu_rect(&self, viewport: Rect) -> Rect {
+        let width = 32.min(viewport.width);
+        let height = (ContextMenuAction::ALL.len() as u16 + 2).min(viewport.height);
+        let x = self.anchor_x.min(viewport.width.saturating_sub(width));
+        let y = self.anchor_y.min(viewport.height.saturating_sub(height));
+        Rect {
+            x,
+            y,
+            width,
+            height,
+        }
+    }
+
+    /// Hit-test mouse coordinate against context menu items.
+    pub fn hit_test(&self, x: u16, y: u16, viewport: Rect) -> Option<ContextMenuAction> {
+        if !self.is_open {
+            return None;
+        }
+        let rect = self.menu_rect(viewport);
+        if x > rect.x
+            && x < rect.x + rect.width.saturating_sub(1)
+            && y > rect.y
+            && y < rect.y + rect.height.saturating_sub(1)
+        {
+            let row = (y.saturating_sub(rect.y + 1)) as usize;
+            if row < ContextMenuAction::ALL.len() {
+                return Some(ContextMenuAction::ALL[row]);
+            }
+        }
+        None
+    }
+
     /// Render popup menu onto frame.
     pub fn render(&self, frame: &mut Frame, theme: &Theme, icons: &Icons, viewport: Rect) {
         if !self.is_open {
             return;
         }
 
-        let width = 32.min(viewport.width);
-        let height = (ContextMenuAction::ALL.len() as u16 + 2).min(viewport.height);
-
-        // Clamp inside screen bounds
-        let x = self.anchor_x.min(viewport.width.saturating_sub(width));
-        let y = self.anchor_y.min(viewport.height.saturating_sub(height));
-
-        let rect = Rect {
-            x,
-            y,
-            width,
-            height,
-        };
+        let rect = self.menu_rect(viewport);
 
         frame.render_widget(Clear, rect);
 

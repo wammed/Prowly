@@ -55,6 +55,7 @@ pub struct ChangesView {
     pub summary_input_area: Rect,
     pub desc_input_area: Rect,
     pub actions_bar_area: Rect,
+    pub file_list_menu_area: Rect,
 }
 
 impl ChangesView {
@@ -70,6 +71,7 @@ impl ChangesView {
             summary_input_area: Rect::default(),
             desc_input_area: Rect::default(),
             actions_bar_area: Rect::default(),
+            file_list_menu_area: Rect::default(),
         }
     }
 
@@ -116,6 +118,12 @@ impl ChangesView {
         } else {
             Some(ChangesButtonAction::DiscardSafe)
         }
+    }
+
+    /// Check if the file list header menu button was clicked.
+    pub fn hit_test_menu_button(&self, x: u16, y: u16) -> bool {
+        let r = self.file_list_menu_area;
+        x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height
     }
 
     /// Check if an input area or file list was clicked.
@@ -215,6 +223,23 @@ impl ChangesView {
         let inner = block.inner(area);
         frame.render_widget(block, area);
 
+        // Menu button in top right corner of file list box
+        let menu_btn_w = 11;
+        let menu_x = area.x + area.width.saturating_sub(menu_btn_w + 1);
+        self.file_list_menu_area = Rect {
+            x: menu_x,
+            y: area.y,
+            width: menu_btn_w,
+            height: 1,
+        };
+        let menu_p = Paragraph::new(Span::styled(
+            " [ 󰍜 Menu ▾ ] ",
+            Style::default()
+                .fg(theme.secondary)
+                .add_modifier(Modifier::BOLD),
+        ));
+        frame.render_widget(menu_p, self.file_list_menu_area);
+
         self.file_scroll.set_total_items(files.len());
         self.file_scroll.set_viewport_height(inner.height as usize);
 
@@ -289,7 +314,10 @@ impl ChangesView {
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(border_color))
             .title(Span::styled(
-                format!(" {} & Actions (Press Tab/Click to Focus) ", i18n.t("btn.commit")),
+                format!(
+                    " {} & Actions (Press Tab/Click to Focus) ",
+                    i18n.t("btn.commit")
+                ),
                 Style::default().fg(theme.primary),
             ))
             .style(Style::default().bg(theme.bg));
@@ -328,15 +356,19 @@ impl ChangesView {
         let summary_style = if self.commit_summary.is_empty() && !is_summary_focused {
             Style::default().fg(theme.dim_fg)
         } else {
-            Style::default().fg(theme.fg).add_modifier(if is_summary_focused {
-                Modifier::BOLD
-            } else {
-                Modifier::empty()
-            })
+            Style::default()
+                .fg(theme.fg)
+                .add_modifier(if is_summary_focused {
+                    Modifier::BOLD
+                } else {
+                    Modifier::empty()
+                })
         };
 
         let summary_label_style = if is_summary_focused {
-            Style::default().fg(theme.primary).add_modifier(Modifier::BOLD)
+            Style::default()
+                .fg(theme.primary)
+                .add_modifier(Modifier::BOLD)
         } else {
             Style::default().fg(theme.primary)
         };

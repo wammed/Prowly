@@ -18,8 +18,9 @@ use crate::services::{
 };
 use crate::ui::layout::LayoutAreas;
 use crate::ui::modals::{
-    AiAssistantModal, BranchSwitcherModal, CommandPaletteModal, ConflictResolverModal,
-    ContextMenu, ContextMenuAction, RebaseModal, RemoteDiffPreviewModal,
+    AiAssistantModal, BranchSwitcherModal, CommandPaletteModal, ConflictResolverModal, ContextMenu,
+    ContextMenuAction, OpenRepoAction, OpenRepoModal, RebaseModal, RemoteDiffPreviewModal,
+    SettingsAction, SettingsModal,
 };
 use crate::ui::theme::{Theme, ThemeId};
 use crate::ui::views::{
@@ -158,6 +159,12 @@ pub struct App {
     pub branch_switcher: BranchSwitcherModal,
     pub remote_diff_preview: RemoteDiffPreviewModal,
     pub rebase_modal: RebaseModal,
+    pub settings_modal: SettingsModal,
+    pub open_repo_modal: OpenRepoModal,
+
+    // File browsing state
+    pub all_repo_files: Vec<GitFileItem>,
+    pub show_all_files: bool,
 
     // Channel sender for background async tasks
     pub event_sender: Option<tokio::sync::mpsc::UnboundedSender<AppEvent>>,
@@ -165,14 +172,27 @@ pub struct App {
 
 impl App {
     /// Create new application instance from configuration.
-    pub fn new(config: Config) -> Self {
+    pub fn new(mut config: Config) -> Self {
         let theme = Theme::get(config.theme);
         let i18n = I18n::new(config.language);
         let icons = Icons::new(config.use_nerd_font);
         let clipboard = ClipboardService::new();
         let backup_service = BackupService::new();
 
-        let git_service = GitService::discover().ok();
+        let mut git_service = GitService::discover().ok();
+        if git_service.is_none() {
+            if let Some(ref last) = config.last_repository {
+                let p = std::path::Path::new(last);
+                if p.is_dir() {
+                    git_service = GitService::open(p).ok();
+                }
+            }
+        }
+
+        if let Some(ref git) = git_service {
+            config.add_recent_repository(git.workdir().display().to_string());
+        }
+
         let gh_token = GitHubService::detect_token();
         let github_service = GitHubService::new(gh_token);
 
@@ -207,6 +227,10 @@ impl App {
             branch_switcher: BranchSwitcherModal::new(),
             remote_diff_preview: RemoteDiffPreviewModal::new(),
             rebase_modal: RebaseModal::new(),
+            settings_modal: SettingsModal::new(),
+            open_repo_modal: OpenRepoModal::new(),
+            all_repo_files: Vec::new(),
+            show_all_files: false,
             event_sender: None,
         };
 
@@ -225,7 +249,12 @@ impl App {
         if let Some(git) = &self.git_service {
             if let Ok(status) = git.get_status() {
                 self.repo_status = status;
-                self.dir_map.update_from_files(&self.repo_status.files);
+                self.all_repo_files = git
+                    .list_all_repo_files()
+                    .unwrap_or_else(|_| self.repo_status.files.clone());
+                let repo_dirs = git.list_all_directories();
+                self.dir_map
+                    .update_from_repo(&repo_dirs, &self.repo_status.files);
 
                 let filtered = self.filtered_files();
                 self.changes_view
@@ -234,30 +263,73 @@ impl App {
                 self.update_active_diff();
             }
         } else {
-            // Demo fallback if outside a Git repo
-            self.repo_status = GitRepoStatus {
-                branch: "main".to_string(),
-                upstream: Some("origin/main".to_string()),
-                ahead: 1,
-                behind: 0,
-                files: vec![
-                    GitFileItem {
-                        path: "src/main.rs".to_string(),
-                        staged: true,
-                        status: crate::git::FileStatus::Modified,
-                    },
-                    GitFileItem {
-                        path: "src/git/service.rs".to_string(),
-                        staged: false,
-                        status: crate::git::FileStatus::Added,
-                    },
-                ],
-            };
-            self.dir_map.update_from_files(&self.repo_status.files);
-            self.changes_view
-                .file_scroll
-                .set_total_items(self.repo_status.files.len());
+            self.repo_status = GitRepoStatus::default();
+            self.all_repo_files.clear();
+            self.dir_map.update_from_files(&[]);
+            self.changes_view.file_scroll.set_total_items(0);
         }
+    }
+
+    /// Open the Settings modal.
+    pub fn open_settings(&mut self) {
+        self.settings_modal.open_with_config(&self.config);
+    }
+
+    /// Open the Open Repository directory switcher modal.
+    pub fn open_open_repo(&mut self) {
+        let cur = self.git_service.as_ref().map(|g| g.workdir());
+        self.open_repo_modal
+            .open_at(cur, &self.config.recent_repositories);
+    }
+
+    /// Switch active repository to given path.
+    pub fn switch_repository(&mut self, path: &std::path::Path) {
+        match GitService::open(path) {
+            Ok(git) => {
+                let p_str = git.workdir().display().to_string();
+                self.config.add_recent_repository(p_str.clone());
+                let _ = self.config.save();
+                self.git_service = Some(git);
+                self.refresh_git_status();
+                self.refresh_worktrees();
+                self.refresh_github();
+                self.last_status = Some(format!("Switched repository to {}", p_str));
+            }
+            Err(e) => {
+                self.last_status = Some(format!("Failed to open repository: {}", e));
+            }
+        }
+    }
+
+    /// Return whether AI is connected along with provider name and model.
+    pub fn ai_connection_status(&self) -> (bool, String, String) {
+        let provider = self.config.ai.provider;
+        let model = self.config.ai.model.clone();
+        let has_key = self
+            .config
+            .ai
+            .api_key
+            .as_ref()
+            .map(|k| !k.trim().is_empty())
+            .unwrap_or(false);
+
+        let is_connected = match provider {
+            crate::ai::AiProvider::OpenAi
+            | crate::ai::AiProvider::Anthropic
+            | crate::ai::AiProvider::Gemini => has_key,
+            crate::ai::AiProvider::Ollama | crate::ai::AiProvider::Custom => true,
+        };
+
+        let prov_name = match provider {
+            crate::ai::AiProvider::OpenAi => "OpenAI",
+            crate::ai::AiProvider::Anthropic => "Anthropic",
+            crate::ai::AiProvider::Gemini => "Gemini",
+            crate::ai::AiProvider::Ollama => "Ollama",
+            crate::ai::AiProvider::Custom => "Custom",
+        }
+        .to_string();
+
+        (is_connected, prov_name, model)
     }
 
     /// Refresh list of active Git worktrees.
@@ -311,15 +383,24 @@ impl App {
 
     /// Retrieve files filtered by active directory in Directory Map.
     pub fn filtered_files(&self) -> Vec<GitFileItem> {
+        let source_files = if self.show_all_files || self.repo_status.files.is_empty() {
+            if !self.all_repo_files.is_empty() {
+                &self.all_repo_files
+            } else {
+                &self.repo_status.files
+            }
+        } else {
+            &self.repo_status.files
+        };
+
         if let Some(prefix) = self.dir_map.current_selected_prefix() {
-            self.repo_status
-                .files
+            source_files
                 .iter()
                 .filter(|f| f.path.starts_with(prefix))
                 .cloned()
                 .collect()
         } else {
-            self.repo_status.files.clone()
+            source_files.clone()
         }
     }
 
@@ -329,8 +410,18 @@ impl App {
         let idx = self.changes_view.file_scroll.selected_index;
         if let Some(item) = filtered.get(idx) {
             if let Some(git) = &self.git_service {
-                if let Ok(diff) = git.get_diff(Some(&item.path), item.staged) {
-                    self.current_diff = diff;
+                if item.status != crate::git::FileStatus::Clean {
+                    if let Ok(diff) = git.get_diff(Some(&item.path), item.staged) {
+                        if !diff.hunks.is_empty() {
+                            self.current_diff = diff;
+                            return;
+                        }
+                    }
+                }
+                // Preview file content for unmodified files or files with empty diff
+                let full_path = git.workdir().join(&item.path);
+                if let Ok(content) = std::fs::read_to_string(&full_path) {
+                    self.current_diff = FileDiff::from_file_content(&item.path, &content);
                     return;
                 }
             }
@@ -458,6 +549,43 @@ impl App {
 
     /// Keyboard event handler.
     pub fn handle_key(&mut self, key: crossterm::event::KeyEvent) {
+        // 0. Settings Modal captures keys
+        if self.settings_modal.is_open {
+            if let Some(action) = self.settings_modal.handle_key(key) {
+                match action {
+                    SettingsAction::SaveAndApply => {
+                        self.settings_modal.apply_to_config(&mut self.config);
+                        if let Err(e) = self.config.save() {
+                            self.last_status = Some(format!("Save config error: {}", e));
+                        } else {
+                            self.theme = Theme::get(self.config.theme);
+                            self.i18n = I18n::new(self.config.language);
+                            self.icons = Icons::new(self.config.use_nerd_font);
+                            self.last_status =
+                                Some("Saved settings to ~/.config/prowly/config.toml".to_string());
+                        }
+                        self.settings_modal.close();
+                    }
+                    SettingsAction::Close => self.settings_modal.close(),
+                }
+            }
+            return;
+        }
+
+        // 0.5. Open Repo Modal captures keys
+        if self.open_repo_modal.is_open {
+            if let Some(action) = self.open_repo_modal.handle_key(key) {
+                match action {
+                    OpenRepoAction::Open(path) => {
+                        self.open_repo_modal.close();
+                        self.switch_repository(&path);
+                    }
+                    OpenRepoAction::Close => self.open_repo_modal.close(),
+                }
+            }
+            return;
+        }
+
         // 1. Context Menu captures keys
         if self.context_menu.is_open {
             match key.code {
@@ -488,7 +616,8 @@ impl App {
                             match git.checkout_branch(&target_b) {
                                 Ok(_) => {
                                     self.previous_branch = Some(prev);
-                                    self.last_status = Some(format!("Switched branch to {}", target_b));
+                                    self.last_status =
+                                        Some(format!("Switched branch to {}", target_b));
                                     self.refresh_git_status();
                                     self.branch_switcher.close();
                                 }
@@ -527,8 +656,11 @@ impl App {
                     KeyCode::Enter => {
                         let new_msg = self.rebase_modal.reword_input.clone();
                         if let Some(git) = &self.git_service {
-                            if crate::git::rebase::reword_head_commit(git.workdir(), &new_msg).is_ok() {
-                                self.last_status = Some("Reworded HEAD commit successfully".to_string());
+                            if crate::git::rebase::reword_head_commit(git.workdir(), &new_msg)
+                                .is_ok()
+                            {
+                                self.last_status =
+                                    Some("Reworded HEAD commit successfully".to_string());
                                 self.refresh_git_status();
                                 self.rebase_modal.close();
                             }
@@ -549,7 +681,8 @@ impl App {
                 KeyCode::Char('s') => {
                     if let Some(git) = &self.git_service {
                         let combined_msg = "squash: combined recent commits".to_string();
-                        if crate::git::rebase::quick_squash(git.workdir(), 2, &combined_msg).is_ok() {
+                        if crate::git::rebase::quick_squash(git.workdir(), 2, &combined_msg).is_ok()
+                        {
                             self.last_status = Some("Squashed top 2 commits".to_string());
                             self.refresh_git_status();
                             self.open_rebase_modal();
@@ -792,12 +925,34 @@ impl App {
                     self.trigger_ai_ci_analysis();
                     return;
                 }
+                // Ctrl+O: Open / Switch Repository
+                KeyCode::Char('o') => {
+                    self.open_open_repo();
+                    return;
+                }
+                // Ctrl+,: Open Settings
+                KeyCode::Char(',') => {
+                    self.open_settings();
+                    return;
+                }
                 _ => {}
             }
         }
 
         match key.code {
             KeyCode::Char('q') => self.should_quit = true,
+            KeyCode::Char(',') => self.open_settings(),
+            KeyCode::Char('o') => self.open_open_repo(),
+            KeyCode::Char('A') => {
+                self.show_all_files = !self.show_all_files;
+                let msg = if self.show_all_files {
+                    "Showing all repository files"
+                } else {
+                    "Showing changed files only"
+                };
+                self.last_status = Some(msg.to_string());
+                self.refresh_git_status();
+            }
             KeyCode::Char('?') => {
                 let ctx = self.capture_ai_context();
                 self.ai_modal.toggle(&ctx);
@@ -926,7 +1081,8 @@ impl App {
                     self.checkout_selected_pr();
                 } else if self.changes_view.commit_summary.is_empty() {
                     self.changes_view.focus = ChangesFocus::CommitSummary;
-                    self.last_status = Some("Enter commit message (Press Enter to Commit & Sync)".to_string());
+                    self.last_status =
+                        Some("Enter commit message (Press Enter to Commit & Sync)".to_string());
                 } else {
                     self.commit_staged();
                 }
@@ -943,11 +1099,15 @@ impl App {
             KeyCode::Enter => match self.active_tab {
                 AppTab::Prs => self.checkout_selected_pr(),
                 AppTab::Worktrees => {
-                    if let Some(wt) = self.worktrees.get(self.worktrees_view.scroll.selected_index) {
+                    if let Some(wt) = self
+                        .worktrees
+                        .get(self.worktrees_view.scroll.selected_index)
+                    {
                         let branch = wt.head_branch.clone().unwrap_or_else(|| "HEAD".to_string());
                         if let Some(git) = &self.git_service {
                             if git.checkout_branch(&branch).is_ok() {
-                                self.last_status = Some(format!("Switched to worktree branch {}", branch));
+                                self.last_status =
+                                    Some(format!("Switched to worktree branch {}", branch));
                                 self.refresh_git_status();
                                 self.refresh_worktrees();
                             }
@@ -1084,7 +1244,55 @@ impl App {
     pub fn handle_mouse(&mut self, mouse: MouseEvent) {
         let (x, y) = (mouse.column, mouse.row);
 
-        // Right-Click: Open Context Menu
+        // 1. Settings Modal clicks
+        if self.settings_modal.is_open {
+            if mouse.kind == MouseEventKind::Down(MouseButton::Left) {
+                if let Some(action) = self
+                    .settings_modal
+                    .handle_click(x, y, self.layout_areas.root)
+                {
+                    match action {
+                        SettingsAction::SaveAndApply => {
+                            self.settings_modal.apply_to_config(&mut self.config);
+                            if let Err(e) = self.config.save() {
+                                self.last_status = Some(format!("Save config error: {}", e));
+                            } else {
+                                self.theme = Theme::get(self.config.theme);
+                                self.i18n = I18n::new(self.config.language);
+                                self.icons = Icons::new(self.config.use_nerd_font);
+                                self.last_status = Some(
+                                    "Saved settings to ~/.config/prowly/config.toml".to_string(),
+                                );
+                            }
+                            self.settings_modal.close();
+                        }
+                        SettingsAction::Close => self.settings_modal.close(),
+                    }
+                }
+            }
+            return;
+        }
+
+        // 2. Open Repo Modal clicks
+        if self.open_repo_modal.is_open {
+            if mouse.kind == MouseEventKind::Down(MouseButton::Left) {
+                if let Some(action) =
+                    self.open_repo_modal
+                        .handle_click(x, y, self.layout_areas.root)
+                {
+                    match action {
+                        OpenRepoAction::Open(path) => {
+                            self.open_repo_modal.close();
+                            self.switch_repository(&path);
+                        }
+                        OpenRepoAction::Close => self.open_repo_modal.close(),
+                    }
+                }
+            }
+            return;
+        }
+
+        // 3. Right-Click: Open Context Menu
         if mouse.kind == MouseEventKind::Down(MouseButton::Right) {
             let sel_file = self
                 .filtered_files()
@@ -1094,13 +1302,28 @@ impl App {
             return;
         }
 
-        // Left-Click when context menu is open
+        // 4. Click when Context Menu is open: hit-test items
         if self.context_menu.is_open {
-            self.context_menu.close();
+            if mouse.kind == MouseEventKind::Down(MouseButton::Left) {
+                if let Some(action) = self.context_menu.hit_test(x, y, self.layout_areas.root) {
+                    self.context_menu.close();
+                    self.execute_context_action(action);
+                } else {
+                    self.context_menu.close();
+                }
+            }
             return;
         }
 
-        // Click on Branch switcher header button
+        // 5. Click on Open Repo button or header path
+        if self.layout_areas.hits_open_repo(x, y)
+            && mouse.kind == MouseEventKind::Down(MouseButton::Left)
+        {
+            self.open_open_repo();
+            return;
+        }
+
+        // 6. Click on Branch switcher header button
         if self.layout_areas.hits_branch(x, y)
             && mouse.kind == MouseEventKind::Down(MouseButton::Left)
         {
@@ -1108,7 +1331,7 @@ impl App {
             return;
         }
 
-        // Click on Sync / Remote Diff header button
+        // 7. Click on Sync / Remote Diff header button
         if self.layout_areas.hits_sync(x, y)
             && mouse.kind == MouseEventKind::Down(MouseButton::Left)
         {
@@ -1116,21 +1339,46 @@ impl App {
             return;
         }
 
-        // Click on Ask AI header button
-        if self.layout_areas.hits_ask_ai(x, y)
+        // 8. Click on Settings header button
+        if self.layout_areas.hits_settings(x, y)
             && mouse.kind == MouseEventKind::Down(MouseButton::Left)
         {
-            let ctx = self.capture_ai_context();
-            self.ai_modal.toggle(&ctx);
+            self.open_settings();
             return;
         }
 
-        // Click on Help header button
+        // 9. Click on Menu header button
+        if self.layout_areas.hits_menu(x, y)
+            && mouse.kind == MouseEventKind::Down(MouseButton::Left)
+        {
+            let sel_file = self
+                .filtered_files()
+                .get(self.changes_view.file_scroll.selected_index)
+                .map(|f| f.path.clone());
+            self.context_menu.open_at(sel_file, x, y + 1);
+            return;
+        }
+
+        // 10. Click on Ask AI / AI Status chip
+        if self.layout_areas.hits_ask_ai(x, y)
+            && mouse.kind == MouseEventKind::Down(MouseButton::Left)
+        {
+            let (connected, _, _) = self.ai_connection_status();
+            if connected {
+                let ctx = self.capture_ai_context();
+                self.ai_modal.toggle(&ctx);
+            } else {
+                self.open_settings();
+            }
+            return;
+        }
+
+        // 11. Click on Help header button
         if self.layout_areas.hits_help(x, y)
             && mouse.kind == MouseEventKind::Down(MouseButton::Left)
         {
             self.last_status = Some(
-                "Help: [Tab] Panes | [Space] Filter/Stage | [m/Right-Click] Menu | [Ctrl+D] AI Diagnose | [q] Quit".to_string(),
+                "Help: [Tab] Panes | [Space] Stage | [,] Settings | [Ctrl+O] Open Repo | [m] Menu | [q] Quit".to_string(),
             );
             return;
         }
@@ -1157,7 +1405,8 @@ impl App {
             match mouse.kind {
                 MouseEventKind::Down(MouseButton::Left) => {
                     if self.git_service.is_none() {
-                        let cur_dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+                        let cur_dir = std::env::current_dir()
+                            .unwrap_or_else(|_| std::path::PathBuf::from("."));
                         match GitService::init_repo(&cur_dir) {
                             Ok(_) => {
                                 if let Ok(git) = GitService::open(&cur_dir) {
@@ -1215,13 +1464,27 @@ impl App {
                             self.alerts_view.scroll.handle_click_row(rel_y);
                         }
                         AppTab::Changes => {
-                            if let Some(btn_action) = self.changes_view.hit_test_action_buttons(x, y) {
+                            if self.changes_view.hit_test_menu_button(x, y) {
+                                let sel_file = self
+                                    .filtered_files()
+                                    .get(self.changes_view.file_scroll.selected_index)
+                                    .map(|f| f.path.clone());
+                                self.context_menu.open_at(sel_file, x, y + 1);
+                            } else if let Some(btn_action) =
+                                self.changes_view.hit_test_action_buttons(x, y)
+                            {
                                 match btn_action {
                                     ChangesButtonAction::CommitAndSync => self.commit_staged(),
-                                    ChangesButtonAction::AiGenerate => self.trigger_ai_generate_commit(),
+                                    ChangesButtonAction::AiGenerate => {
+                                        self.trigger_ai_generate_commit()
+                                    }
                                     ChangesButtonAction::AiReview => self.trigger_ai_review(),
-                                    ChangesButtonAction::StashAll => self.execute_palette_action("stash"),
-                                    ChangesButtonAction::DiscardSafe => self.safe_discard_selected(),
+                                    ChangesButtonAction::StashAll => {
+                                        self.execute_palette_action("stash")
+                                    }
+                                    ChangesButtonAction::DiscardSafe => {
+                                        self.safe_discard_selected()
+                                    }
                                 }
                             } else if let Some(focus) = self.changes_view.hit_test_inputs(x, y) {
                                 self.changes_view.focus = focus;
@@ -1403,6 +1666,18 @@ impl App {
                     self.last_status = Some("No conflicted files found".to_string());
                 }
             }
+            "settings" => self.open_settings(),
+            "open_repo" => self.open_open_repo(),
+            "toggle_all_files" => {
+                self.show_all_files = !self.show_all_files;
+                let msg = if self.show_all_files {
+                    "Showing all repository files"
+                } else {
+                    "Showing changed files only"
+                };
+                self.last_status = Some(msg.to_string());
+                self.refresh_git_status();
+            }
             _ => {}
         }
     }
@@ -1458,7 +1733,8 @@ impl App {
     /// Commit staged changes using summary and description inputs, then push (Commit & Sync).
     pub fn commit_staged(&mut self) {
         let summary = if self.changes_view.commit_summary.trim().is_empty() {
-            self.last_status = Some("Please enter a commit message or press Ctrl+G for AI message".to_string());
+            self.last_status =
+                Some("Please enter a commit message or press Ctrl+G for AI message".to_string());
             return;
         } else {
             self.changes_view.commit_summary.trim().to_string()
@@ -1567,8 +1843,17 @@ impl App {
             .and_then(|g| g.remote_url(None))
             .and_then(|url| GitHubRepoTarget::from_remote_url(&url));
 
-        if let (Some(target), Some(git), Some(pr)) = (target, &self.git_service, self.prs_view.selected_pr().cloned()) {
-            match self.github_service.checkout_pr_locally(&target, pr.number, &pr.head_branch, git.workdir()) {
+        if let (Some(target), Some(git), Some(pr)) = (
+            target,
+            &self.git_service,
+            self.prs_view.selected_pr().cloned(),
+        ) {
+            match self.github_service.checkout_pr_locally(
+                &target,
+                pr.number,
+                &pr.head_branch,
+                git.workdir(),
+            ) {
                 Ok(msg) => {
                     self.last_status = Some(msg);
                     self.refresh_git_status();
@@ -1605,7 +1890,8 @@ impl App {
         let query = self.ai_modal.input_query.clone();
         let ctx = self.capture_ai_context();
         let client = crate::ai::create_ai_client(&self.config.ai);
-        let has_key = self.config.ai.api_key.is_some() || self.config.ai.provider == crate::ai::AiProvider::Ollama;
+        let has_key = self.config.ai.api_key.is_some()
+            || self.config.ai.provider == crate::ai::AiProvider::Ollama;
         if !has_key {
             let response = format!(
                 "󱚣 AI Assistant response for '{}':\n\n• Recommendation: Code is clean and staged files are ready.\n• Conventional Commit suggested: feat: implement feature changes\n• Tip: Configure your AI API key in ~/.config/prowly/config.toml to enable live LLM integration.",
@@ -1639,10 +1925,12 @@ impl App {
                         } else {
                             None
                         };
-                        let _ = sender.send(AppEvent::AiAssistantResponseReceived(Ok((content, patch))));
+                        let _ = sender
+                            .send(AppEvent::AiAssistantResponseReceived(Ok((content, patch))));
                     }
                     Err(e) => {
-                        let _ = sender.send(AppEvent::AiAssistantResponseReceived(Err(e.to_string())));
+                        let _ =
+                            sender.send(AppEvent::AiAssistantResponseReceived(Err(e.to_string())));
                     }
                 }
             });
@@ -1969,6 +2257,18 @@ impl App {
             self.rebase_modal
                 .render(frame, &self.theme, &self.icons, area);
         }
+
+        // 12. Open Repository Modal Overlay (if open)
+        if self.open_repo_modal.is_open {
+            self.open_repo_modal
+                .render(frame, &self.theme, &self.icons, area);
+        }
+
+        // 13. Settings Modal Overlay (if open)
+        if self.settings_modal.is_open {
+            self.settings_modal
+                .render(frame, &self.theme, &self.icons, &self.i18n, area);
+        }
     }
 
     fn render_header(&self, frame: &mut Frame) {
@@ -1989,13 +2289,27 @@ impl App {
                 p.display().to_string()
             }
         } else {
-            "~/prowly".to_string()
+            let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+            if let Ok(home) = std::env::var("HOME") {
+                let home_path = std::path::Path::new(&home);
+                if let Ok(rel) = cwd.strip_prefix(home_path) {
+                    format!("~/{} (Not a Repo - Click)", rel.display())
+                } else {
+                    format!("{} (Not a Repo - Click)", cwd.display())
+                }
+            } else {
+                format!("{} (Not a Repo - Click)", cwd.display())
+            }
         };
 
         // Sync status determination
         let is_sync_needed = self.repo_status.ahead > 0 || self.repo_status.behind > 0;
         let (sync_icon, sync_label, sync_color) = if is_sync_needed {
-            (self.icons.get(crate::ui::IconId::CheckWarning), "Sync Needed", self.theme.warning)
+            (
+                self.icons.get(crate::ui::IconId::CheckWarning),
+                "Sync Needed",
+                self.theme.warning,
+            )
         } else {
             (self.icons.check_success(), "Synced", self.theme.success)
         };
@@ -2008,7 +2322,10 @@ impl App {
                     .fg(self.theme.primary)
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::styled(format!(" [  {} ] ", repo_path), Style::default().fg(self.theme.dim_fg)),
+            Span::styled(
+                format!(" [  {} ] ", repo_path),
+                Style::default().fg(self.theme.dim_fg),
+            ),
             Span::styled(
                 format!(
                     " [ {} {} ({}{} {}{}) ] ",
@@ -2031,27 +2348,72 @@ impl App {
             top_area,
         );
 
-        // Top right buttons: [ 󱚣 Ask AI ] and [? Help]
-        let ask_ai_p = Paragraph::new(Span::styled(
-            " [ 󱚣 Ask AI ] ",
+        // Top right buttons: AI Status Chip, [ 󰍜 Menu ], [  Settings ], [? Help]
+        let (ai_connected, ai_prov, ai_mod) = self.ai_connection_status();
+        let (ai_icon, ai_label, ai_style) = if ai_connected {
+            (
+                "󱚣",
+                format!("AI: {} ({})", ai_prov, ai_mod),
+                Style::default()
+                    .fg(self.theme.ai_sparkle)
+                    .add_modifier(Modifier::BOLD),
+            )
+        } else {
+            let disconnected_label = if self.config.language == crate::i18n::Language::Ja {
+                "AI: 未接続 (APIキー未設定)"
+            } else {
+                "AI: Disconnected"
+            };
+            (
+                "⚠",
+                disconnected_label.to_string(),
+                Style::default()
+                    .fg(self.theme.warning)
+                    .add_modifier(Modifier::BOLD),
+            )
+        };
+
+        let ai_p = Paragraph::new(Span::styled(
+            format!(" [ {} {} ] ", ai_icon, ai_label),
+            ai_style,
+        ));
+        frame.render_widget(ai_p, self.layout_areas.ai_status_button);
+
+        let menu_p = Paragraph::new(Span::styled(
+            " [ 󰍜 Menu ] ",
+            Style::default().fg(self.theme.secondary),
+        ));
+        frame.render_widget(menu_p, self.layout_areas.menu_button);
+
+        let settings_p = Paragraph::new(Span::styled(
+            " [  Settings ] ",
             Style::default()
-                .fg(self.theme.ai_sparkle)
+                .fg(self.theme.primary)
                 .add_modifier(Modifier::BOLD),
         ));
-        frame.render_widget(ask_ai_p, self.layout_areas.ask_ai_button);
+        frame.render_widget(settings_p, self.layout_areas.settings_button);
 
         let help_p = Paragraph::new(Span::styled(
             " [? Help] ",
-            Style::default().fg(self.theme.secondary),
+            Style::default().fg(self.theme.dim_fg),
         ));
         frame.render_widget(help_p, self.layout_areas.help_button);
 
         // Bottom Header Row
         let gh_target = self.github_target();
         let repo_label = if let Some(target) = gh_target {
-            format!(" {}/{} ({})", target.owner, target.repo, self.i18n.t("header.private"))
+            format!(
+                " {}/{} ({})",
+                target.owner,
+                target.repo,
+                self.i18n.t("header.private")
+            )
         } else if let Some(git) = &self.git_service {
-            let name = git.workdir().file_name().and_then(|n| n.to_str()).unwrap_or("repo");
+            let name = git
+                .workdir()
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("repo");
             format!(" local @ {} ({})", name, self.i18n.t("header.private"))
         } else {
             format!(" user @ repo ({})", self.i18n.t("header.private"))
@@ -2072,7 +2434,11 @@ impl App {
         };
 
         let unread_count = self.alerts_view.alerts.iter().filter(|a| a.unread).count();
-        let alert_label = format!("{} Alerts: {}", self.icons.get(crate::ui::IconId::Alert), unread_count);
+        let alert_label = format!(
+            "{} Alerts: {}",
+            self.icons.get(crate::ui::IconId::Alert),
+            unread_count
+        );
 
         let bottom_line = Line::from(vec![
             Span::raw("  "),
@@ -2181,12 +2547,22 @@ impl App {
 
     fn render_footer(&self, frame: &mut Frame) {
         let status_msg = self.last_status.as_deref().unwrap_or("Editing Prowly");
+        let (ai_connected, ai_prov, ai_mod) = self.ai_connection_status();
+        let ai_footer = if ai_connected {
+            format!("AI: {} ({})", ai_prov, ai_mod)
+        } else if self.config.language == crate::i18n::Language::Ja {
+            "AI: 未接続 (APIキー未設定)".to_string()
+        } else {
+            "AI: Disconnected".to_string()
+        };
+
         let left_part = format!(
-            " Context: {} | [Tab] Panes [Space] Filter/Stage [m] Menu [Ctrl+D] AI Diag [q] Quit",
+            " Context: {} | [Tab] Panes [Space] Stage [,] Settings [Ctrl+O] Open Repo [m] Menu [q] Quit",
             status_msg
         );
         let right_part = format!(
-            "Theme: {} | Lang: {} ",
+            "{} | Theme: {} | Lang: {} ",
+            ai_footer,
             self.theme.name,
             self.config.language.code().to_uppercase()
         );

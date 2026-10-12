@@ -463,7 +463,13 @@ impl GitHubService {
 
         // Try using `gh run rerun <id>` first
         if let Ok(output) = Command::new("gh")
-            .args(["run", "rerun", &run_id.to_string(), "-R", &format!("{}/{}", target.owner, target.repo)])
+            .args([
+                "run",
+                "rerun",
+                &run_id.to_string(),
+                "-R",
+                &format!("{}/{}", target.owner, target.repo),
+            ])
             .output()
         {
             if output.status.success() {
@@ -473,7 +479,10 @@ impl GitHubService {
 
         // Try octocrab post
         if let Some(octo) = self.get_octocrab().await {
-            let route = format!("/repos/{}/{}/actions/runs/{}/rerun", target.owner, target.repo, run_id);
+            let route = format!(
+                "/repos/{}/{}/actions/runs/{}/rerun",
+                target.owner, target.repo, run_id
+            );
             match octo.post::<_, serde_json::Value>(&route, None::<&()>).await {
                 Ok(_) => Ok(format!("Triggered rerun for workflow #{}", run_id)),
                 Err(e) => Err(format!("Failed to rerun workflow #{}: {}", run_id, e)),
@@ -494,11 +503,20 @@ impl GitHubService {
         // Try `gh pr checkout <number>`
         if let Ok(output) = Command::new("gh")
             .current_dir(workdir)
-            .args(["pr", "checkout", &pr_number.to_string(), "-R", &format!("{}/{}", target.owner, target.repo)])
+            .args([
+                "pr",
+                "checkout",
+                &pr_number.to_string(),
+                "-R",
+                &format!("{}/{}", target.owner, target.repo),
+            ])
             .output()
         {
             if output.status.success() {
-                return Ok(format!("Checked out PR #{} ({}) via gh CLI", pr_number, head_branch));
+                return Ok(format!(
+                    "Checked out PR #{} ({}) via gh CLI",
+                    pr_number, head_branch
+                ));
             }
         }
 
@@ -516,7 +534,10 @@ impl GitHubService {
             .output();
 
         match co {
-            Ok(out) if out.status.success() => Ok(format!("Checked out PR #{} as branch '{}'", pr_number, branch_name)),
+            Ok(out) if out.status.success() => Ok(format!(
+                "Checked out PR #{} as branch '{}'",
+                pr_number, branch_name
+            )),
             Ok(out) => Err(String::from_utf8_lossy(&out.stderr).trim().to_string()),
             Err(e) => Err(e.to_string()),
         }

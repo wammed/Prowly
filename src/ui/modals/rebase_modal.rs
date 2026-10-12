@@ -76,7 +76,10 @@ impl RebaseModal {
 
         frame.render_widget(Clear, rect);
 
-        let title = format!(" {} Quick Interactive Rebase & Commit History ", icons.commit());
+        let title = format!(
+            " {} Quick Interactive Rebase & Commit History ",
+            icons.commit()
+        );
 
         let block = Block::default()
             .borders(Borders::ALL)
@@ -101,18 +104,26 @@ impl RebaseModal {
                 Style::default().fg(theme.dim_fg),
             )));
         } else {
-            lines.push(Line::from(vec![
-                Span::styled("  Action  Hash    Author     Summary                     Signature", Style::default().fg(theme.dim_fg)),
-            ]));
+            lines.push(Line::from(vec![Span::styled(
+                "  Action  Hash    Author     Summary                     Signature",
+                Style::default().fg(theme.dim_fg),
+            )]));
             lines.push(Line::from(""));
 
-            for (idx, item) in self.commits.iter().enumerate().take(inner.height as usize - 5) {
+            for (idx, item) in self
+                .commits
+                .iter()
+                .enumerate()
+                .take(inner.height as usize - 5)
+            {
                 let is_sel = idx == self.selected_index;
                 let prefix = if is_sel { "▶ " } else { "  " };
 
                 let action_style = match item.action {
                     RebaseAction::Pick => Style::default().fg(theme.info),
-                    RebaseAction::Squash => Style::default().fg(theme.accent).add_modifier(Modifier::BOLD),
+                    RebaseAction::Squash => Style::default()
+                        .fg(theme.accent)
+                        .add_modifier(Modifier::BOLD),
                     RebaseAction::Fixup => Style::default().fg(theme.warning),
                     RebaseAction::Reword => Style::default().fg(theme.primary),
                     RebaseAction::Drop => Style::default().fg(theme.error),
@@ -148,8 +159,21 @@ impl RebaseModal {
                 lines.push(Line::from(vec![
                     Span::styled(prefix, line_style),
                     Span::styled(format!("[{:<6}] ", item.action.badge()), action_style),
-                    Span::styled(format!("{:<7} ", item.hash), Style::default().fg(theme.secondary)),
-                    Span::styled(format!("{:<10} ", if item.author.len() > 10 { &item.author[..10] } else { &item.author }), Style::default().fg(theme.dim_fg)),
+                    Span::styled(
+                        format!("{:<7} ", item.hash),
+                        Style::default().fg(theme.secondary),
+                    ),
+                    Span::styled(
+                        format!(
+                            "{:<10} ",
+                            if item.author.len() > 10 {
+                                &item.author[..10]
+                            } else {
+                                &item.author
+                            }
+                        ),
+                        Style::default().fg(theme.dim_fg),
+                    ),
                     Span::styled(summary_truncated, line_style),
                     Span::raw("  "),
                     Span::styled(format!("{} ", sig_icon), sig_style),
@@ -160,9 +184,20 @@ impl RebaseModal {
         lines.push(Line::from(""));
         if self.is_editing_reword {
             lines.push(Line::from(vec![
-                Span::styled("New message: ", Style::default().fg(theme.primary).add_modifier(Modifier::BOLD)),
-                Span::styled(&self.reword_input, Style::default().fg(theme.fg).add_modifier(Modifier::BOLD)),
-                Span::styled(" (Press Enter to confirm, Esc to cancel)", Style::default().fg(theme.dim_fg)),
+                Span::styled(
+                    "New message: ",
+                    Style::default()
+                        .fg(theme.primary)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    &self.reword_input,
+                    Style::default().fg(theme.fg).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    " (Press Enter to confirm, Esc to cancel)",
+                    Style::default().fg(theme.dim_fg),
+                ),
             ]));
         } else {
             lines.push(Line::from(vec![

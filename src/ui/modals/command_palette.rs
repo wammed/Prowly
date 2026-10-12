@@ -106,6 +106,21 @@ impl PaletteAction {
             title: "Git: Resolve Merge Conflicts",
             shortcut: None,
         },
+        PaletteAction {
+            id: "settings",
+            title: "Preferences: Open Settings Modal",
+            shortcut: Some(","),
+        },
+        PaletteAction {
+            id: "open_repo",
+            title: "Repository: Open / Switch Repository",
+            shortcut: Some("Ctrl+O"),
+        },
+        PaletteAction {
+            id: "toggle_all_files",
+            title: "View: Toggle All Files / Changed Only",
+            shortcut: Some("a"),
+        },
     ];
 }
 

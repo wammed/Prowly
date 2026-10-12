@@ -151,8 +151,7 @@ impl DiffView {
                             Style::default().bg(bg).fg(c),
                         ));
                     }
-                    self.highlight_cache
-                        .put(content.clone(), cached_ranges);
+                    self.highlight_cache.put(content.clone(), cached_ranges);
                 } else {
                     spans.push(Span::styled(
                         content.clone(),

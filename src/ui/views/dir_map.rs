@@ -39,49 +39,58 @@ impl DirectoryMap {
         }
     }
 
-    /// Rebuild directory tree nodes from modified/untracked files.
-    pub fn update_from_files(&mut self, files: &[GitFileItem]) {
-        if files.is_empty() {
-            self.nodes = vec![DirMapNode {
-                display_name: "/ (root) [0]".to_string(),
-                path_prefix: "".to_string(),
-                change_count: 0,
-                is_root: true,
-                depth: 0,
-            }];
-            self.scroll.set_total_items(1);
-            return;
-        }
+    /// Rebuild directory tree nodes from repository directories and modified files.
+    pub fn update_from_repo(&mut self, repo_dirs: &[String], files: &[GitFileItem]) {
+        let changed_files_count = files
+            .iter()
+            .filter(|f| f.status != crate::git::FileStatus::Clean)
+            .count();
 
         // Aggregate counts by directory prefix
         let mut dir_counts: BTreeMap<String, usize> = BTreeMap::new();
         let mut all_dirs: BTreeSet<String> = BTreeSet::new();
 
+        // 1. Add known repository directories
+        for dir in repo_dirs {
+            let mut prefix = String::new();
+            for part in dir.trim_end_matches('/').split('/') {
+                if !part.is_empty() {
+                    prefix.push_str(part);
+                    prefix.push('/');
+                    all_dirs.insert(prefix.clone());
+                }
+            }
+        }
+
+        // 2. Add changed files and accumulate their change counts
         for file in files {
+            let is_changed = file.status != crate::git::FileStatus::Clean;
             let path = &file.path;
             let parts: Vec<&str> = path.split('/').collect();
 
-            // Register each directory prefix
             let mut prefix = String::new();
             for part in &parts[..parts.len().saturating_sub(1)] {
                 prefix.push_str(part);
                 prefix.push('/');
-                *dir_counts.entry(prefix.clone()).or_insert(0) += 1;
+                if is_changed {
+                    *dir_counts.entry(prefix.clone()).or_insert(0) += 1;
+                }
                 all_dirs.insert(prefix.clone());
             }
         }
 
         let mut nodes = Vec::new();
-        // 1. Root node
+        // Root node
+        let root_label = format!("/ (root) [{}]", changed_files_count);
         nodes.push(DirMapNode {
-            display_name: format!("/ (root) [{}]", files.len()),
+            display_name: root_label,
             path_prefix: "".to_string(),
-            change_count: files.len(),
+            change_count: changed_files_count,
             is_root: true,
             depth: 0,
         });
 
-        // 2. Hierarchical directory nodes
+        // Hierarchical directory nodes
         for dir in all_dirs {
             let count = dir_counts.get(&dir).copied().unwrap_or(0);
             let depth = dir.matches('/').count();
@@ -108,6 +117,11 @@ impl DirectoryMap {
 
         self.scroll.set_total_items(nodes.len());
         self.nodes = nodes;
+    }
+
+    /// Rebuild directory tree nodes from modified/untracked files.
+    pub fn update_from_files(&mut self, files: &[GitFileItem]) {
+        self.update_from_repo(&[], files);
     }
 
     /// Retrieve the currently selected directory prefix for filtering.

@@ -43,7 +43,11 @@ pub fn list_recent_commits(
 ) -> Result<Vec<RebaseCommitItem>, GitError> {
     let output = Command::new("git")
         .current_dir(repo_dir)
-        .args(["log", &format!("-n{}", count), "--pretty=format:%h|%an|%s|%G?"])
+        .args([
+            "log",
+            &format!("-n{}", count),
+            "--pretty=format:%h|%an|%s|%G?",
+        ])
         .output()?;
 
     if !output.status.success() {
