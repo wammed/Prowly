@@ -1,0 +1,87 @@
+# ==============================================================================
+# Prowly Configuration File Template
+# Place this file at: ~/.config/prowly/config.toml (or ./prowly.toml)
+# ==============================================================================
+
+# UI Theme:
+# Available themes:
+#   CatppuccinMocha, TokyoNight, Dracula, GruvboxDark, OneDark,
+#   Nord, GitHubDark, CatppuccinLatte, SolarizedDark, Monokai,
+#   Cyberpunk, Synthwave84, MaterialPalenight, RoséPine, EverforestDark
+theme = "CatppuccinMocha"
+
+# Interface Language:
+#   "en" (English) or "ja" (日本語)
+language = "en"
+
+# Render high-definition Nerd Font glyphs:
+#   true  = Use Nerd Font icons (requires a Nerd Font terminal font)
+#   false = Use ASCII / Unicode fallbacks
+use_nerd_font = true
+
+# ------------------------------------------------------------------------------
+# Omnipresent AI Integration (BYOK - Bring Your Own Key)
+# ------------------------------------------------------------------------------
+[ai]
+# AI Provider:
+#   "openai"    - OpenAI API (e.g. gpt-4o, gpt-4o-mini)
+#   "anthropic" - Anthropic Claude API (e.g. claude-3-5-sonnet-20241022)
+#   "gemini"    - Google Gemini API (e.g. gemini-1.5-flash, gemini-1.5-pro, gemini-2.0-flash)
+#   "ollama"    - Local Ollama instance (e.g. llama3.2:latest, deepseek-r1:latest)
+#   "custom"    - Any OpenAI-compatible local/remote endpoint (vLLM, LiteLLM, LM Studio)
+provider = "openai"
+
+# Model name for your chosen provider:
+# Examples:
+#   OpenAI:    "gpt-4o-mini", "gpt-4o", "o3-mini"
+#   Anthropic: "claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022"
+#   Gemini:    "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash"
+#   Ollama:    "llama3.2:latest", "deepseek-r1:latest", "codellama"
+model = "gpt-4o-mini"
+
+# API Key:
+# You can set it here, or via environment variables:
+#   OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY (or GOOGLE_API_KEY)
+# api_key = "your-api-key-here"
+
+# API Base / Endpoint URL (optional override):
+#   OpenAI default:    https://api.openai.com/v1
+#   Anthropic default: https://api.anthropic.com/v1
+#   Gemini default:    https://generativelanguage.googleapis.com/v1beta
+#   Ollama default:    http://localhost:11434/api
+#   Custom default:    http://localhost:8080/v1
+# api_base = "http://localhost:11434/api"
+
+# Generation temperature (0.0 to 1.0, lower is more deterministic)
+temperature = 0.3
+
+# Maximum output tokens
+max_tokens = 2048
+
+# ------------------------------------------------------------------------------
+# Git Engine Preferences
+# ------------------------------------------------------------------------------
+[git]
+# Automatically create a safety backup before discarding changes
+soft_discard_backup = true
+
+# Background auto-fetch interval in seconds (0 to disable)
+auto_fetch_interval_secs = 60
+
+# ------------------------------------------------------------------------------
+# External Editor Preferences
+# ------------------------------------------------------------------------------
+[editor]
+# Preferred editor command to open files with ('e' shortcut or context menu):
+# Leave empty to use $EDITOR / $VISUAL environment variable.
+# Examples: "nvim", "vim", "code", "nano", "gedit"
+# command = "nvim"
+
+# ------------------------------------------------------------------------------
+# Repository History (managed automatically by Prowly)
+# ------------------------------------------------------------------------------
+# last_repository = "/path/to/last/repo"
+# recent_repositories = [
+#     "/path/to/repo1",
+#     "/path/to/repo2",
+# ]
