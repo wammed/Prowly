@@ -242,6 +242,7 @@ impl App {
 
         app.refresh_git_status();
         app.refresh_worktrees();
+        app.update_active_diff();
         app
     }
 
@@ -1574,14 +1575,16 @@ impl App {
                                 }
                             } else if let Some(focus) = self.changes_view.hit_test_inputs(x, y) {
                                 self.changes_view.focus = focus;
-                            } else if self
-                                .changes_view
-                                .file_scroll
-                                .handle_click_row(rel_y)
-                                .is_some()
+                            } else if let Some((rel_y, is_checkbox)) =
+                                self.changes_view.hit_test_file_list(x, y)
                             {
                                 self.changes_view.focus = ChangesFocus::FileList;
-                                self.update_active_diff();
+                                if self.changes_view.file_scroll.handle_click_row(rel_y).is_some() {
+                                    if is_checkbox {
+                                        self.toggle_stage_selected();
+                                    }
+                                    self.update_active_diff();
+                                }
                             }
                         }
                     }
