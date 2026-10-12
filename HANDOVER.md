@@ -77,7 +77,7 @@ Last Updated: 2026-10-12
   - **Phase 3 (Directory Map, Worktrees & AI Diagnostic)**:
     1. Directory Map component with tree aggregation & count badges (`src/ui/views/dir_map.rs`).
     2. Native Git Worktree manager & interactive view (`src/git/worktree.rs`, `src/ui/views/worktrees.rs`).
-    3. Floating right-click context menu modal (`src/ui/modals/context_menu.rs`).
+    3. Floating context menu modal with terminal compatibility design (includes left-click `[ 󰍜 Menu ▾ ]` button and `m` key fallback for 100% operation in GNOME Terminal and desktop environments that intercept right-clicks) (`src/ui/modals/context_menu.rs`).
     4. Repository AI Health Diagnostic (`Clean`, `NeedsCommit`, `Conflicted`) (`src/ai/diagnostic.rs`).
   - **Phase 4 (GitHub Deep Integration)**:
     1. GitHub Client with TTL cache, rate-limit protection, and mock support (`src/github/client.rs`).

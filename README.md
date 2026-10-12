@@ -133,6 +133,7 @@ prowly /path/to/repo
 | `t` | Cycle Color Theme (21 themes) |
 | `l` | Toggle Language (English / 日本語) |
 | `e` | Suspend Prowly and open `$EDITOR` |
+| `m` | Open Context Menu (equivalent to left-clicking `[ 󰍜 Menu ▾ ]`) |
 | `?` | Toggle Help & Keybindings Modal |
 | `q` / `Esc` | Close Modal or Quit Prowly |
 
@@ -159,6 +160,20 @@ prowly /path/to/repo
 | `w` | Save resolved changes to file |
 | `n` | Create new worktree |
 | `x` | Prune / Remove selected worktree |
+
+### Mouse Operations & Terminal Compatibility (Right-Click Interception)
+
+Prowly fully supports mouse navigation, including row selection, checkbox staging, wheel scrolling, and clickable buttons.
+
+> [!NOTE]
+> **Right-Click Interception in Terminal Emulators**
+> 
+> - **Behavior Across Terminals**:
+>   - **TUI-focused Terminals (Alacritty, Kitty, WezTerm, Foot, etc.)**: Mouse pass-through is active by default; right-clicking files directly opens Prowly's context menu.
+>   - **Desktop Terminals (GNOME Terminal, XFCE Terminal, Windows Terminal default)**: The terminal emulator's GUI window intercepts right-click events in the OS event loop to show its native context menu (Copy, Paste, etc.). Prowly (as a child process on stdin) never receives these right-click events. This is an unavoidable limitation of those terminal emulators.
+> - **Prowly's Universal Compatibility Approach**:
+>   - To guarantee full context operations in 100% of terminal environments, Prowly provides an explicit **`[ 󰍜 Menu ▾ ]` button** at the top of the file list and header.
+>   - In terminals where right-click is intercepted, you can **left-click `[ 󰍜 Menu ▾ ]`** or press the **`m` key** to seamlessly access all context actions (open in editor, copy path/commit, discard, etc.).
 
 ---
 
