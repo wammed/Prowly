@@ -27,13 +27,14 @@ use crate::ui::views::{
     changes::{ChangesButtonAction, ChangesFocus, ChangesRenderParams},
     ActionsView, AlertsView, ChangesView, DirectoryMap, PrsView, WorktreesView,
 };
+use crate::ui::capsule::{key_badge, pill, split_pill};
 use crate::ui::Icons;
 use crossterm::event::{KeyCode, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::{
     layout::Rect,
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Paragraph, Tabs},
+    widgets::{Block, BorderType, Borders, Paragraph},
     Frame,
 };
 
@@ -2323,96 +2324,130 @@ impl App {
             (self.icons.check_success(), "Synced", self.theme.success)
         };
 
-        // Top Header Row
-        let top_line = Line::from(vec![
-            Span::styled(
-                " 󰄛 Prowly ",
-                Style::default()
-                    .fg(self.theme.primary)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                format!(" [  {} ] ", repo_path),
-                Style::default().fg(self.theme.dim_fg),
-            ),
-            Span::styled(
-                format!(
-                    " [ {} {} ({}{} {}{}) ] ",
-                    self.icons.branch(),
-                    self.repo_status.branch,
-                    self.icons.arrow_up(),
-                    self.repo_status.ahead,
-                    self.icons.arrow_down(),
-                    self.repo_status.behind
-                ),
-                Style::default().fg(self.theme.info),
-            ),
-            Span::styled(
-                format!(" [ {} {} ] ", sync_icon, sync_label),
-                Style::default().fg(sync_color),
-            ),
-        ]);
+        // Top Header Row with GUI Capsules
+        let mut top_spans = Vec::new();
+        top_spans.push(Span::raw(" "));
+        // 1. Brand Capsule (vibrant accent)
+        top_spans.extend(pill(
+            Some("󰄛"),
+            "PROWLY",
+            self.theme.bg,
+            self.theme.primary,
+            self.theme.header_bg,
+            self.icons.use_nerd_font,
+        ));
+        top_spans.push(Span::raw(" "));
+
+        // 2. Repo Path Capsule
+        top_spans.extend(pill(
+            Some(""),
+            &repo_path,
+            self.theme.fg,
+            self.theme.selection_bg,
+            self.theme.header_bg,
+            self.icons.use_nerd_font,
+        ));
+        top_spans.push(Span::raw(" "));
+
+        // 3. Git Branch & Sync status Split Capsule
+        let branch_stats = format!(
+            "↑{} ↓{}",
+            self.repo_status.ahead, self.repo_status.behind
+        );
+        top_spans.extend(split_pill(
+            Some(self.icons.branch()),
+            &self.repo_status.branch,
+            self.theme.bg,
+            self.theme.info,
+            &branch_stats,
+            self.theme.info,
+            self.theme.selection_bg,
+            self.theme.header_bg,
+            self.icons.use_nerd_font,
+        ));
+        top_spans.push(Span::raw(" "));
+
+        // 4. Sync State Capsule
+        top_spans.extend(pill(
+            Some(sync_icon),
+            sync_label,
+            self.theme.bg,
+            sync_color,
+            self.theme.header_bg,
+            self.icons.use_nerd_font,
+        ));
+
         frame.render_widget(
-            Paragraph::new(top_line).style(Style::default().bg(self.theme.header_bg)),
+            Paragraph::new(Line::from(top_spans)).style(Style::default().bg(self.theme.header_bg)),
             top_area,
         );
 
         // Top right buttons: AI Status Chip, [ 󰍜 Menu ], [  Settings ], [? Help]
         let (ai_connected, ai_prov, ai_mod) = self.ai_connection_status();
-        let (ai_icon, ai_label, ai_style) = if ai_connected {
+        let (ai_icon, ai_label, ai_fg) = if ai_connected {
             (
                 "󱚣",
                 format!("AI: {} ({})", ai_prov, ai_mod),
-                Style::default()
-                    .fg(self.theme.ai_sparkle)
-                    .add_modifier(Modifier::BOLD),
+                self.theme.ai_sparkle,
             )
         } else {
             let disconnected_label = if self.config.language == crate::i18n::Language::Ja {
-                "AI: 未接続 (APIキー未設定)"
+                "AI: 未接続"
             } else {
                 "AI: Disconnected"
             };
             (
                 "⚠",
                 disconnected_label.to_string(),
-                Style::default()
-                    .fg(self.theme.warning)
-                    .add_modifier(Modifier::BOLD),
+                self.theme.warning,
             )
         };
 
-        let ai_p = Paragraph::new(Span::styled(
-            format!(" [ {} {} ] ", ai_icon, ai_label),
-            ai_style,
-        ));
-        frame.render_widget(ai_p, self.layout_areas.ai_status_button);
+        let ai_spans = pill(
+            Some(ai_icon),
+            &ai_label,
+            ai_fg,
+            self.theme.selection_bg,
+            self.theme.header_bg,
+            self.icons.use_nerd_font,
+        );
+        frame.render_widget(Paragraph::new(Line::from(ai_spans)), self.layout_areas.ai_status_button);
 
-        let menu_p = Paragraph::new(Span::styled(
-            " [ 󰍜 Menu ] ",
-            Style::default().fg(self.theme.secondary),
-        ));
-        frame.render_widget(menu_p, self.layout_areas.menu_button);
+        let menu_spans = pill(
+            Some("󰍜"),
+            "Menu",
+            self.theme.secondary,
+            self.theme.selection_bg,
+            self.theme.header_bg,
+            self.icons.use_nerd_font,
+        );
+        frame.render_widget(Paragraph::new(Line::from(menu_spans)), self.layout_areas.menu_button);
 
-        let settings_p = Paragraph::new(Span::styled(
-            " [  Settings ] ",
-            Style::default()
-                .fg(self.theme.primary)
-                .add_modifier(Modifier::BOLD),
-        ));
-        frame.render_widget(settings_p, self.layout_areas.settings_button);
+        let settings_spans = pill(
+            Some(""),
+            "Settings",
+            self.theme.primary,
+            self.theme.selection_bg,
+            self.theme.header_bg,
+            self.icons.use_nerd_font,
+        );
+        frame.render_widget(Paragraph::new(Line::from(settings_spans)), self.layout_areas.settings_button);
 
-        let help_p = Paragraph::new(Span::styled(
-            " [? Help] ",
-            Style::default().fg(self.theme.dim_fg),
-        ));
-        frame.render_widget(help_p, self.layout_areas.help_button);
+        let help_spans = pill(
+            Some(""),
+            "Help",
+            self.theme.dim_fg,
+            self.theme.selection_bg,
+            self.theme.header_bg,
+            self.icons.use_nerd_font,
+        );
+        frame.render_widget(Paragraph::new(Line::from(help_spans)), self.layout_areas.help_button);
 
-        // Bottom Header Row
+        // Bottom Header Row with Metadata Capsules
         let gh_target = self.github_target();
         let repo_label = if let Some(target) = gh_target {
             format!(
-                " {}/{} ({})",
+                "{}/{} ({})",
                 target.owner,
                 target.repo,
                 self.i18n.t("header.private")
@@ -2423,12 +2458,12 @@ impl App {
                 .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("repo");
-            format!(" local @ {} ({})", name, self.i18n.t("header.private"))
+            format!("local @ {} ({})", name, self.i18n.t("header.private"))
         } else {
-            format!(" user @ repo ({})", self.i18n.t("header.private"))
+            format!("user @ repo ({})", self.i18n.t("header.private"))
         };
 
-        let ci_label = if let Some(run) = self.actions_view.runs.first() {
+        let (ci_icon, ci_label) = if let Some(run) = self.actions_view.runs.first() {
             let conclusion = run.conclusion.as_deref().unwrap_or("in_progress");
             let icon = if conclusion == "success" {
                 self.icons.check_success()
@@ -2437,63 +2472,85 @@ impl App {
             } else {
                 self.icons.check_running()
             };
-            format!("{} CI: #{} {}", icon, run.id, conclusion)
+            (icon, format!("CI: #{} {}", run.id, conclusion))
         } else {
-            format!("{} CI: No runs", self.icons.check_success())
+            (self.icons.check_success(), "CI: No runs".to_string())
         };
 
         let unread_count = self.alerts_view.alerts.iter().filter(|a| a.unread).count();
-        let alert_label = format!(
-            "{} Alerts: {}",
-            self.icons.get(crate::ui::IconId::Alert),
-            unread_count
-        );
+        let alert_label = format!("Alerts: {}", unread_count);
 
-        let bottom_line = Line::from(vec![
-            Span::raw("  "),
-            Span::styled(repo_label, Style::default().fg(self.theme.dim_fg)),
-            Span::raw("    "),
-            Span::styled(ci_label, Style::default().fg(self.theme.success)),
-            Span::raw("    "),
-            Span::styled(alert_label, Style::default().fg(self.theme.dim_fg)),
-        ]);
+        let mut bottom_spans = Vec::new();
+        bottom_spans.push(Span::raw("  "));
+        bottom_spans.extend(pill(
+            Some(""),
+            &repo_label,
+            self.theme.dim_fg,
+            self.theme.selection_bg,
+            self.theme.header_bg,
+            self.icons.use_nerd_font,
+        ));
+        bottom_spans.push(Span::raw(" "));
+        bottom_spans.extend(pill(
+            Some(ci_icon),
+            &ci_label,
+            self.theme.success,
+            self.theme.selection_bg,
+            self.theme.header_bg,
+            self.icons.use_nerd_font,
+        ));
+        bottom_spans.push(Span::raw(" "));
+        bottom_spans.extend(pill(
+            Some(self.icons.get(crate::ui::IconId::Alert)),
+            &alert_label,
+            if unread_count > 0 { self.theme.warning } else { self.theme.dim_fg },
+            self.theme.selection_bg,
+            self.theme.header_bg,
+            self.icons.use_nerd_font,
+        ));
+
         frame.render_widget(
-            Paragraph::new(bottom_line).style(Style::default().bg(self.theme.header_bg)),
+            Paragraph::new(Line::from(bottom_spans)).style(Style::default().bg(self.theme.header_bg)),
             bottom_area,
         );
     }
 
     fn render_right_pane(&mut self, frame: &mut Frame) {
-        // Render Tabs
-        let titles: Vec<Line> = AppTab::ALL
-            .iter()
-            .map(|tab| {
-                let key = tab.title_key();
-                let text = self.i18n.t(key);
-                let icon_str = match tab {
-                    AppTab::Changes => self.icons.branch(),
-                    AppTab::Prs => self.icons.pr_open(),
-                    AppTab::Actions => self.icons.check_success(),
-                    AppTab::Alerts => self.icons.get(crate::ui::IconId::Alert),
-                    AppTab::Worktrees => self.icons.worktree(),
-                };
-                Line::from(format!(" {} {} ", icon_str, text))
-            })
-            .collect();
+        // Render Segmented Control Pill Tabs
+        let mut tab_spans = Vec::new();
+        tab_spans.push(Span::raw(" "));
+        for tab in AppTab::ALL {
+            let key = tab.title_key();
+            let text = self.i18n.t(key);
+            let icon_str = match tab {
+                AppTab::Changes => self.icons.branch(),
+                AppTab::Prs => self.icons.pr_open(),
+                AppTab::Actions => self.icons.check_success(),
+                AppTab::Alerts => self.icons.get(crate::ui::IconId::Alert),
+                AppTab::Worktrees => self.icons.worktree(),
+            };
 
-        let tabs = Tabs::new(titles)
-            .select(self.active_tab.index())
-            .style(Style::default().fg(self.theme.dim_fg))
-            .highlight_style(
-                Style::default()
-                    .fg(self.theme.primary)
-                    .add_modifier(Modifier::BOLD),
-            )
-            .divider("│");
+            let is_active = *tab == self.active_tab;
+            let (fg, bg) = if is_active {
+                (self.theme.bg, self.theme.primary)
+            } else {
+                (self.theme.dim_fg, self.theme.selection_bg)
+            };
 
-        frame.render_widget(tabs, self.layout_areas.right_tabs);
+            tab_spans.extend(pill(
+                Some(icon_str),
+                &text,
+                fg,
+                bg,
+                self.theme.bg,
+                self.icons.use_nerd_font,
+            ));
+            tab_spans.push(Span::raw(" "));
+        }
 
-        // Render Active Tab Content
+        frame.render_widget(Paragraph::new(Line::from(tab_spans)), self.layout_areas.right_tabs);
+
+        // Render Active Tab Content with Elevated Border
         let is_focused = self.focused_pane == FocusedPane::MainContent;
         let border_color = if is_focused {
             self.theme.border_focused
@@ -2505,6 +2562,16 @@ impl App {
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(border_color))
+            .title(if is_focused {
+                Span::styled(
+                    " ● ACTIVE ",
+                    Style::default()
+                        .fg(self.theme.border_focused)
+                        .add_modifier(Modifier::BOLD),
+                )
+            } else {
+                Span::raw("")
+            })
             .style(Style::default().bg(self.theme.bg));
 
         let inner = block.inner(self.layout_areas.right_content);
@@ -2555,38 +2622,126 @@ impl App {
     }
 
     fn render_footer(&self, frame: &mut Frame) {
-        let status_msg = self.last_status.as_deref().unwrap_or("Editing Prowly");
+        let status_msg = self.last_status.as_deref().unwrap_or("Ready");
         let (ai_connected, ai_prov, ai_mod) = self.ai_connection_status();
         let ai_footer = if ai_connected {
-            format!("AI: {} ({})", ai_prov, ai_mod)
+            format!("{}: {}", ai_prov, ai_mod)
         } else if self.config.language == crate::i18n::Language::Ja {
-            "AI: 未接続 (APIキー未設定)".to_string()
+            "未接続".to_string()
         } else {
-            "AI: Disconnected".to_string()
+            "Disconnected".to_string()
         };
 
-        let left_part = format!(
-            " Context: {} | [Tab] Panes [Space] Stage [,] Settings [Ctrl+O] Open Repo [m] Menu [q] Quit",
-            status_msg
-        );
-        let right_part = format!(
-            "{} | Theme: {} | Lang: {} ",
-            ai_footer,
+        let mut left_spans = Vec::new();
+        left_spans.push(Span::raw(" "));
+        left_spans.extend(pill(
+            Some("󰄛"),
+            "NORMAL",
+            self.theme.bg,
+            self.theme.primary,
+            self.theme.status_bg,
+            self.icons.use_nerd_font,
+        ));
+        left_spans.push(Span::styled(
+            format!(" 󰋼 {}  ", status_msg),
+            Style::default().fg(self.theme.status_fg),
+        ));
+
+        // Keycap badges
+        left_spans.extend(key_badge(
+            "Tab",
+            "Panes",
+            self.theme.primary,
+            self.theme.selection_bg,
+            self.theme.dim_fg,
+            self.theme.status_bg,
+            self.icons.use_nerd_font,
+        ));
+        left_spans.extend(key_badge(
+            "Space",
+            "Stage",
+            self.theme.success,
+            self.theme.selection_bg,
+            self.theme.dim_fg,
+            self.theme.status_bg,
+            self.icons.use_nerd_font,
+        ));
+        left_spans.extend(key_badge(
+            "c",
+            "Commit",
+            self.theme.accent,
+            self.theme.selection_bg,
+            self.theme.dim_fg,
+            self.theme.status_bg,
+            self.icons.use_nerd_font,
+        ));
+        left_spans.extend(key_badge(
+            ",",
+            "Settings",
+            self.theme.secondary,
+            self.theme.selection_bg,
+            self.theme.dim_fg,
+            self.theme.status_bg,
+            self.icons.use_nerd_font,
+        ));
+        left_spans.extend(key_badge(
+            "Ctrl+O",
+            "Open",
+            self.theme.info,
+            self.theme.selection_bg,
+            self.theme.dim_fg,
+            self.theme.status_bg,
+            self.icons.use_nerd_font,
+        ));
+        left_spans.extend(key_badge(
+            "q",
+            "Quit",
+            self.theme.error,
+            self.theme.selection_bg,
+            self.theme.dim_fg,
+            self.theme.status_bg,
+            self.icons.use_nerd_font,
+        ));
+
+        let mut right_spans = Vec::new();
+        right_spans.extend(pill(
+            Some("󱚣"),
+            &ai_footer,
+            if ai_connected { self.theme.ai_sparkle } else { self.theme.warning },
+            self.theme.selection_bg,
+            self.theme.status_bg,
+            self.icons.use_nerd_font,
+        ));
+        right_spans.push(Span::raw(" "));
+        right_spans.extend(pill(
+            Some(""),
             self.theme.name,
-            self.config.language.code().to_uppercase()
-        );
+            self.theme.fg,
+            self.theme.selection_bg,
+            self.theme.status_bg,
+            self.icons.use_nerd_font,
+        ));
+        right_spans.push(Span::raw(" "));
+        right_spans.extend(pill(
+            Some(""),
+            self.config.language.code().to_uppercase().as_str(),
+            self.theme.info,
+            self.theme.selection_bg,
+            self.theme.status_bg,
+            self.icons.use_nerd_font,
+        ));
+        right_spans.push(Span::raw(" "));
 
-        let space_count = (self.layout_areas.footer.width as usize)
-            .saturating_sub(left_part.len() + right_part.len());
-        let footer_text = format!(
-            "{}{:width$}{}",
-            left_part,
-            "",
-            right_part,
-            width = space_count
-        );
+        let left_len: usize = left_spans.iter().map(|s| s.content.chars().count()).sum();
+        let right_len: usize = right_spans.iter().map(|s| s.content.chars().count()).sum();
+        let width = self.layout_areas.footer.width as usize;
+        let pad = width.saturating_sub(left_len + right_len);
 
-        let p = Paragraph::new(footer_text).style(
+        let mut all_spans = left_spans;
+        all_spans.push(Span::styled(" ".repeat(pad), Style::default().bg(self.theme.status_bg)));
+        all_spans.extend(right_spans);
+
+        let p = Paragraph::new(Line::from(all_spans)).style(
             Style::default()
                 .bg(self.theme.status_bg)
                 .fg(self.theme.status_fg),

@@ -444,6 +444,21 @@ impl SettingsModal {
         }
 
         let rect = self.modal_rect(viewport);
+
+        // 1. Drop Shadow Effect (Pseudo-3D elevation)
+        if viewport.width > rect.width + 1 && viewport.height > rect.height + 1 {
+            let shadow_rect = Rect {
+                x: (rect.x + 1).min(viewport.width.saturating_sub(1)),
+                y: (rect.y + 1).min(viewport.height.saturating_sub(1)),
+                width: rect.width.min(viewport.width.saturating_sub(rect.x + 1)),
+                height: rect.height.min(viewport.height.saturating_sub(rect.y + 1)),
+            };
+            let shadow_block = Block::default()
+                .style(Style::default().bg(ratatui::style::Color::Rgb(12, 14, 20)));
+            frame.render_widget(shadow_block, shadow_rect);
+        }
+
+        // 2. Clear background for modal window
         frame.render_widget(Clear, rect);
 
         let inner_height = rect.height.saturating_sub(2);
@@ -468,6 +483,36 @@ impl SettingsModal {
         let inner = block.inner(rect);
         frame.render_widget(block, rect);
 
+        let card_header = |icon_and_title: &str, is_top: bool| -> Line<'static> {
+            let prefix = if is_top { "╭─ " } else { "├─ " };
+            let title_len = icon_and_title.chars().count();
+            let total_w = inner.width as usize;
+            let bar_len = total_w.saturating_sub(prefix.chars().count() + title_len + 4);
+            let bar = "─".repeat(bar_len);
+            let suffix = if is_top { "╮" } else { "┤" };
+            Line::from(vec![
+                Span::styled(prefix, Style::default().fg(theme.primary)),
+                Span::styled(
+                    icon_and_title.to_string(),
+                    Style::default()
+                        .fg(theme.primary)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(format!(" {} ", bar), Style::default().fg(theme.border)),
+                Span::styled(suffix, Style::default().fg(theme.border)),
+            ])
+        };
+
+        let card_footer = || -> Line<'static> {
+            let total_w = inner.width as usize;
+            let bar = "─".repeat(total_w.saturating_sub(2));
+            Line::from(vec![
+                Span::styled("╰", Style::default().fg(theme.border)),
+                Span::styled(bar, Style::default().fg(theme.border)),
+                Span::styled("╯", Style::default().fg(theme.border)),
+            ])
+        };
+
         let mut lines = Vec::new();
 
         // 1. Header action buttons
@@ -487,7 +532,7 @@ impl SettingsModal {
             Span::styled(" [ ❌ Cancel ] ", cancel_style),
         ]));
 
-        lines.push(Line::from(""));
+        lines.push(card_header("🎨 APPEARANCE & DISPLAY / 外観・基本設定", true));
 
         // 2. Theme row
         let themes = [
@@ -562,11 +607,7 @@ impl SettingsModal {
             Span::styled(" [ OFF ] ", nf_off_style),
         ]));
 
-        let sep_len = (inner.width as usize).min(90);
-        lines.push(Line::from(Span::styled(
-            "─".repeat(sep_len),
-            Style::default().fg(theme.border),
-        )));
+        lines.push(card_header("󱚣 AI CO-PILOT INTEGRATION / AI連携", false));
 
         // 4. AI Provider row
         let providers = [
@@ -719,10 +760,7 @@ impl SettingsModal {
             Span::styled(" [ Default ] ", Style::default().fg(theme.dim_fg)),
         ]));
 
-        lines.push(Line::from(Span::styled(
-            "─".repeat(sep_len),
-            Style::default().fg(theme.border),
-        )));
+        lines.push(card_header("󰊢 GIT ENGINE & TOOLS / Git・外部ツール", false));
 
         // 9. Git Engine Preferences
         let soft_on = if self.git_soft_discard {
@@ -802,7 +840,7 @@ impl SettingsModal {
             Span::styled(" [ nano ] ", Style::default().fg(theme.secondary)),
         ]));
 
-        lines.push(Line::from(""));
+        lines.push(card_footer());
 
         // 11. Bottom Action Buttons
         lines.push(Line::from(vec![
@@ -817,6 +855,11 @@ impl SettingsModal {
             Span::styled(
                 " [ ❌ Cancel (Esc) ] ",
                 Style::default().bg(theme.status_bg).fg(theme.dim_fg),
+            ),
+            Span::raw("   "),
+            Span::styled(
+                " Hint: Tab to cycle • j/k to scroll ",
+                Style::default().fg(theme.dim_fg),
             ),
         ]));
 

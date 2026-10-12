@@ -90,6 +90,19 @@ impl AiAssistantModal {
             height: popup_height,
         };
 
+        // Drop shadow behind AI Assistant modal
+        if area.width > popup_rect.width + 1 && area.height > popup_rect.height + 1 {
+            let shadow_rect = Rect {
+                x: (popup_rect.x + 1).min(area.width.saturating_sub(1)),
+                y: (popup_rect.y + 1).min(area.height.saturating_sub(1)),
+                width: popup_rect.width.min(area.width.saturating_sub(popup_rect.x + 1)),
+                height: popup_rect.height.min(area.height.saturating_sub(popup_rect.y + 1)),
+            };
+            let shadow_block = Block::default()
+                .style(Style::default().bg(ratatui::style::Color::Rgb(12, 14, 20)));
+            frame.render_widget(shadow_block, shadow_rect);
+        }
+
         // Clear backdrop
         frame.render_widget(Clear, popup_rect);
 
