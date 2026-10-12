@@ -77,7 +77,7 @@
   - **Phase 3 (ディレクトリマップ、ワークツリー & AI診断)**:
     1. ディレクトリマップツリー集計 & 件数バッジ (`src/ui/views/dir_map.rs`)。
     2. Git ワークツリー管理 & インタラクティブ一覧ビュー (`src/git/worktree.rs`, `src/ui/views/worktrees.rs`)。
-    3. 右クリックコンテキストメニュー (`src/ui/modals/context_menu.rs`)。
+    3. 右クリックコンテキストメニュー & 端末互換設計（左クリック `[ 󰍜 Menu ▾ ]` ボタン / キー `m` 完備により、GNOME Terminal 等の右クリック横取り環境でも 100% 動作保証）(`src/ui/modals/context_menu.rs`)。
     4. リポジトリ健康診断 AI スキャン (`Clean`, `NeedsCommit`, `Conflicted`) (`src/ai/diagnostic.rs`)。
   - **Phase 4 (GitHub 深層統合)**:
     1. TTL キャッシュ & レートリミット保護付き GitHub クライアント (`src/github/client.rs`)。
