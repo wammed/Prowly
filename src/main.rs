@@ -93,6 +93,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Run TUI event loop
     while !app.should_quit {
+        if app.needs_clear {
+            terminal.clear()?;
+            app.needs_clear = false;
+        }
         terminal.draw(|f| app.render(f))?;
 
         if let Some(event) = events.next().await {

@@ -9,7 +9,7 @@ use crossterm::{
         LeaveAlternateScreen,
     },
 };
-use std::io::{self, stdout};
+use std::io::{self, stdout, Write};
 use std::path::Path;
 use std::process::Command;
 
@@ -36,27 +36,47 @@ pub fn open_external_editor_with_preference(
             }
         });
 
-    run_interactive_command(&editor, &[file_path.to_string_lossy().as_ref()])
+    let parts: Vec<&str> = editor.split_whitespace().collect();
+    if parts.is_empty() {
+        return Err(io::Error::other("Editor command is empty"));
+    }
+    let cmd = parts[0];
+    let mut args: Vec<&str> = parts[1..].to_vec();
+    let file_str = file_path.to_string_lossy();
+    args.push(file_str.as_ref());
+
+    run_interactive_command(cmd, &args)
 }
 
 /// Reveal a file or directory in the system file manager (e.g. xdg-open, open, explorer).
 pub fn reveal_in_file_manager(path: &Path) -> io::Result<()> {
-    let target = if path.is_file() {
-        path.parent().unwrap_or(path)
+    let target = if path.is_dir() {
+        path.to_path_buf()
+    } else if let Some(parent) = path.parent() {
+        if parent.as_os_str().is_empty() {
+            std::path::PathBuf::from(".")
+        } else {
+            parent.to_path_buf()
+        }
     } else {
-        path
+        std::path::PathBuf::from(".")
     };
 
+    let target_str = target.to_str().unwrap_or(".");
+
     let (cmd, args): (&str, Vec<&str>) = if cfg!(windows) {
-        ("explorer", vec![target.to_str().unwrap_or(".")])
+        ("explorer", vec![target_str])
     } else if cfg!(target_os = "macos") {
-        ("open", vec![target.to_str().unwrap_or(".")])
+        ("open", vec![target_str])
     } else {
-        ("xdg-open", vec![target.to_str().unwrap_or(".")])
+        ("xdg-open", vec![target_str])
     };
 
     Command::new(cmd)
         .args(args)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
         .spawn()
         .map(|_| ())
         .map_err(|e| io::Error::other(format!("Failed to open file manager with '{}': {}", cmd, e)))
@@ -67,6 +87,7 @@ pub fn run_interactive_command(command: &str, args: &[&str]) -> io::Result<()> {
     // 1. Leave TUI & restore cooked terminal
     disable_raw_mode()?;
     execute!(stdout(), LeaveAlternateScreen, DisableMouseCapture, Show)?;
+    let _ = stdout().flush();
 
     // 2. Run child process with inherited standard streams
     let status = Command::new(command)
@@ -85,6 +106,7 @@ pub fn run_interactive_command(command: &str, args: &[&str]) -> io::Result<()> {
         Hide,
         Clear(ClearType::All)
     )?;
+    let _ = stdout().flush();
 
     match status {
         Ok(s) => {

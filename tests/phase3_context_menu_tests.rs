@@ -32,3 +32,19 @@ fn test_context_menu_navigation() {
     menu.previous();
     assert_eq!(menu.selected_action(), ContextMenuAction::SafeDiscard);
 }
+
+#[test]
+fn test_reveal_in_file_manager_path_resolution() {
+    use prowly::services::reveal_in_file_manager;
+    use std::path::Path;
+
+    // Relative and absolute files should resolve gracefully without panic or erroring out
+    let test_path = Path::new("Cargo.toml");
+    let res = reveal_in_file_manager(test_path);
+    assert!(res.is_ok());
+
+    let non_existent = Path::new("non_existent_folder/file.rs");
+    let res = reveal_in_file_manager(non_existent);
+    assert!(res.is_ok());
+}
+
