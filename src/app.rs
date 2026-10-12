@@ -19,8 +19,8 @@ use crate::services::{
 use crate::ui::layout::LayoutAreas;
 use crate::ui::modals::{
     AiAssistantModal, BranchSwitcherModal, CommandPaletteModal, ConflictResolverModal, ContextMenu,
-    ContextMenuAction, OpenRepoAction, OpenRepoModal, RebaseModal, RemoteDiffPreviewModal,
-    SettingsAction, SettingsModal,
+    ContextMenuAction, OpenRepoAction, OpenRepoModal, PaletteEnterResult, RebaseModal,
+    RemoteDiffPreviewModal, SettingsAction, SettingsModal,
 };
 use crate::ui::theme::{Theme, ThemeId};
 use crate::ui::views::{
@@ -743,49 +743,67 @@ impl App {
         // 6. Command Palette captures input
         if self.command_palette.is_open {
             match key.code {
-                KeyCode::Esc => self.command_palette.close(),
+                KeyCode::Esc => {
+                    if !self.command_palette.handle_esc() {
+                        self.command_palette.close();
+                    }
+                }
+                KeyCode::Tab => {
+                    self.command_palette.handle_tab();
+                }
                 KeyCode::Up => self.command_palette.previous(),
                 KeyCode::Down => self.command_palette.next(),
                 KeyCode::PageUp => self.command_palette.page_up(10),
                 KeyCode::PageDown => self.command_palette.page_down(10),
                 KeyCode::Backspace => self.command_palette.pop_char(),
                 KeyCode::Enter => {
-                    if let Some(cmd) = self.command_palette.ai_suggestion.take() {
-                        let _ = std::process::Command::new("sh")
-                            .args(["-c", &cmd.command])
-                            .output();
-                        self.last_status = Some(format!("Executed: {}", cmd.command));
-                        self.refresh_git_status();
-                        self.command_palette.close();
-                    } else if let Some(action) = self.command_palette.selected_action() {
-                        let id = action.id;
-                        self.command_palette.close();
-                        self.execute_palette_action(id);
-                    } else {
-                        let req = self.command_palette.query.clone();
-                        let branch = self.repo_status.branch.clone();
-                        let client = crate::ai::create_ai_client(&self.config.ai);
-                        let lang = self.config.language;
-                        if let Some(sender) = self.event_sender.clone() {
-                            tokio::spawn(async move {
-                                let res = translate_natural_language_to_git(
+                    match self.command_palette.handle_enter() {
+                        PaletteEnterResult::LayerChanged => {}
+                        PaletteEnterResult::ExecuteAction(action_id) => {
+                            self.command_palette.close();
+                            self.execute_palette_action(action_id);
+                        }
+                        PaletteEnterResult::ExecuteGitCommand { subcommand, args } => {
+                            self.command_palette.close();
+                            self.execute_git_cli(&subcommand, &args);
+                        }
+                        PaletteEnterResult::ExecuteAiCommand(cmd) => {
+                            self.command_palette.close();
+                            let _ = std::process::Command::new("sh")
+                                .args(["-c", &cmd])
+                                .output();
+                            self.last_status = Some(format!("Executed: {}", cmd));
+                            self.refresh_git_status();
+                            self.needs_clear = true;
+                        }
+                        PaletteEnterResult::DangerWarning(warn) => {
+                            self.last_status = Some(format!("⚠️ Safety Guard: {}", warn));
+                        }
+                        PaletteEnterResult::RequestAi(req) => {
+                            let branch = self.repo_status.branch.clone();
+                            let client = crate::ai::create_ai_client(&self.config.ai);
+                            let lang = self.config.language;
+                            if let Some(sender) = self.event_sender.clone() {
+                                tokio::spawn(async move {
+                                    let res = translate_natural_language_to_git(
+                                        &req,
+                                        &branch,
+                                        client.as_ref(),
+                                        lang,
+                                    )
+                                    .await
+                                    .map_err(|e| e.to_string());
+                                    let _ = sender.send(AppEvent::AiCommandSuggested(res));
+                                });
+                            } else if tokio::runtime::Handle::try_current().is_err() {
+                                if let Ok(suggested) = block_on_safe(translate_natural_language_to_git(
                                     &req,
                                     &branch,
                                     client.as_ref(),
                                     lang,
-                                )
-                                .await
-                                .map_err(|e| e.to_string());
-                                let _ = sender.send(AppEvent::AiCommandSuggested(res));
-                            });
-                        } else if tokio::runtime::Handle::try_current().is_err() {
-                            if let Ok(suggested) = block_on_safe(translate_natural_language_to_git(
-                                &req,
-                                &branch,
-                                client.as_ref(),
-                                lang,
-                            )) {
-                                self.command_palette.ai_suggestion = Some(suggested);
+                                )) {
+                                    self.command_palette.ai_suggestion = Some(suggested);
+                                }
                             }
                         }
                     }
@@ -1765,6 +1783,56 @@ impl App {
             }
             _ => {}
         }
+    }
+
+    /// Execute an arbitrary Git CLI command in the repository workspace.
+    pub fn execute_git_cli(&mut self, subcommand: &str, args: &str) {
+        let workdir = if let Some(git) = &self.git_service {
+            git.workdir().to_path_buf()
+        } else {
+            std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+        };
+
+        let trimmed_args = args.trim();
+        let full_cmd_str = if trimmed_args.is_empty() {
+            format!("git {}", subcommand)
+        } else {
+            format!("git {} {}", subcommand, trimmed_args)
+        };
+
+        let output = std::process::Command::new("sh")
+            .current_dir(&workdir)
+            .args(["-c", &full_cmd_str])
+            .output();
+
+        match output {
+            Ok(output) => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                if output.status.success() {
+                    let summary = if !stdout.trim().is_empty() {
+                        stdout.lines().next().unwrap_or("").to_string()
+                    } else if !stderr.trim().is_empty() {
+                        stderr.lines().next().unwrap_or("").to_string()
+                    } else {
+                        "Done".to_string()
+                    };
+                    self.last_status = Some(format!("{}: {}", full_cmd_str, summary));
+                } else {
+                    let err_msg = if !stderr.trim().is_empty() {
+                        stderr.lines().next().unwrap_or("Failed").to_string()
+                    } else {
+                        format!("Failed with exit code {:?}", output.status.code())
+                    };
+                    self.last_status = Some(format!("Error ({}): {}", full_cmd_str, err_msg));
+                }
+            }
+            Err(e) => {
+                self.last_status = Some(format!("Error executing {}: {}", full_cmd_str, e));
+            }
+        }
+        self.refresh_git_status();
+        self.needs_clear = true;
     }
 
     /// Toggle stage for currently selected file.
