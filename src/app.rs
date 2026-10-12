@@ -1386,6 +1386,14 @@ impl App {
             return;
         }
 
+        // 8.5. Click on Command Palette header button
+        if self.layout_areas.hits_palette(x, y)
+            && mouse.kind == MouseEventKind::Down(MouseButton::Left)
+        {
+            self.command_palette.open();
+            return;
+        }
+
         // 9. Click on Menu header button
         if self.layout_areas.hits_menu(x, y)
             && mouse.kind == MouseEventKind::Down(MouseButton::Left)
@@ -2528,6 +2536,16 @@ impl App {
         );
         let settings_w = crate::ui::capsule::spans_width(&settings_spans) as u16;
 
+        let palette_spans = pill(
+            Some(self.icons.ai_sparkle()),
+            "Palette",
+            self.theme.accent,
+            self.theme.selection_bg,
+            self.theme.header_bg,
+            self.icons.use_nerd_font,
+        );
+        let palette_w = crate::ui::capsule::spans_width(&palette_spans) as u16;
+
         let menu_spans = pill(
             Some("󰍜"),
             "Menu",
@@ -2550,17 +2568,20 @@ impl App {
 
         let help_x = top_area.x + top_area.width.saturating_sub(help_w);
         let settings_x = help_x.saturating_sub(settings_w);
-        let menu_x = settings_x.saturating_sub(menu_w);
+        let palette_x = settings_x.saturating_sub(palette_w);
+        let menu_x = palette_x.saturating_sub(menu_w);
         let ai_x = menu_x.saturating_sub(ai_w);
 
         self.layout_areas.help_button = Rect { x: help_x, y: top_area.y, width: help_w, height: 1 };
         self.layout_areas.settings_button = Rect { x: settings_x, y: top_area.y, width: settings_w, height: 1 };
+        self.layout_areas.palette_button = Rect { x: palette_x, y: top_area.y, width: palette_w, height: 1 };
         self.layout_areas.menu_button = Rect { x: menu_x, y: top_area.y, width: menu_w, height: 1 };
         self.layout_areas.ai_status_button = Rect { x: ai_x, y: top_area.y, width: ai_w, height: 1 };
         self.layout_areas.ask_ai_button = self.layout_areas.ai_status_button;
 
         frame.render_widget(Paragraph::new(Line::from(ai_spans)), self.layout_areas.ai_status_button);
         frame.render_widget(Paragraph::new(Line::from(menu_spans)), self.layout_areas.menu_button);
+        frame.render_widget(Paragraph::new(Line::from(palette_spans)), self.layout_areas.palette_button);
         frame.render_widget(Paragraph::new(Line::from(settings_spans)), self.layout_areas.settings_button);
         frame.render_widget(Paragraph::new(Line::from(help_spans)), self.layout_areas.help_button);
 
@@ -2791,6 +2812,15 @@ impl App {
             "c",
             "Commit",
             self.theme.accent,
+            self.theme.selection_bg,
+            self.theme.dim_fg,
+            self.theme.status_bg,
+            self.icons.use_nerd_font,
+        ));
+        left_spans.extend(key_badge(
+            "F1",
+            "Palette",
+            self.theme.primary,
             self.theme.selection_bg,
             self.theme.dim_fg,
             self.theme.status_bg,
