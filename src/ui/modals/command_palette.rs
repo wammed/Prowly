@@ -57,6 +57,56 @@ impl PaletteAction {
             shortcut: None,
         },
         PaletteAction {
+            id: "switch_branch",
+            title: "Git: Switch Branch",
+            shortcut: Some("b"),
+        },
+        PaletteAction {
+            id: "remote_diff",
+            title: "Git: Preview Remote Diff (Unpushed / Unpulled)",
+            shortcut: None,
+        },
+        PaletteAction {
+            id: "rebase",
+            title: "Git: Interactive Rebase & Squash",
+            shortcut: Some("r"),
+        },
+        PaletteAction {
+            id: "resolve_conflicts",
+            title: "Git: Resolve Merge Conflicts",
+            shortcut: None,
+        },
+        PaletteAction {
+            id: "discard_changes",
+            title: "Git: Discard Selected Changes",
+            shortcut: Some("d"),
+        },
+        PaletteAction {
+            id: "stage_selected",
+            title: "Git: Toggle Stage Selected File",
+            shortcut: Some("Space"),
+        },
+        PaletteAction {
+            id: "stash_selected",
+            title: "Git: Stash Selected File Only",
+            shortcut: None,
+        },
+        PaletteAction {
+            id: "open_editor",
+            title: "View: Open Selected in External Editor",
+            shortcut: Some("e"),
+        },
+        PaletteAction {
+            id: "reveal_file_manager",
+            title: "View: Reveal Selected in File Manager",
+            shortcut: None,
+        },
+        PaletteAction {
+            id: "refresh",
+            title: "View: Refresh Repository & GitHub Data",
+            shortcut: Some("R"),
+        },
+        PaletteAction {
             id: "tab_changes",
             title: "View: Switch to Changes",
             shortcut: Some("1"),
@@ -82,6 +132,11 @@ impl PaletteAction {
             shortcut: Some("5"),
         },
         PaletteAction {
+            id: "toggle_all_files",
+            title: "View: Toggle All Files / Changed Only",
+            shortcut: Some("A"),
+        },
+        PaletteAction {
             id: "cycle_theme",
             title: "Preferences: Cycle Color Theme",
             shortcut: Some("t"),
@@ -90,21 +145,6 @@ impl PaletteAction {
             id: "toggle_lang",
             title: "Preferences: Toggle Language (EN/JA)",
             shortcut: Some("l"),
-        },
-        PaletteAction {
-            id: "ai_diag",
-            title: "AI: Diagnose Repository Health",
-            shortcut: Some("Ctrl+D"),
-        },
-        PaletteAction {
-            id: "ai_review",
-            title: "AI: Pre-commit Code Review",
-            shortcut: Some("Ctrl+R"),
-        },
-        PaletteAction {
-            id: "resolve_conflicts",
-            title: "Git: Resolve Merge Conflicts",
-            shortcut: None,
         },
         PaletteAction {
             id: "settings",
@@ -117,9 +157,29 @@ impl PaletteAction {
             shortcut: Some("Ctrl+O"),
         },
         PaletteAction {
-            id: "toggle_all_files",
-            title: "View: Toggle All Files / Changed Only",
-            shortcut: Some("a"),
+            id: "ai_diag",
+            title: "AI: Diagnose Repository Health",
+            shortcut: Some("Ctrl+D"),
+        },
+        PaletteAction {
+            id: "ai_review",
+            title: "AI: Pre-commit Code Review",
+            shortcut: Some("Ctrl+R"),
+        },
+        PaletteAction {
+            id: "ai_ci_failure",
+            title: "AI: Analyze CI / Actions Failure",
+            shortcut: Some("Ctrl+F"),
+        },
+        PaletteAction {
+            id: "ai_assistant",
+            title: "AI: Ask AI Assistant Chat",
+            shortcut: Some("?"),
+        },
+        PaletteAction {
+            id: "ai_pr_draft",
+            title: "AI: Generate Pull Request Draft",
+            shortcut: None,
         },
     ];
 }
@@ -130,6 +190,7 @@ pub struct CommandPaletteModal {
     pub is_open: bool,
     pub query: String,
     pub selected_index: usize,
+    pub scroll_offset: usize,
     pub ai_suggestion: Option<SuggestedGitCommand>,
 }
 
@@ -142,6 +203,7 @@ impl CommandPaletteModal {
         self.is_open = true;
         self.query.clear();
         self.selected_index = 0;
+        self.scroll_offset = 0;
         self.ai_suggestion = None;
     }
 
@@ -176,6 +238,17 @@ impl CommandPaletteModal {
         }
     }
 
+    pub fn page_down(&mut self, step: usize) {
+        let total = self.filtered_actions().len();
+        if total > 0 {
+            self.selected_index = (self.selected_index + step).min(total - 1);
+        }
+    }
+
+    pub fn page_up(&mut self, step: usize) {
+        self.selected_index = self.selected_index.saturating_sub(step);
+    }
+
     pub fn selected_action(&self) -> Option<&'static PaletteAction> {
         let list = self.filtered_actions();
         list.get(self.selected_index).copied()
@@ -184,16 +257,18 @@ impl CommandPaletteModal {
     pub fn push_char(&mut self, c: char) {
         self.query.push(c);
         self.selected_index = 0;
+        self.scroll_offset = 0;
         self.ai_suggestion = None;
     }
 
     pub fn pop_char(&mut self) {
         self.query.pop();
         self.selected_index = 0;
+        self.scroll_offset = 0;
         self.ai_suggestion = None;
     }
 
-    pub fn render(&self, frame: &mut Frame, theme: &Theme, icons: &Icons, viewport: Rect) {
+    pub fn render(&mut self, frame: &mut Frame, theme: &Theme, icons: &Icons, viewport: Rect) {
         if !self.is_open {
             return;
         }
@@ -251,6 +326,7 @@ impl CommandPaletteModal {
         frame.render_widget(Paragraph::new(prompt_line), input_inner);
 
         // 2. Results List or AI Suggestion
+        let filtered = self.filtered_actions();
         if let Some(ref ai_cmd) = self.ai_suggestion {
             let (risk_color, risk_text) = match ai_cmd.risk_level {
                 crate::ai::CommandRiskLevel::Safe => (theme.diff_add_fg, "SAFE"),
@@ -291,9 +367,7 @@ impl CommandPaletteModal {
                 ]),
             ];
             frame.render_widget(Paragraph::new(ai_card), chunks[1]);
-        } else {
-            let filtered = self.filtered_actions();
-            if filtered.is_empty() {
+        } else if filtered.is_empty() {
                 let empty_line = vec![
                     Line::from(""),
                     Line::from(vec![
@@ -309,9 +383,21 @@ impl CommandPaletteModal {
                 ];
                 frame.render_widget(Paragraph::new(empty_line), chunks[1]);
             } else {
+                let visible_height = chunks[1].height as usize;
+                let mut scroll_top = self.scroll_offset;
+                if self.selected_index < scroll_top {
+                    scroll_top = self.selected_index;
+                } else if visible_height > 0 && self.selected_index >= scroll_top + visible_height {
+                    scroll_top = self.selected_index + 1 - visible_height;
+                }
+                let max_scroll = filtered.len().saturating_sub(visible_height);
+                scroll_top = scroll_top.min(max_scroll);
+                self.scroll_offset = scroll_top;
+
                 let mut lines = Vec::new();
-                for (i, action) in filtered.iter().enumerate().take(chunks[1].height as usize) {
-                    let is_selected = i == self.selected_index;
+                for (offset, action) in filtered.iter().skip(scroll_top).take(visible_height).enumerate() {
+                    let actual_idx = scroll_top + offset;
+                    let is_selected = actual_idx == self.selected_index;
                     let line_bg = if is_selected {
                         theme.selection_bg
                     } else {
@@ -345,12 +431,19 @@ impl CommandPaletteModal {
                 }
                 frame.render_widget(Paragraph::new(lines), chunks[1]);
             }
-        }
 
         // 3. Footer Help
+        let count_str = if filtered.is_empty() {
+            String::new()
+        } else {
+            format!("({}/{}) ", self.selected_index + 1, filtered.len())
+        };
         let help = Line::from(vec![
             Span::styled("[ Enter: Execute ]  ", Style::default().fg(theme.primary)),
-            Span::styled("[ ↑/↓: Navigate ]  ", Style::default().fg(theme.dim_fg)),
+            Span::styled(
+                format!("[ ↑/↓: Navigate {}]  ", count_str),
+                Style::default().fg(theme.dim_fg),
+            ),
             Span::styled("[ Esc: Dismiss ]", Style::default().fg(theme.dim_fg)),
         ]);
         frame.render_widget(Paragraph::new(help), chunks[2]);

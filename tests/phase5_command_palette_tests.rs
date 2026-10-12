@@ -55,3 +55,31 @@ fn test_palette_action_shortcuts() {
         .unwrap();
     assert_eq!(cycle_theme.shortcut, Some("t"));
 }
+
+#[test]
+fn test_rebase_command_search_and_scrolling() {
+    let mut palette = CommandPaletteModal::new();
+    palette.open();
+
+    // 1. Total items should exceed initial 13
+    assert!(PaletteAction::ALL.len() > 13);
+
+    // 2. Search for "rebase"
+    for c in "rebase".chars() {
+        palette.push_char(c);
+    }
+    let filtered = palette.filtered_actions();
+    assert_eq!(filtered.len(), 1);
+    assert_eq!(filtered[0].id, "rebase");
+    assert_eq!(filtered[0].title, "Git: Interactive Rebase & Squash");
+    assert_eq!(filtered[0].shortcut, Some("r"));
+
+    // 3. Clear and test scrolling past 13 items
+    palette.open();
+    for _ in 0..15 {
+        palette.next();
+    }
+    assert_eq!(palette.selected_index, 15);
+    assert!(palette.selected_action().is_some());
+}
+

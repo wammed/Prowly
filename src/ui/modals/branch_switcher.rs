@@ -151,8 +151,15 @@ impl BranchSwitcherModal {
                 Style::default().fg(theme.dim_fg),
             )));
         } else {
-            for (idx, branch) in filtered.iter().enumerate().take(inner.height as usize - 3) {
-                let is_sel = idx == self.selected_index;
+            let visible_height = (inner.height as usize).saturating_sub(3);
+            let scroll_top = if visible_height > 0 && self.selected_index >= visible_height {
+                self.selected_index + 1 - visible_height
+            } else {
+                0
+            };
+            for (offset, branch) in filtered.iter().skip(scroll_top).take(visible_height).enumerate() {
+                let actual_idx = scroll_top + offset;
+                let is_sel = actual_idx == self.selected_index;
                 let is_current = branch == &self.current_branch;
                 let prefix = if is_sel { "▶ " } else { "  " };
 
