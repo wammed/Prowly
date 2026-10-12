@@ -116,6 +116,22 @@ impl FileDiff {
             stats_deleted: 0,
         }
     }
+
+    /// Format hunks and lines into standard unified diff text.
+    pub fn to_diff_string(&self) -> String {
+        let mut out = String::new();
+        out.push_str(&format!("--- a/{}\n+++ b/{}\n", self.file_path, self.file_path));
+        for hunk in &self.hunks {
+            out.push_str(&hunk.header);
+            out.push('\n');
+            for line in &hunk.lines {
+                out.push(line.origin);
+                out.push_str(&line.content);
+                out.push('\n');
+            }
+        }
+        out
+    }
 }
 
 /// Overall repository status summary.

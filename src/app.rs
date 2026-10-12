@@ -471,6 +471,7 @@ impl App {
                     self.last_status = Some("AI generated commit message!".to_string());
                 }
                 Err(e) => {
+                    self.changes_view.commit_summary.clear();
                     self.last_status = Some(format!("AI error: {}", e));
                 }
             },
@@ -2183,10 +2184,22 @@ impl App {
         }
     }
 
+    /// Retrieve clean unified diff text for staged changes, falling back to current diff.
+    pub fn get_staged_or_current_diff_text(&self) -> String {
+        if let Some(git) = &self.git_service {
+            if let Ok(staged_diff) = git.get_diff(None, true) {
+                if !staged_diff.hunks.is_empty() {
+                    return staged_diff.to_diff_string();
+                }
+            }
+        }
+        self.current_diff.to_diff_string()
+    }
+
     /// Trigger AI to generate a Conventional Commit message from staged diff.
     pub fn trigger_ai_generate_commit(&mut self) {
         let client = crate::ai::create_ai_client(&self.config.ai);
-        let diff_text = format!("{:?}", self.current_diff);
+        let diff_text = self.get_staged_or_current_diff_text();
         let lang = self.config.language;
 
         if let Some(sender) = self.event_sender.clone() {
@@ -2206,6 +2219,9 @@ impl App {
                     self.changes_view.commit_description = desc;
                 }
                 self.last_status = Some("AI generated commit message!".to_string());
+            } else if let Err(e) = commit_res {
+                self.changes_view.commit_summary.clear();
+                self.last_status = Some(format!("AI error: {}", e));
             }
         }
     }
@@ -2213,7 +2229,7 @@ impl App {
     /// Trigger AI pre-commit code review.
     pub fn trigger_ai_review(&mut self) {
         let client = crate::ai::create_ai_client(&self.config.ai);
-        let diff_text = format!("{:?}", self.current_diff);
+        let diff_text = self.get_staged_or_current_diff_text();
         let lang = self.config.language;
 
         let ctx = self.capture_ai_context();

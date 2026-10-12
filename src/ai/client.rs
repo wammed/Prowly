@@ -150,6 +150,8 @@ pub struct AiConfig {
     pub api_base: Option<String>,
     pub temperature: Option<f32>,
     pub max_tokens: Option<u32>,
+    #[serde(default)]
+    pub num_ctx: Option<u32>,
 }
 
 impl Default for AiConfig {
@@ -161,6 +163,7 @@ impl Default for AiConfig {
             api_base: None,
             temperature: Some(0.3),
             max_tokens: Some(2048),
+            num_ctx: Some(8192),
         }
     }
 }
@@ -533,12 +536,15 @@ impl AiClient for OllamaClient {
             })
             .collect();
 
+        let num_ctx = self.config.num_ctx.unwrap_or(8192);
+
         let body = serde_json::json!({
             "model": self.config.model,
             "messages": messages,
             "stream": false,
             "options": {
-                "temperature": prompt.temperature.or(self.config.temperature).unwrap_or(0.3)
+                "temperature": prompt.temperature.or(self.config.temperature).unwrap_or(0.3),
+                "num_ctx": num_ctx
             }
         });
 

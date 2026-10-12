@@ -16,7 +16,9 @@ pub use client::{
     AiRole, MockAiClient, OllamaClient,
 };
 pub use command::{translate_natural_language_to_git, CommandRiskLevel, SuggestedGitCommand};
-pub use commit::{generate_commit_message, review_changes, GeneratedCommit};
+pub use commit::{
+    generate_commit_message, review_changes, truncate_diff, GeneratedCommit, DEFAULT_MAX_DIFF_CHARS,
+};
 pub use context::{AiContext, CiContext, ConflictContext, ContextProvider, PrContext};
 pub use diagnostic::{diagnose_repository, RepoDiagnosis, RepoHealth};
 pub use merge::smart_merge_conflict;

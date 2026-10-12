@@ -10,6 +10,55 @@ pub struct GeneratedCommit {
     pub description: Option<String>,
 }
 
+/// Default maximum characters of diff passed to AI context to prevent overflow (approx 3,000 tokens).
+pub const DEFAULT_MAX_DIFF_CHARS: usize = 12_000;
+
+/// Safely truncate and filter a git diff to fit within model context windows.
+/// Filters out verbose lockfile diffs while preserving commit-critical change headers and structure.
+pub fn truncate_diff(diff: &str, max_chars: usize) -> String {
+    let mut out = String::with_capacity(max_chars.min(diff.len()));
+    let mut in_lockfile = false;
+    let mut omitted_lines = 0usize;
+    let mut total_lines = 0usize;
+
+    for line in diff.lines() {
+        total_lines += 1;
+
+        // Detect file headers to check for lockfiles
+        if line.starts_with("diff --git ") || line.starts_with("--- a/") || line.starts_with("+++ b/") {
+            let lower = line.to_lowercase();
+            in_lockfile = lower.contains("lock") || lower.contains(".lock") || lower.ends_with("-lock.json");
+            if in_lockfile && line.starts_with("diff --git ") {
+                out.push_str(line);
+                out.push_str("\n[Lockfile changes omitted to preserve context]\n");
+                continue;
+            }
+        }
+
+        if in_lockfile && !line.starts_with("diff --git ") {
+            continue;
+        }
+
+        // Check if adding this line would exceed max_chars budget
+        if out.len() + line.len() + 1 > max_chars {
+            omitted_lines += 1;
+            continue;
+        }
+
+        out.push_str(line);
+        out.push('\n');
+    }
+
+    if omitted_lines > 0 {
+        out.push_str(&format!(
+            "\n[... Diff truncated: context limit reached ({} lines omitted out of {}) ...]\n",
+            omitted_lines, total_lines
+        ));
+    }
+
+    out
+}
+
 /// Ask AI to generate a Conventional Commit message from staged diff.
 pub async fn generate_commit_message(
     diff: &str,
@@ -31,7 +80,8 @@ Output ONLY the raw commit message text without markdown code blocks."
         }
     };
 
-    let user = format!("Git Diff:\n```diff\n{}\n```", diff);
+    let truncated_diff = truncate_diff(diff, DEFAULT_MAX_DIFF_CHARS);
+    let user = format!("Git Diff:\n```diff\n{}\n```", truncated_diff);
     let prompt = AiPrompt::system_and_user(system, user);
     let res = client.complete(&prompt).await?;
 
@@ -83,7 +133,8 @@ If everything looks good, provide a brief LGTM."
         }
     };
 
-    let user = format!("Git Diff to review:\n```diff\n{}\n```", diff);
+    let truncated_diff = truncate_diff(diff, DEFAULT_MAX_DIFF_CHARS);
+    let user = format!("Git Diff to review:\n```diff\n{}\n```", truncated_diff);
     let prompt = AiPrompt::system_and_user(system, user);
     let res = client.complete(&prompt).await?;
     Ok(res.content)
