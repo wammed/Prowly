@@ -38,6 +38,12 @@ Whether you prefer keyboard shortcuts or intuitive mouse interactions (clicking,
   - AI-assisted smart merge conflict resolution.
   - Natural language to Git command translation with safety risk ratings (`Safe` / `Caution` / `Dangerous`).
 - 📂 **Directory Map & Stash Filtering**: Visual tree map of repository modifications, allowing instant bulk staging per folder.
+- 📜 **Git Graph, Commit History & Time Machine (`2` / `h`)**:
+  - Interactive visual Git Graph map (`git log --graph` based) with automatic junction-line skipping during navigation.
+  - Split view showing real-time commit metadata (author, relative time, SHA) and instant diff preview (~20 lines).
+  - Full commit manipulation suite: Checkout (`c`), Create Branch (`b`), Cherry-Pick (`p`), and Revert (`r`).
+  - **Time Machine Reset (`t`)**: Select any past commit to hard-reset the repository (invalidating subsequent commits) with zero risk via automatic backup branches (`backup/timemachine-...`).
+  - One-key clipboard copy of commit SHA (`y`).
 - 🌲 **Native Git Worktree Management**: Create, switch, and prune isolated worktree directories with independent branches.
 - 🐙 **First-Class GitHub Integration**:
   - Live Pull Requests list with checkout and diff review.
@@ -127,10 +133,11 @@ prowly /path/to/repo
 | Shortcut | Action |
 |:---|:---|
 | `1` | Switch to **Changes** View |
-| `2` | Switch to **Pull Requests** View |
-| `3` | Switch to **Actions & CI** View |
-| `4` | Switch to **Alerts** View |
-| `5` | Switch to **Worktrees** View |
+| `2` | Switch to **Commit History & Git Graph** View (`h`) |
+| `3` | Switch to **Pull Requests** View |
+| `4` | Switch to **Actions & CI** View |
+| `5` | Switch to **Alerts** View |
+| `6` | Switch to **Worktrees** View |
 | `Tab` | Cycle focus between panes |
 | `:` or `F1` | Open **Command Palette** (Fuzzy search & NL-to-Git) |
 | `Ctrl+A` | Open **Omnipresent AI Assistant** |
@@ -154,6 +161,19 @@ prowly /path/to/repo
 | `Ctrl+R` | Trigger pre-commit AI code review |
 | `j` / `k` or `↓` / `↑` | Navigate file list / diff scroll |
 | `PageDown` / `PageUp` | Fast scroll diff |
+
+### Commit History & Time Machine View (`2` / `h`)
+| Shortcut | Action |
+|:---|:---|
+| `j` / `k` or `↓` / `↑` | Navigate commits (automatically skips graph junction lines) |
+| `PageDown` / `PageUp` | Scroll commit details and diff preview |
+| `Enter` or `m` | Open **Commit Actions Menu** (Checkout, Branch, Cherry-Pick, Revert, Time Machine) |
+| `c` | Checkout selected commit directly |
+| `b` | Create new branch from selected commit |
+| `p` | Cherry-pick selected commit onto current branch |
+| `r` | Revert selected commit |
+| `t` | **Time Machine**: Reset repository to this commit (invalidating subsequent commits, with auto-backup) |
+| `y` | Copy commit SHA hash to clipboard |
 
 ### Conflict Resolver & Worktrees
 | Shortcut | Action |
