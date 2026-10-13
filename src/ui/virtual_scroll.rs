@@ -151,7 +151,7 @@ impl VirtualScroll {
     }
 
     /// Keep selection visible in viewport.
-    fn ensure_visible(&mut self) {
+    pub fn ensure_visible(&mut self) {
         if self.total_items == 0 {
             self.viewport_offset = 0;
             return;

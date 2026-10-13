@@ -19,13 +19,15 @@ use crate::services::{
 use crate::ui::layout::LayoutAreas;
 use crate::ui::modals::{
     AiAssistantModal, BranchSwitcherModal, CommandPaletteModal, ConflictResolverModal, ContextMenu,
-    ContextMenuAction, OpenRepoAction, OpenRepoModal, PaletteEnterResult, RebaseModal,
-    RemoteDiffPreviewModal, SettingsAction, SettingsModal,
+    ContextMenuAction, HistoryActionState, HistoryActionsModal, HistoryMenuAction, OpenRepoAction,
+    OpenRepoModal, PaletteEnterResult, RebaseModal, RemoteDiffPreviewModal, SettingsAction,
+    SettingsModal,
 };
 use crate::ui::theme::{Theme, ThemeId};
 use crate::ui::views::{
     changes::{ChangesButtonAction, ChangesFocus, ChangesRenderParams},
-    ActionsView, AlertsView, ChangesView, DirectoryMap, PrsView, WorktreesView,
+    ActionsView, AlertsView, ChangesView, DirectoryMap, HistoryView, PrsView,
+    WorktreesView,
 };
 use crate::ui::capsule::{key_badge, pill, split_pill};
 use crate::ui::Icons;
@@ -65,6 +67,7 @@ where
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppTab {
     Changes,
+    History,
     Prs,
     Actions,
     Alerts,
@@ -74,6 +77,7 @@ pub enum AppTab {
 impl AppTab {
     pub const ALL: &'static [AppTab] = &[
         AppTab::Changes,
+        AppTab::History,
         AppTab::Prs,
         AppTab::Actions,
         AppTab::Alerts,
@@ -83,19 +87,21 @@ impl AppTab {
     pub fn index(&self) -> usize {
         match self {
             Self::Changes => 0,
-            Self::Prs => 1,
-            Self::Actions => 2,
-            Self::Alerts => 3,
-            Self::Worktrees => 4,
+            Self::History => 1,
+            Self::Prs => 2,
+            Self::Actions => 3,
+            Self::Alerts => 4,
+            Self::Worktrees => 5,
         }
     }
 
     pub fn from_index(idx: usize) -> Self {
         match idx {
-            1 => Self::Prs,
-            2 => Self::Actions,
-            3 => Self::Alerts,
-            4 => Self::Worktrees,
+            1 => Self::History,
+            2 => Self::Prs,
+            3 => Self::Actions,
+            4 => Self::Alerts,
+            5 => Self::Worktrees,
             _ => Self::Changes,
         }
     }
@@ -103,6 +109,7 @@ impl AppTab {
     pub fn title_key(&self) -> &'static str {
         match self {
             Self::Changes => "tabs.changes",
+            Self::History => "tabs.history",
             Self::Prs => "tabs.prs",
             Self::Actions => "tabs.actions",
             Self::Alerts => "tabs.alerts",
@@ -144,6 +151,7 @@ pub struct App {
     // Views
     pub dir_map: DirectoryMap,
     pub changes_view: ChangesView,
+    pub history_view: HistoryView,
     pub worktrees_view: WorktreesView,
     pub prs_view: PrsView,
     pub actions_view: ActionsView,
@@ -159,6 +167,7 @@ pub struct App {
     pub command_palette: CommandPaletteModal,
     pub conflict_resolver: ConflictResolverModal,
     pub branch_switcher: BranchSwitcherModal,
+    pub history_modal: HistoryActionsModal,
     pub remote_diff_preview: RemoteDiffPreviewModal,
     pub rebase_modal: RebaseModal,
     pub settings_modal: SettingsModal,
@@ -227,6 +236,7 @@ impl App {
             layout_areas: LayoutAreas::default(),
             dir_map: DirectoryMap::new(),
             changes_view: ChangesView::new(),
+            history_view: HistoryView::new(),
             worktrees_view: WorktreesView::new(),
             prs_view: PrsView::new(),
             actions_view: ActionsView::new(),
@@ -238,6 +248,7 @@ impl App {
             command_palette: CommandPaletteModal::new(),
             conflict_resolver: ConflictResolverModal::new(),
             branch_switcher: BranchSwitcherModal::new(),
+            history_modal: HistoryActionsModal::new(),
             remote_diff_preview: RemoteDiffPreviewModal::new(),
             rebase_modal: RebaseModal::new(),
             settings_modal: SettingsModal::new(),
@@ -252,6 +263,7 @@ impl App {
 
         app.refresh_git_status();
         app.refresh_worktrees();
+        app.refresh_history();
         app.update_active_diff();
         app
     }
@@ -439,6 +451,7 @@ impl App {
                 self.is_repo_private = None;
                 self.refresh_git_status();
                 self.refresh_worktrees();
+                self.refresh_history();
                 self.refresh_github();
                 self.last_status = Some(format!("Switched repository to {}", p_str));
             }
@@ -773,6 +786,65 @@ impl App {
                     }
                     OpenRepoAction::Close => self.open_repo_modal.close(),
                 }
+            }
+            return;
+        }
+
+        // History Actions Modal captures keys
+        if self.history_modal.is_open {
+            match self.history_modal.state {
+                HistoryActionState::Menu => match key.code {
+                    KeyCode::Esc => self.history_modal.close(),
+                    KeyCode::Up | KeyCode::Char('k') => self.history_modal.previous(),
+                    KeyCode::Down | KeyCode::Char('j') => self.history_modal.next(),
+                    KeyCode::Char('c') => {
+                        self.execute_history_menu_action(HistoryMenuAction::Checkout)
+                    }
+                    KeyCode::Char('b') => {
+                        self.execute_history_menu_action(HistoryMenuAction::CreateBranch)
+                    }
+                    KeyCode::Char('p') => {
+                        self.execute_history_menu_action(HistoryMenuAction::CherryPick)
+                    }
+                    KeyCode::Char('r') => {
+                        self.execute_history_menu_action(HistoryMenuAction::Revert)
+                    }
+                    KeyCode::Char('t') => {
+                        self.execute_history_menu_action(HistoryMenuAction::TimeMachine)
+                    }
+                    KeyCode::Char('y') => {
+                        self.execute_history_menu_action(HistoryMenuAction::CopySha)
+                    }
+                    KeyCode::Char('m') => {
+                        self.execute_history_menu_action(HistoryMenuAction::CopyMessage)
+                    }
+                    KeyCode::Enter => {
+                        let action = self.history_modal.selected_action();
+                        self.execute_history_menu_action(action);
+                    }
+                    _ => {}
+                },
+                HistoryActionState::BranchInput => match key.code {
+                    KeyCode::Esc => self.history_modal.close(),
+                    KeyCode::Backspace => self.history_modal.pop_char(),
+                    KeyCode::Enter => {
+                        let bname = self.history_modal.new_branch_name.trim().to_string();
+                        if !bname.is_empty() {
+                            self.create_branch_at_selected_commit(&bname);
+                        }
+                        self.history_modal.close();
+                    }
+                    KeyCode::Char(c) => self.history_modal.push_char(c),
+                    _ => {}
+                },
+                HistoryActionState::TimeMachineConfirm => match key.code {
+                    KeyCode::Esc | KeyCode::Char('n') => self.history_modal.close(),
+                    KeyCode::Enter | KeyCode::Char('y') => {
+                        self.time_machine_reset_to_selected_commit();
+                        self.history_modal.close();
+                    }
+                    _ => {}
+                },
             }
             return;
         }
@@ -1174,16 +1246,41 @@ impl App {
                 self.ai_modal.toggle(&ctx);
             }
             // Quick Branch Switcher via 'b'
+            // Quick Branch Switcher via 'b' (or Branch from commit in History tab)
             KeyCode::Char('b') => {
-                self.open_branch_switcher();
+                if self.active_tab == AppTab::History {
+                    if let Some(c) = self.history_view.selected_commit() {
+                        let commit_item = c.clone();
+                        self.history_modal.open_branch_input(commit_item);
+                    }
+                } else {
+                    self.open_branch_switcher();
+                }
             }
-            // Open Context Menu via 'm' or F10
+            // Open Context Menu / Action Menu via 'm' or F10
             KeyCode::Char('m') | KeyCode::F(10) => {
-                let sel_file = self
-                    .filtered_files()
-                    .get(self.changes_view.file_scroll.selected_index)
-                    .map(|f| f.path.clone());
-                self.context_menu.open_at(sel_file, 40, 10);
+                if self.active_tab == AppTab::History {
+                    if let Some(c) = self.history_view.selected_commit() {
+                        let commit_item = c.clone();
+                        self.history_modal.open(commit_item);
+                    }
+                } else {
+                    let sel_file = self
+                        .filtered_files()
+                        .get(self.changes_view.file_scroll.selected_index)
+                        .map(|f| f.path.clone());
+                    self.context_menu.open_at(sel_file, 40, 10);
+                }
+            }
+            // Direct history shortcuts
+            KeyCode::Char('p') => {
+                if self.active_tab == AppTab::History {
+                    self.cherry_pick_selected_commit();
+                }
+            }
+            KeyCode::Char('h') => {
+                self.active_tab = AppTab::History;
+                self.refresh_history();
             }
             KeyCode::Tab => {
                 self.focused_pane = match self.focused_pane {
@@ -1191,18 +1288,31 @@ impl App {
                     FocusedPane::MainContent => FocusedPane::DirectoryMap,
                 };
             }
-            // Tab switching 1..5
+            // Tab switching 1..6
             KeyCode::Char('1') => self.active_tab = AppTab::Changes,
-            KeyCode::Char('2') => self.active_tab = AppTab::Prs,
-            KeyCode::Char('3') => self.active_tab = AppTab::Actions,
-            KeyCode::Char('4') => self.active_tab = AppTab::Alerts,
-            KeyCode::Char('5') => {
+            KeyCode::Char('2') => {
+                self.active_tab = AppTab::History;
+                self.refresh_history();
+            }
+            KeyCode::Char('3') => self.active_tab = AppTab::Prs,
+            KeyCode::Char('4') => self.active_tab = AppTab::Actions,
+            KeyCode::Char('5') => self.active_tab = AppTab::Alerts,
+            KeyCode::Char('6') => {
                 self.active_tab = AppTab::Worktrees;
                 self.refresh_worktrees();
             }
 
-            // Cycle Theme (t)
-            KeyCode::Char('t') => self.cycle_theme(),
+            // Time Machine in History tab / Cycle Theme (t)
+            KeyCode::Char('t') => {
+                if self.active_tab == AppTab::History {
+                    if let Some(c) = self.history_view.selected_commit() {
+                        let commit_item = c.clone();
+                        self.history_modal.open_time_machine(commit_item);
+                    }
+                } else {
+                    self.cycle_theme();
+                }
+            }
 
             // Toggle Language (l)
             KeyCode::Char('l') => {
@@ -1220,6 +1330,9 @@ impl App {
                         .get(self.dir_map.scroll.selected_index)
                         .map(|n| n.path_prefix.clone()),
                     FocusedPane::MainContent => match self.active_tab {
+                        AppTab::History => {
+                            self.history_view.selected_commit().map(|c| c.full_hash.clone())
+                        }
                         AppTab::Prs => self.prs_view.selected_pr().map(|p| p.html_url.clone()),
                         AppTab::Actions => {
                             self.actions_view.selected_run().map(|r| r.html_url.clone())
@@ -1291,9 +1404,11 @@ impl App {
                 }
             }
 
-            // 'c': Commit staged changes in Changes tab, or Checkout PR locally in PRs tab
+            // 'c': Checkout commit in History tab, Checkout PR locally in PRs tab, or Commit in Changes tab
             KeyCode::Char('c') => {
-                if self.active_tab == AppTab::Prs {
+                if self.active_tab == AppTab::History {
+                    self.checkout_selected_commit();
+                } else if self.active_tab == AppTab::Prs {
                     self.checkout_selected_pr();
                 } else if self.changes_view.commit_summary.is_empty() {
                     self.changes_view.focus = ChangesFocus::CommitSummary;
@@ -1304,15 +1419,23 @@ impl App {
                 }
             }
 
-            // 'r': Re-run failed CI job in Actions tab
+            // 'r': Revert in History tab, or Re-run failed CI job in Actions tab
             KeyCode::Char('r') => {
-                if self.active_tab == AppTab::Actions {
+                if self.active_tab == AppTab::History {
+                    self.revert_selected_commit();
+                } else if self.active_tab == AppTab::Actions {
                     self.rerun_selected_action_job();
                 }
             }
 
             // Enter key dispatching
             KeyCode::Enter => match self.active_tab {
+                AppTab::History => {
+                    if let Some(commit) = self.history_view.selected_commit() {
+                        let c = commit.clone();
+                        self.history_modal.open(c);
+                    }
+                }
                 AppTab::Prs => self.checkout_selected_pr(),
                 AppTab::Worktrees => {
                     if let Some(wt) = self
@@ -1359,6 +1482,7 @@ impl App {
             KeyCode::Char('R') => {
                 self.refresh_git_status();
                 self.refresh_worktrees();
+                self.refresh_history();
                 self.refresh_github();
                 self.trigger_background_fetch();
                 self.last_status = Some("Refreshed repository status and GitHub data (fetching remote...)".to_string());
@@ -1385,6 +1509,10 @@ impl App {
             KeyCode::Up | KeyCode::Char('k') => match self.focused_pane {
                 FocusedPane::DirectoryMap => self.dir_map.scroll.previous(),
                 FocusedPane::MainContent => match self.active_tab {
+                    AppTab::History => {
+                        self.history_view.previous_commit();
+                        self.update_active_history_diff();
+                    }
                     AppTab::Worktrees => self.worktrees_view.scroll.previous(),
                     AppTab::Prs => self.prs_view.previous(),
                     AppTab::Actions => self.actions_view.previous(),
@@ -1398,6 +1526,10 @@ impl App {
             KeyCode::Down | KeyCode::Char('j') => match self.focused_pane {
                 FocusedPane::DirectoryMap => self.dir_map.scroll.next(),
                 FocusedPane::MainContent => match self.active_tab {
+                    AppTab::History => {
+                        self.history_view.next_commit();
+                        self.update_active_history_diff();
+                    }
                     AppTab::Worktrees => self.worktrees_view.scroll.next(),
                     AppTab::Prs => self.prs_view.next(),
                     AppTab::Actions => self.actions_view.next(),
@@ -1411,7 +1543,9 @@ impl App {
             KeyCode::PageUp => match self.focused_pane {
                 FocusedPane::DirectoryMap => self.dir_map.scroll.page_up(),
                 FocusedPane::MainContent => {
-                    if self.active_tab == AppTab::Worktrees {
+                    if self.active_tab == AppTab::History {
+                        self.history_view.scroll_diff_up(10);
+                    } else if self.active_tab == AppTab::Worktrees {
                         self.worktrees_view.scroll.page_up();
                     } else {
                         self.changes_view.file_scroll.page_up();
@@ -1422,7 +1556,9 @@ impl App {
             KeyCode::PageDown => match self.focused_pane {
                 FocusedPane::DirectoryMap => self.dir_map.scroll.page_down(),
                 FocusedPane::MainContent => {
-                    if self.active_tab == AppTab::Worktrees {
+                    if self.active_tab == AppTab::History {
+                        self.history_view.scroll_diff_down(10);
+                    } else if self.active_tab == AppTab::Worktrees {
                         self.worktrees_view.scroll.page_down();
                     } else {
                         self.changes_view.file_scroll.page_down();
@@ -1666,6 +1802,7 @@ impl App {
                 let text = self.i18n.t(key);
                 let icon_str = match tab {
                     AppTab::Changes => self.icons.branch(),
+                    AppTab::History => self.icons.commit(),
                     AppTab::Prs => self.icons.pr_open(),
                     AppTab::Actions => self.icons.check_success(),
                     AppTab::Alerts => self.icons.get(crate::ui::IconId::Alert),
@@ -1684,6 +1821,8 @@ impl App {
                     self.active_tab = *tab;
                     if self.active_tab == AppTab::Worktrees {
                         self.refresh_worktrees();
+                    } else if self.active_tab == AppTab::History {
+                        self.refresh_history();
                     }
                     return;
                 }
@@ -1744,6 +1883,10 @@ impl App {
                 MouseEventKind::Down(MouseButton::Left) => {
                     let rel_y = y.saturating_sub(self.layout_areas.right_content.y + 1) as usize;
                     match self.active_tab {
+                        AppTab::History => {
+                            self.history_view.scroll.handle_click_row(rel_y);
+                            self.update_active_history_diff();
+                        }
                         AppTab::Worktrees => {
                             self.worktrees_view.scroll.handle_click_row(rel_y);
                         }
@@ -1799,6 +1942,10 @@ impl App {
                     }
                 }
                 MouseEventKind::ScrollDown => match self.active_tab {
+                    AppTab::History => {
+                        self.history_view.scroll.scroll_down(3);
+                        self.update_active_history_diff();
+                    }
                     AppTab::Worktrees => self.worktrees_view.scroll.scroll_down(3),
                     AppTab::Prs => self.prs_view.list_scroll.scroll_down(3),
                     AppTab::Actions => self.actions_view.list_scroll.scroll_down(3),
@@ -1809,6 +1956,10 @@ impl App {
                     }
                 },
                 MouseEventKind::ScrollUp => match self.active_tab {
+                    AppTab::History => {
+                        self.history_view.scroll.scroll_up(3);
+                        self.update_active_history_diff();
+                    }
                     AppTab::Worktrees => self.worktrees_view.scroll.scroll_up(3),
                     AppTab::Prs => self.prs_view.list_scroll.scroll_up(3),
                     AppTab::Actions => self.actions_view.list_scroll.scroll_up(3),
@@ -1933,6 +2084,10 @@ impl App {
             }
             "ai_pr_draft" => self.trigger_ai_pr_draft(),
             "tab_changes" => self.active_tab = AppTab::Changes,
+            "tab_history" => {
+                self.active_tab = AppTab::History;
+                self.refresh_history();
+            }
             "tab_prs" => self.active_tab = AppTab::Prs,
             "tab_actions" => self.active_tab = AppTab::Actions,
             "tab_alerts" => self.active_tab = AppTab::Alerts,
@@ -2072,6 +2227,185 @@ impl App {
             }
         }
     }
+    /// Refresh Git commit history log for History tab.
+    pub fn refresh_history(&mut self) {
+        if let Some(git) = &self.git_service {
+            if let Ok(rows) = crate::git::get_commit_history(git.workdir(), 100) {
+                self.history_view.set_rows(rows);
+                self.update_active_history_diff();
+            }
+        } else {
+            self.history_view.set_rows(Vec::new());
+        }
+    }
+
+    /// Load detailed diff and stats for the currently selected history commit.
+    pub fn update_active_history_diff(&mut self) {
+        if let Some(git) = &self.git_service {
+            if let Some(commit) = self.history_view.selected_commit() {
+                let hash = commit.full_hash.clone();
+                if let Ok(detail) = crate::git::get_commit_details(git.workdir(), &hash) {
+                    self.history_view.set_detail(detail);
+                }
+            }
+        }
+    }
+
+    /// Checkout currently selected commit in detached HEAD mode.
+    pub fn checkout_selected_commit(&mut self) {
+        if let Some(git) = &self.git_service {
+            if let Some(commit) = self.history_view.selected_commit() {
+                let hash = commit.hash.clone();
+                match crate::git::checkout_commit(git.workdir(), &hash) {
+                    Ok(_) => {
+                        self.last_status = Some(format!("Checked out commit {} (Detached HEAD)", hash));
+                        self.refresh_git_status();
+                        self.refresh_history();
+                    }
+                    Err(e) => {
+                        self.last_status = Some(format!("Checkout failed: {}", e));
+                    }
+                }
+            }
+        }
+    }
+
+    /// Create new branch at selected commit and switch to it.
+    pub fn create_branch_at_selected_commit(&mut self, branch_name: &str) {
+        if let Some(git) = &self.git_service {
+            if let Some(commit) = self.history_view.selected_commit() {
+                let hash = commit.hash.clone();
+                match crate::git::create_branch_at_commit(git.workdir(), branch_name, &hash, true) {
+                    Ok(_) => {
+                        self.last_status = Some(format!(
+                            "Created and switched to branch '{}' at commit {}",
+                            branch_name, hash
+                        ));
+                        self.refresh_git_status();
+                        self.refresh_history();
+                    }
+                    Err(e) => {
+                        self.last_status = Some(format!("Failed to create branch: {}", e));
+                    }
+                }
+            }
+        }
+    }
+
+    /// Cherry-pick selected commit into current HEAD.
+    pub fn cherry_pick_selected_commit(&mut self) {
+        if let Some(git) = &self.git_service {
+            if let Some(commit) = self.history_view.selected_commit() {
+                let hash = commit.hash.clone();
+                match crate::git::cherry_pick_commit(git.workdir(), &hash) {
+                    Ok(_) => {
+                        self.last_status = Some(format!("Cherry-picked commit {} successfully", hash));
+                        self.refresh_git_status();
+                        self.refresh_history();
+                    }
+                    Err(e) => {
+                        self.last_status = Some(format!("Cherry-pick failed: {}", e));
+                        self.refresh_git_status();
+                    }
+                }
+            }
+        }
+    }
+
+    /// Revert selected commit by creating an inverse commit.
+    pub fn revert_selected_commit(&mut self) {
+        if let Some(git) = &self.git_service {
+            if let Some(commit) = self.history_view.selected_commit() {
+                let hash = commit.hash.clone();
+                match crate::git::revert_commit(git.workdir(), &hash) {
+                    Ok(_) => {
+                        self.last_status = Some(format!("Reverted commit {}", hash));
+                        self.refresh_git_status();
+                        self.refresh_history();
+                    }
+                    Err(e) => {
+                        self.last_status = Some(format!("Revert failed: {}", e));
+                        self.refresh_git_status();
+                    }
+                }
+            }
+        }
+    }
+
+    /// Time Machine: Reset branch to selected commit, discarding subsequent commits.
+    pub fn time_machine_reset_to_selected_commit(&mut self) {
+        if let Some(git) = &self.git_service {
+            if let Some(commit) = self.history_view.selected_commit() {
+                let hash = commit.hash.clone();
+                match crate::git::time_machine_reset(git.workdir(), &hash) {
+                    Ok(backup_branch) => {
+                        self.last_status = Some(format!(
+                            "⏳ Time Machine: Reset to commit {}. Safety backup saved to branch '{}'",
+                            hash, backup_branch
+                        ));
+                        self.refresh_git_status();
+                        self.refresh_history();
+                    }
+                    Err(e) => {
+                        self.last_status = Some(format!("Time Machine reset failed: {}", e));
+                    }
+                }
+            }
+        }
+    }
+
+    /// Copy SHA of currently selected commit to clipboard.
+    pub fn copy_selected_commit_sha(&mut self) {
+        if let Some(commit) = self.history_view.selected_commit() {
+            let sha = commit.full_hash.clone();
+            if self.clipboard.copy_text(&sha).is_ok() {
+                self.last_status = Some(format!("Copied commit SHA: {}", sha));
+            }
+        }
+    }
+
+    /// Copy summary message of currently selected commit to clipboard.
+    pub fn copy_selected_commit_message(&mut self) {
+        if let Some(commit) = self.history_view.selected_commit() {
+            let msg = commit.summary.clone();
+            if self.clipboard.copy_text(&msg).is_ok() {
+                self.last_status = Some(format!("Copied commit message: {}", msg));
+            }
+        }
+    }
+
+    /// Dispatch action from commit action menu.
+    pub fn execute_history_menu_action(&mut self, action: HistoryMenuAction) {
+        match action {
+            HistoryMenuAction::Checkout => {
+                self.history_modal.close();
+                self.checkout_selected_commit();
+            }
+            HistoryMenuAction::CreateBranch => {
+                self.history_modal.state = HistoryActionState::BranchInput;
+                self.history_modal.new_branch_name.clear();
+            }
+            HistoryMenuAction::CherryPick => {
+                self.history_modal.close();
+                self.cherry_pick_selected_commit();
+            }
+            HistoryMenuAction::Revert => {
+                self.history_modal.close();
+                self.revert_selected_commit();
+            }
+            HistoryMenuAction::TimeMachine => {
+                self.history_modal.state = HistoryActionState::TimeMachineConfirm;
+            }
+            HistoryMenuAction::CopySha => {
+                self.history_modal.close();
+                self.copy_selected_commit_sha();
+            }
+            HistoryMenuAction::CopyMessage => {
+                self.history_modal.close();
+                self.copy_selected_commit_message();
+            }
+        }
+    }
 
     /// Commit staged changes locally without pushing.
     pub fn commit_staged_only(&mut self) {
@@ -2138,6 +2472,7 @@ impl App {
                     self.changes_view.commit_description.clear();
                     self.changes_view.focus = ChangesFocus::FileList;
                     self.refresh_git_status();
+                    self.refresh_history();
                 }
                 Err(e) => {
                     self.last_status = Some(format!("Commit failed: {}", e));
@@ -2673,6 +3008,12 @@ impl App {
             self.settings_modal
                 .render(frame, &self.theme, &self.icons, &self.i18n, area);
         }
+
+        // 14. History Actions Modal Overlay (if open)
+        if self.history_modal.is_open {
+            self.history_modal
+                .render(frame, &self.theme, &self.icons, area);
+        }
     }
 
     fn render_header(&mut self, frame: &mut Frame) {
@@ -3035,6 +3376,7 @@ impl App {
             let text = self.i18n.t(key);
             let icon_str = match tab {
                 AppTab::Changes => self.icons.branch(),
+                AppTab::History => self.icons.commit(),
                 AppTab::Prs => self.icons.pr_open(),
                 AppTab::Actions => self.icons.check_success(),
                 AppTab::Alerts => self.icons.get(crate::ui::IconId::Alert),
@@ -3103,6 +3445,11 @@ impl App {
                     area: inner,
                 };
                 self.changes_view.render(frame, params);
+            }
+            AppTab::History => {
+                let theme = self.theme.clone();
+                let icons = self.icons.clone();
+                self.history_view.render(frame, &theme, &icons, inner);
             }
             AppTab::Prs => {
                 let theme = self.theme.clone();

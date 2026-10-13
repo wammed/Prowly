@@ -19,20 +19,24 @@ fn test_app_initialization_defaults() {
 fn test_tab_navigation_keys() {
     let mut app = App::new(Config::default());
 
-    // Press '2' -> PRs
+    // Press '2' -> History
     app.handle_key(KeyEvent::new(KeyCode::Char('2'), KeyModifiers::NONE));
+    assert_eq!(app.active_tab, AppTab::History);
+
+    // Press '3' -> PRs
+    app.handle_key(KeyEvent::new(KeyCode::Char('3'), KeyModifiers::NONE));
     assert_eq!(app.active_tab, AppTab::Prs);
 
-    // Press '3' -> Actions
-    app.handle_key(KeyEvent::new(KeyCode::Char('3'), KeyModifiers::NONE));
+    // Press '4' -> Actions
+    app.handle_key(KeyEvent::new(KeyCode::Char('4'), KeyModifiers::NONE));
     assert_eq!(app.active_tab, AppTab::Actions);
 
-    // Press '4' -> Alerts
-    app.handle_key(KeyEvent::new(KeyCode::Char('4'), KeyModifiers::NONE));
+    // Press '5' -> Alerts
+    app.handle_key(KeyEvent::new(KeyCode::Char('5'), KeyModifiers::NONE));
     assert_eq!(app.active_tab, AppTab::Alerts);
 
-    // Press '5' -> Worktrees
-    app.handle_key(KeyEvent::new(KeyCode::Char('5'), KeyModifiers::NONE));
+    // Press '6' -> Worktrees
+    app.handle_key(KeyEvent::new(KeyCode::Char('6'), KeyModifiers::NONE));
     assert_eq!(app.active_tab, AppTab::Worktrees);
 
     // Press '1' -> Changes
