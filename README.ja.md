@@ -57,7 +57,7 @@
   - 第2層（110+標準Git CLIサブコマンドカタログ・カテゴリバッジ表示）
   - 第3層（引数・オプション直接入力 & Tabフラグ自動巡回補完）
   - パンくずリスト、Esc/Backspace階層ロールバック、直打ちジャンプ、破壊的操作（force push, hard reset等）の2段階確認セーフティガードを完備。
-- 🎨 **厳選された全21種類のカラーテーマ**: Tokyo Night、Catppuccin、Gruvbox、Nord、Dracula、Solarized、Everforest、Cyberpunk など。
+- 🎨 **厳選された全21種類のカラーテーマ**: Catppuccin、Tokyo Night、Gruvbox、Nord、Dracula、Solarized、One、Rosé Pine、Monokai Pro、Synthwave '84、Everforest Dark。
 - 🌐 **完全なバイリンガル対応**: 英語と日本語をワンキー (`l`) で即時切り替え。
 - 🚀 **アプリランチャー & デフォルトターミナル自動起動**: FreeDesktop 仕様の `.desktop` エントリとアイコンを自動登録し、システムのデフォルトターミナルで起動。
 
@@ -226,7 +226,7 @@ export GEMINI_API_KEY="AIza..."
 ### 設定ファイル (`~/.config/prowly/config.toml`)
 ```toml
 [ui]
-theme = "tokyo_night"
+theme = "catppuccin_mocha"
 language = "ja"
 nerd_fonts = true
 
@@ -262,18 +262,17 @@ api_base = "http://127.0.0.1:11434"
 
 Prowly には美しい21種類のカラーパレットがプリセットされています:
 
-- **Tokyo Night** (デフォルト)
-- **Catppuccin Mocha**, **Catppuccin Macchiato**, **Catppuccin Frappe**, **Catppuccin Latte**
-- **Gruvbox Dark**, **Gruvbox Light**
+- **Catppuccin**: Catppuccin Mocha (デフォルト), Catppuccin Macchiato, Catppuccin Frappe, Catppuccin Latte
+- **Tokyo Night**: Tokyo Night, Tokyo Night Storm, Tokyo Night Light
+- **Gruvbox**: Gruvbox Dark, Gruvbox Light
+- **Solarized**: Solarized Dark, Solarized Light
+- **One**: One Dark, One Light
+- **Rosé Pine**: Rosé Pine, Rosé Pine Moon, Rosé Pine Dawn
 - **Nord**
 - **Dracula**
-- **Solarized Dark**, **Solarized Light**
-- **One Dark**, **One Light**
-- **Everforest Dark**, **Everforest Light**
-- **Rose Pine**, **Rose Pine Dawn**, **Rose Pine Moon**
 - **Monokai Pro**
-- **Kanagawa**
-- **Cyberpunk**
+- **Synthwave '84**
+- **Everforest Dark**
 
 ---
 

@@ -95,7 +95,7 @@ impl Config {
 # Location: ~/.config/prowly/config.toml
 # ==============================================================================
 
-# UI Theme: CatppuccinMocha, TokyoNight, Dracula, GruvboxDark, OneDark, Nord, GitHubDark, CatppuccinLatte
+# UI Theme: CatppuccinMocha, TokyoNight, GruvboxDark, Nord, Dracula, SolarizedDark, OneDark, MonokaiPro, etc. (21 themes)
 theme = "CatppuccinMocha"
 
 # Language: "en" (English), "ja" (日本語)

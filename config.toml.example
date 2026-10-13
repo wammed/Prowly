@@ -5,9 +5,11 @@
 
 # UI Theme:
 # Available themes:
-#   CatppuccinMocha, TokyoNight, Dracula, GruvboxDark, OneDark,
-#   Nord, GitHubDark, CatppuccinLatte, SolarizedDark, Monokai,
-#   Cyberpunk, Synthwave84, MaterialPalenight, RoséPine, EverforestDark
+#   CatppuccinMocha, CatppuccinMacchiato, CatppuccinFrappe, CatppuccinLatte,
+#   TokyoNight, TokyoNightStorm, TokyoNightLight,
+#   GruvboxDark, GruvboxLight, SolarizedDark, SolarizedLight,
+#   OneDark, OneLight, RosePine, RosePineMoon, RosePineDawn,
+#   Nord, Dracula, MonokaiPro, Synthwave84, EverforestDark
 theme = "CatppuccinMocha"
 
 # Interface Language:

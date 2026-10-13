@@ -57,7 +57,7 @@ Whether you prefer keyboard shortcuts or intuitive mouse interactions (clicking,
   - Layer 2: 110+ Standard Git CLI Subcommands Catalog with category badges & descriptions.
   - Layer 3: Direct argument/option input with Tab flag autocompletion.
   - Features breadcrumbs navigation, Esc/Backspace hierarchical rollback, direct shortcut jumps, and a safety guard with two-step Enter confirmation for destructive operations.
-- 🎨 **21 Curated Color Themes**: Tokyo Night, Catppuccin, Gruvbox, Nord, Dracula, Solarized, Everforest, Cyberpunk, and more.
+- 🎨 **21 Curated Color Themes**: Catppuccin, Tokyo Night, Gruvbox, Nord, Dracula, Solarized, One, Rosé Pine, Monokai Pro, Synthwave '84, Everforest Dark.
 - 🌐 **Full Bilingual Support**: Instant switching between English and Japanese (`l`).
 - 🚀 **App Launcher Integration**: Seamless FreeDesktop integration with `Terminal=true` to automatically launch in your desktop environment's default terminal.
 
@@ -226,7 +226,7 @@ export GEMINI_API_KEY="AIza..."
 ### Configuration File (`~/.config/prowly/config.toml`)
 ```toml
 [ui]
-theme = "tokyo_night"
+theme = "catppuccin_mocha"
 language = "en"
 nerd_fonts = true
 
@@ -262,18 +262,17 @@ api_base = "http://127.0.0.1:11434"
 
 Prowly includes 21 hand-crafted color themes:
 
-- **Tokyo Night** (Default dark)
-- **Catppuccin Mocha**, **Catppuccin Macchiato**, **Catppuccin Frappe**, **Catppuccin Latte**
-- **Gruvbox Dark**, **Gruvbox Light**
+- **Catppuccin**: Catppuccin Mocha (Default), Catppuccin Macchiato, Catppuccin Frappe, Catppuccin Latte
+- **Tokyo Night**: Tokyo Night, Tokyo Night Storm, Tokyo Night Light
+- **Gruvbox**: Gruvbox Dark, Gruvbox Light
+- **Solarized**: Solarized Dark, Solarized Light
+- **One**: One Dark, One Light
+- **Rosé Pine**: Rosé Pine, Rosé Pine Moon, Rosé Pine Dawn
 - **Nord**
 - **Dracula**
-- **Solarized Dark**, **Solarized Light**
-- **One Dark**, **One Light**
-- **Everforest Dark**, **Everforest Light**
-- **Rose Pine**, **Rose Pine Dawn**, **Rose Pine Moon**
 - **Monokai Pro**
-- **Kanagawa**
-- **Cyberpunk**
+- **Synthwave '84**
+- **Everforest Dark**
 
 ---
 
