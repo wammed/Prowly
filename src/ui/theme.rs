@@ -86,6 +86,33 @@ impl ThemeId {
         }
     }
 
+    /// Returns compact chip label for UI pickers.
+    pub const fn chip_name(&self) -> &'static str {
+        match self {
+            Self::CatppuccinMocha => "Mocha",
+            Self::CatppuccinMacchiato => "Macchiato",
+            Self::CatppuccinFrappe => "Frappe",
+            Self::CatppuccinLatte => "Latte",
+            Self::TokyoNight => "TokyoNight",
+            Self::TokyoNightStorm => "TokyoStorm",
+            Self::TokyoNightLight => "TokyoLight",
+            Self::Nord => "Nord",
+            Self::Dracula => "Dracula",
+            Self::GruvboxDark => "GruvboxDark",
+            Self::GruvboxLight => "GruvboxLight",
+            Self::SolarizedDark => "SolarizedDark",
+            Self::SolarizedLight => "SolarizedLight",
+            Self::OneDark => "OneDark",
+            Self::OneLight => "OneLight",
+            Self::RosePine => "RosePine",
+            Self::RosePineMoon => "RoseMoon",
+            Self::RosePineDawn => "RoseDawn",
+            Self::MonokaiPro => "MonokaiPro",
+            Self::Synthwave84 => "Synthwave84",
+            Self::EverforestDark => "Everforest",
+        }
+    }
+
     /// Match from lowercase / slugified name.
     pub fn from_name(name: &str) -> Option<Self> {
         let normalized = name.to_lowercase().replace([' ', '-', '_', '\''], "");

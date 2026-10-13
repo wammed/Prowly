@@ -46,17 +46,16 @@ fn test_settings_modal_interaction_and_save() {
     let viewport = Rect::new(0, 0, 100, 30);
     let modal_rect = modal.modal_rect(viewport);
 
-    // Click TokyoNight theme in Row 2
-    // Mocha is at cur_x = 10, width = 5 + 4 = 9, so next is at cur_x = 20. TokyoNight width = 10 + 4 = 14 (inner_x: 20..34)
-    let _ = modal.handle_click(modal_rect.x + 1 + 22, modal_rect.y + 1 + 2, viewport);
+    // Click TokyoNight theme in Row 2 (inner_x: 63..79)
+    let _ = modal.handle_click(modal_rect.x + 1 + 65, modal_rect.y + 1 + 2, viewport);
     assert_eq!(modal.theme, ThemeId::TokyoNight);
 
-    // Click Japanese language in Row 3 (inner_x: 23..34)
-    let _ = modal.handle_click(modal_rect.x + 1 + 25, modal_rect.y + 1 + 3, viewport);
+    // Click Japanese language (inner_y = 7, corresponding to 3 + offset, inner_x: 23..34)
+    let _ = modal.handle_click(modal_rect.x + 1 + 25, modal_rect.y + 1 + 7, viewport);
     assert_eq!(modal.language, Language::Ja);
 
-    // Click Anthropic AI provider in Row 5 (inner_x: OpenAI is 12..22, Anthropic is 23..36)
-    let _ = modal.handle_click(modal_rect.x + 1 + 25, modal_rect.y + 1 + 5, viewport);
+    // Click Anthropic AI provider (inner_y = 9, corresponding to 5 + offset, inner_x: 23..36)
+    let _ = modal.handle_click(modal_rect.x + 1 + 25, modal_rect.y + 1 + 9, viewport);
     assert_eq!(modal.ai_provider, prowly::ai::AiProvider::Anthropic);
 
     // Click Save button in header row (inner_y == 0, inner_x between width-24 and width-12)
@@ -225,4 +224,37 @@ fn test_cli_help_and_version_flags() {
     assert!(ja_help_str.contains("使用方法:"));
     assert!(ja_help_str.contains("オプション:"));
 }
+
+#[test]
+fn test_settings_modal_all_themes_selectable() {
+    use prowly::ui::modals::settings::layout_theme_chips;
+
+    let viewport = Rect::new(0, 0, 100, 30);
+    let mut modal = SettingsModal::new();
+    let config = Config::default();
+    modal.open_with_config(&config);
+
+    let modal_rect = modal.modal_rect(viewport);
+    let inner_w = modal_rect.width.saturating_sub(2);
+    let rows = layout_theme_chips(inner_w);
+
+    // Verify all 21 themes are present in the layout
+    let mut found_themes = Vec::new();
+    for (r_idx, row) in rows.iter().enumerate() {
+        for &(tid, _name, start_x, _end_x) in row {
+            found_themes.push(tid);
+            // Click inside chip
+            let click_x = modal_rect.x + 1 + start_x + 1;
+            let click_y = modal_rect.y + 1 + 2 + r_idx as u16;
+            modal.handle_click(click_x, click_y, viewport);
+            assert_eq!(modal.theme, tid, "Failed to select theme {:?}", tid);
+        }
+    }
+
+    assert_eq!(found_themes.len(), ThemeId::ALL.len());
+    for &tid in ThemeId::ALL {
+        assert!(found_themes.contains(&tid), "Theme {:?} missing from chips", tid);
+    }
+}
+
 

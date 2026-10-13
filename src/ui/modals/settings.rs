@@ -52,6 +52,33 @@ pub struct SettingsModal {
     pub scroll_offset: u16,
 }
 
+/// Helper to calculate layout of theme chips wrapped across multiple lines.
+/// Returns a list of rows, each containing (ThemeId, chip_name, start_x, end_x).
+pub fn layout_theme_chips(inner_w: u16) -> Vec<Vec<(ThemeId, &'static str, u16, u16)>> {
+    let mut rows: Vec<Vec<(ThemeId, &'static str, u16, u16)>> = Vec::new();
+    let mut current_row: Vec<(ThemeId, &'static str, u16, u16)> = Vec::new();
+    let indent: u16 = 10;
+    let mut cur_x = indent;
+
+    for &tid in ThemeId::ALL {
+        let name = tid.chip_name();
+        let btn_w = name.len() as u16 + 6;
+        if !current_row.is_empty() && cur_x + btn_w > inner_w {
+            rows.push(current_row);
+            current_row = Vec::new();
+            cur_x = indent;
+        }
+        let start_x = cur_x;
+        let end_x = cur_x + btn_w;
+        current_row.push((tid, name, start_x, end_x));
+        cur_x = end_x + 1;
+    }
+    if !current_row.is_empty() {
+        rows.push(current_row);
+    }
+    rows
+}
+
 impl Default for SettingsModal {
     fn default() -> Self {
         Self::new()
@@ -107,8 +134,11 @@ impl SettingsModal {
     pub fn scroll_down(&mut self, viewport: Rect) {
         let rect = self.modal_rect(viewport);
         let inner_height = rect.height.saturating_sub(2);
-        let total_lines = 21;
-        let max_scroll = (total_lines as u16).saturating_sub(inner_height);
+        let inner_w = rect.width.saturating_sub(2);
+        let theme_rows = layout_theme_chips(inner_w);
+        let offset = (theme_rows.len() as u16).saturating_sub(1);
+        let total_lines = 16 + offset;
+        let max_scroll = total_lines.saturating_sub(inner_height);
         if self.scroll_offset < max_scroll {
             self.scroll_offset += 1;
         }
@@ -170,7 +200,7 @@ impl SettingsModal {
                 None
             }
             KeyCode::Down | KeyCode::Char('j') if self.focused_input.is_none() => {
-                self.scroll_offset = self.scroll_offset.saturating_add(1).min(12);
+                self.scroll_offset = self.scroll_offset.saturating_add(1).min(18);
                 None
             }
             KeyCode::PageUp if self.focused_input.is_none() => {
@@ -178,7 +208,7 @@ impl SettingsModal {
                 None
             }
             KeyCode::PageDown if self.focused_input.is_none() => {
-                self.scroll_offset = self.scroll_offset.saturating_add(5).min(12);
+                self.scroll_offset = self.scroll_offset.saturating_add(5).min(18);
                 None
             }
             KeyCode::Tab => {
@@ -266,29 +296,27 @@ impl SettingsModal {
             }
         }
 
-        // Row 2: Theme selection
-        if content_y == 2 {
-            let themes = [
-                (ThemeId::CatppuccinMocha, "Mocha"),
-                (ThemeId::TokyoNight, "TokyoNight"),
-                (ThemeId::Dracula, "Dracula"),
-                (ThemeId::GruvboxDark, "Gruvbox"),
-                (ThemeId::OneDark, "OneDark"),
-                (ThemeId::Nord, "Nord"),
-            ];
-            let mut cur_x = 10;
-            for (tid, name) in themes {
-                let btn_w = name.len() as u16 + 6;
-                if inner_x >= cur_x && inner_x < cur_x + btn_w {
-                    self.theme = tid;
-                    return None;
+        let theme_rows = layout_theme_chips(inner_w);
+        let theme_row_count = theme_rows.len() as u16;
+        let offset = theme_row_count.saturating_sub(1);
+
+        // Row 2 .. 2 + theme_row_count: Theme selection
+        let theme_start_y = 2;
+        let theme_end_y = theme_start_y + theme_row_count;
+        if content_y >= theme_start_y && content_y < theme_end_y {
+            let row_idx = (content_y - theme_start_y) as usize;
+            if let Some(row) = theme_rows.get(row_idx) {
+                for &(tid, _, start_x, end_x) in row {
+                    if inner_x >= start_x && inner_x < end_x {
+                        self.theme = tid;
+                        return None;
+                    }
                 }
-                cur_x += btn_w + 1;
             }
         }
 
-        // Row 3: Language & Nerd Font
-        if content_y == 3 {
+        // Language & Nerd Font
+        if content_y == 3 + offset {
             // [ English ] (10..23), [ 日本語 ] (23..34)
             if inner_x >= 10 && inner_x < 23 {
                 self.language = Language::En;
@@ -303,8 +331,8 @@ impl SettingsModal {
             }
         }
 
-        // Row 5: AI Provider Chips
-        if content_y == 5 {
+        // AI Provider Chips
+        if content_y == 5 + offset {
             let providers = [
                 (AiProvider::OpenAi, "OpenAI"),
                 (AiProvider::Anthropic, "Anthropic"),
@@ -324,8 +352,8 @@ impl SettingsModal {
             }
         }
 
-        // Row 7: Model Presets
-        if content_y == 7 {
+        // Model Presets
+        if content_y == 7 + offset {
             let presets: &[&str] = match self.ai_provider {
                 AiProvider::OpenAi => &["gpt-4o-mini", "gpt-4o", "o3-mini"],
                 AiProvider::Anthropic => {
@@ -346,14 +374,14 @@ impl SettingsModal {
             }
         }
 
-        // Row 8: Model Input
-        if content_y == 8 && inner_x >= 10 && inner_x < inner_w.saturating_sub(4) {
+        // Model Input
+        if content_y == 8 + offset && inner_x >= 10 && inner_x < inner_w.saturating_sub(4) {
             self.focused_input = Some(SettingsInputFocus::AiModel);
             return None;
         }
 
-        // Row 9: API Key Input & Buttons
-        if content_y == 9 {
+        // API Key Input & Buttons
+        if content_y == 9 + offset {
             // [ Show / Hide ] (40..50), [ Clear ] (50..63)
             if inner_x >= 40 && inner_x < 50 {
                 self.show_api_key = !self.show_api_key;
@@ -369,8 +397,8 @@ impl SettingsModal {
             }
         }
 
-        // Row 10: Endpoint Base URL & Reset Default
-        if content_y == 10 {
+        // Endpoint Base URL & Reset Default
+        if content_y == 10 + offset {
             // [ Default ] (50..63)
             if inner_x >= 50 && inner_x < 63 {
                 self.ai_api_base.clear();
@@ -382,8 +410,8 @@ impl SettingsModal {
             }
         }
 
-        // Row 12: Git Soft Discard & Auto Fetch
-        if content_y == 12 {
+        // Git Soft Discard & Auto Fetch
+        if content_y == 12 + offset {
             // Soft Discard: [ ON ] (14..22), [ OFF ] (22..31)
             if inner_x >= 14 && inner_x < 22 {
                 self.git_soft_discard = true;
@@ -400,8 +428,8 @@ impl SettingsModal {
             }
         }
 
-        // Row 13: Editor Command
-        if content_y == 13 {
+        // Editor Command
+        if content_y == 13 + offset {
             // Presets: [ nvim ] (40..50), [ code ] (50..60), [ nano ] (60..70)
             if inner_x >= 40 && inner_x < 50 {
                 self.editor_command = "nvim".to_string();
@@ -419,8 +447,8 @@ impl SettingsModal {
             }
         }
 
-        // Bottom Action Bar: content_y == 15 or inner_y near bottom
-        if content_y == 15 || inner_y >= rect.height.saturating_sub(4) {
+        // Bottom Action Bar: content_y == 15 + offset or inner_y near bottom
+        if content_y == 15 + offset || inner_y >= rect.height.saturating_sub(4) {
             if inner_x >= 1 && inner_x < 38 {
                 return Some(SettingsAction::SaveAndApply);
             }
@@ -464,7 +492,11 @@ impl SettingsModal {
         frame.render_widget(Clear, rect);
 
         let inner_height = rect.height.saturating_sub(2);
-        let scroll_hint = if (inner_height as usize) < 21 {
+        let inner_w = rect.width.saturating_sub(2);
+        let theme_rows = layout_theme_chips(inner_w);
+        let offset = (theme_rows.len() as u16).saturating_sub(1);
+        let total_content_lines = 16 + offset;
+        let scroll_hint = if inner_height < total_content_lines {
             format!(" [ ▲▼ Scroll: j/k ]")
         } else {
             String::new()
@@ -541,33 +573,28 @@ impl SettingsModal {
 
         lines.push(card_header("🎨 APPEARANCE & DISPLAY / 外観・基本設定", true));
 
-        // 2. Theme row
-        let themes = [
-            (ThemeId::CatppuccinMocha, "Mocha"),
-            (ThemeId::TokyoNight, "TokyoNight"),
-            (ThemeId::Dracula, "Dracula"),
-            (ThemeId::GruvboxDark, "Gruvbox"),
-            (ThemeId::OneDark, "OneDark"),
-            (ThemeId::Nord, "Nord"),
-        ];
-        let mut theme_spans = vec![Span::styled(
-            "Theme:    ",
-            Style::default().fg(theme.primary),
-        )];
-        for (tid, name) in themes {
-            let is_sel = self.theme == tid;
-            let style = if is_sel {
-                Style::default()
-                    .bg(theme.primary)
-                    .fg(theme.bg)
-                    .add_modifier(Modifier::BOLD)
+        // 2. Theme rows
+        for (r_idx, row) in theme_rows.iter().enumerate() {
+            let mut theme_spans = vec![if r_idx == 0 {
+                Span::styled("Theme:    ", Style::default().fg(theme.primary))
             } else {
-                Style::default().fg(theme.fg)
-            };
-            theme_spans.push(Span::styled(format!(" [ {} ] ", name), style));
-            theme_spans.push(Span::raw(" "));
+                Span::raw(" ".repeat(10))
+            }];
+            for &(tid, name, _, _) in row {
+                let is_sel = self.theme == tid;
+                let style = if is_sel {
+                    Style::default()
+                        .bg(theme.primary)
+                        .fg(theme.bg)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(theme.fg)
+                };
+                theme_spans.push(Span::styled(format!(" [ {} ] ", name), style));
+                theme_spans.push(Span::raw(" "));
+            }
+            lines.push(Line::from(theme_spans));
         }
-        lines.push(Line::from(theme_spans));
 
         // 3. Language & Nerd Font row
         let lang_en_style = if self.language == Language::En {
