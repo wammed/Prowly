@@ -223,4 +223,47 @@ fn test_app_commit_staged_auto_stages_and_prevents_empty() {
     assert!(app.repo_status.files.is_empty());
 }
 
+#[test]
+fn test_repo_badge_visibility_rendering() {
+    let render_content = |app: &mut App| -> String {
+        let backend = ratatui::backend::TestBackend::new(120, 30);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        terminal.draw(|f| app.render(f)).unwrap();
+        terminal.backend().buffer().content().iter().map(|c| c.symbol()).collect()
+    };
+
+    let mut app = App::new(Config::default());
+
+    // 1. When is_repo_private is Some(false) (Public)
+    app.set_repo_visibility(false);
+    let content = render_content(&mut app);
+    assert!(content.contains("Public"), "Expected Public badge when is_repo_private=false");
+    assert!(!content.contains("Private"), "Did not expect Private badge when is_repo_private=false");
+
+    // 2. When is_repo_private is Some(true) (Private)
+    app.set_repo_visibility(true);
+    let content2 = render_content(&mut app);
+    assert!(content2.contains("Private"), "Expected Private badge when is_repo_private=true");
+
+    // 3. In Japanese mode
+    app.i18n.set_language(Language::Ja);
+    assert_eq!(app.i18n.t("header.public"), "公開");
+    assert_eq!(app.i18n.t("header.private"), "非公開");
+
+    app.set_repo_visibility(false);
+    let content3 = render_content(&mut app);
+    assert!(
+        content3.contains("公") && content3.contains("開"),
+        "Expected 公開 badge in Japanese mode when is_repo_private=false"
+    );
+
+    app.set_repo_visibility(true);
+    let content4 = render_content(&mut app);
+    assert!(
+        content4.contains("非") && content4.contains("開"),
+        "Expected 非公開 badge in Japanese mode when is_repo_private=true"
+    );
+}
+
+
 

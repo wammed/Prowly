@@ -15,7 +15,8 @@ pub use config::Config;
 pub use event::{AppEvent, EventHandler};
 pub use git::GitService;
 pub use github::{
-    AlertItem, GitHubRateLimit, GitHubRepoTarget, GitHubService, PullRequestItem, WorkflowRunItem,
+    AlertItem, GitHubRateLimit, GitHubRepoTarget, GitHubService, PullRequestItem, RepoMetadata,
+    WorkflowRunItem,
 };
 pub use i18n::{I18n, Language};
 pub use services::{BackupService, ClipboardService};

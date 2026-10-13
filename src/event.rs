@@ -8,7 +8,7 @@ use tokio::sync::mpsc;
 use crate::ai::{
     CiFailureAnalysis, GeneratedCommit, GeneratedPrDraft, RepoDiagnosis, SuggestedGitCommand,
 };
-use crate::github::{AlertItem, PullRequestItem, WorkflowRunItem};
+use crate::github::{AlertItem, PullRequestItem, RepoMetadata, WorkflowRunItem};
 
 /// Core events processed by the Prowly application.
 #[derive(Debug, Clone)]
@@ -18,6 +18,7 @@ pub enum AppEvent {
     Resize(u16, u16),
     Tick,
     StatusMessage(String),
+    GitHubRepoMetadataLoaded(RepoMetadata),
     GitHubPrsLoaded(Vec<PullRequestItem>),
     GitHubRunsLoaded(Vec<WorkflowRunItem>),
     GitHubAlertsLoaded(Vec<AlertItem>),

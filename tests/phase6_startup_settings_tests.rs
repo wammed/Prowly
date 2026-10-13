@@ -181,3 +181,48 @@ fn test_clean_repo_all_files_listing() {
     assert!(all_files.iter().any(|f| f.path == "file1.txt"));
     assert!(all_files.iter().any(|f| f.path == "file2.rs"));
 }
+
+#[test]
+fn test_cli_help_and_version_flags() {
+    // 1. Verify --help prints usage and exits cleanly with 0
+    let help_output = std::process::Command::new(env!("CARGO_BIN_EXE_prowly"))
+        .arg("--help")
+        .output()
+        .expect("Failed to run prowly binary with --help");
+    assert!(help_output.status.success());
+    let help_str = String::from_utf8_lossy(&help_output.stdout);
+    assert!(help_str.contains("Prowly v0.1.0"));
+    assert!(help_str.contains("-h, --help"));
+    assert!(help_str.contains("-v, --version"));
+
+    // 2. Verify -h prints help
+    let short_h_output = std::process::Command::new(env!("CARGO_BIN_EXE_prowly"))
+        .arg("-h")
+        .output()
+        .expect("Failed to run prowly binary with -h");
+    assert!(short_h_output.status.success());
+    let short_h_str = String::from_utf8_lossy(&short_h_output.stdout);
+    assert!(short_h_str.contains("Prowly v0.1.0"));
+
+    // 3. Verify --version prints summary and exits cleanly with 0
+    let ver_output = std::process::Command::new(env!("CARGO_BIN_EXE_prowly"))
+        .arg("--version")
+        .output()
+        .expect("Failed to run prowly binary with --version");
+    assert!(ver_output.status.success());
+    let ver_str = String::from_utf8_lossy(&ver_output.stdout);
+    assert!(ver_str.contains("Prowly v0.1.0"));
+    assert!(ver_str.contains("Theme:"));
+    assert!(ver_str.contains("Language:"));
+
+    // 4. Verify --lang ja --help outputs Japanese help
+    let ja_help_output = std::process::Command::new(env!("CARGO_BIN_EXE_prowly"))
+        .args(["--lang", "ja", "--help"])
+        .output()
+        .expect("Failed to run prowly binary with --lang ja --help");
+    assert!(ja_help_output.status.success());
+    let ja_help_str = String::from_utf8_lossy(&ja_help_output.stdout);
+    assert!(ja_help_str.contains("使用方法:"));
+    assert!(ja_help_str.contains("オプション:"));
+}
+

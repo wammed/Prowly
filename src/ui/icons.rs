@@ -268,4 +268,10 @@ impl Icons {
     pub fn settings(&self) -> &'static str {
         self.get(IconId::Settings)
     }
+    pub fn lock_private(&self) -> &'static str {
+        self.get(IconId::LockPrivate)
+    }
+    pub fn globe_public(&self) -> &'static str {
+        self.get(IconId::GlobePublic)
+    }
 }

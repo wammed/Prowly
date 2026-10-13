@@ -86,6 +86,13 @@ pub struct AlertItem {
     pub url: String,
 }
 
+/// Repository metadata representation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RepoMetadata {
+    pub is_private: bool,
+    pub description: Option<String>,
+}
+
 /// Rate limit status.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GitHubRateLimit {
@@ -107,6 +114,7 @@ impl Default for GitHubRateLimit {
 /// Internal cached data container.
 #[derive(Default)]
 struct CachedData {
+    repo_meta: Option<(Instant, RepoMetadata)>,
     prs: Option<(Instant, Vec<PullRequestItem>)>,
     runs: Option<(Instant, Vec<WorkflowRunItem>)>,
     alerts: Option<(Instant, Vec<AlertItem>)>,
@@ -205,10 +213,99 @@ impl GitHubService {
         guard.alerts = Some((now, alerts));
     }
 
+    /// Set mock repository metadata.
+    pub async fn set_mock_repo_metadata(&self, is_private: bool) {
+        let mut guard = self.cache.lock().await;
+        guard.repo_meta = Some((
+            Instant::now(),
+            RepoMetadata {
+                is_private,
+                description: None,
+            },
+        ));
+    }
+
     /// Retrieve active rate limit status.
     pub async fn get_rate_limit(&self) -> GitHubRateLimit {
         let guard = self.cache.lock().await;
         guard.rate_limit
+    }
+
+    /// Retrieve repository metadata (visibility/privacy, etc.).
+    pub async fn get_repo_metadata(
+        &self,
+        target: &GitHubRepoTarget,
+        force_refresh: bool,
+    ) -> Result<RepoMetadata, String> {
+        let mut guard = self.cache.lock().await;
+        if !force_refresh {
+            if let Some((ts, ref meta)) = guard.repo_meta {
+                if ts.elapsed() < self.cache_ttl {
+                    return Ok(meta.clone());
+                }
+            }
+        }
+
+        if self.mock_mode {
+            return Ok(guard
+                .repo_meta
+                .as_ref()
+                .map(|(_, m)| m.clone())
+                .unwrap_or(RepoMetadata {
+                    is_private: false,
+                    description: None,
+                }));
+        }
+
+        // 1. Try `gh repo view <owner>/<repo> --json isPrivate` CLI first
+        if let Ok(output) = Command::new("gh")
+            .args([
+                "repo",
+                "view",
+                &format!("{}/{}", target.owner, target.repo),
+                "--json",
+                "isPrivate",
+            ])
+            .output()
+        {
+            if output.status.success() {
+                if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&output.stdout) {
+                    if let Some(is_private) = val.get("isPrivate").and_then(|v| v.as_bool()) {
+                        let meta = RepoMetadata {
+                            is_private,
+                            description: None,
+                        };
+                        guard.repo_meta = Some((Instant::now(), meta.clone()));
+                        return Ok(meta);
+                    }
+                }
+            }
+        }
+
+        // 2. Fallback to Octocrab API
+        let octo = match self.get_octocrab().await {
+            Some(o) => o,
+            None => match octocrab::OctocrabBuilder::new().build() {
+                Ok(o) => o,
+                Err(_) => (*octocrab::instance()).clone(),
+            },
+        };
+
+        match octo.repos(&target.owner, &target.repo).get().await {
+            Ok(repo) => {
+                let is_private = repo.private.unwrap_or(false);
+                let meta = RepoMetadata {
+                    is_private,
+                    description: repo.description,
+                };
+                guard.repo_meta = Some((Instant::now(), meta.clone()));
+                if guard.rate_limit.remaining > 0 {
+                    guard.rate_limit.remaining -= 1;
+                }
+                Ok(meta)
+            }
+            Err(e) => Err(format!("GitHub API error: {}", e)),
+        }
     }
 
     /// List pull requests with caching.
