@@ -36,6 +36,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    // Help option without taking over terminal
+    if args
+        .iter()
+        .any(|arg| arg == "--help" || arg == "-h" || arg == "help")
+    {
+        print_help(&config);
+        return Ok(());
+    }
+
+    // Diagnostic/Information mode without taking over terminal
+    if args
+        .iter()
+        .any(|arg| arg == "--info" || arg == "--version" || arg == "-v")
+    {
+        let theme = prowly::ui::Theme::get(config.theme);
+        let icons = prowly::ui::Icons::new(config.use_nerd_font);
+        println!("{} Prowly v0.1.0", icons.branch());
+        println!("Theme: {} (dark={})", theme.name, theme.is_dark);
+        println!("Language: {}", config.language.display_name());
+        println!("Nerd Font: {}", config.use_nerd_font);
+        println!("AI Provider: {:?}", config.ai.provider);
+        return Ok(());
+    }
+
     // Positional directory path argument: prowly [path]
     let mut skip_next = false;
     for arg in args.iter().skip(1) {
@@ -54,21 +78,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 break;
             }
         }
-    }
-
-    // Diagnostic/Information mode without taking over terminal
-    if args
-        .iter()
-        .any(|arg| arg == "--info" || arg == "--version" || arg == "-v")
-    {
-        let theme = prowly::ui::Theme::get(config.theme);
-        let icons = prowly::ui::Icons::new(config.use_nerd_font);
-        println!("{} Prowly v0.1.0", icons.branch());
-        println!("Theme: {} (dark={})", theme.name, theme.is_dark);
-        println!("Language: {}", config.language.display_name());
-        println!("Nerd Font: {}", config.use_nerd_font);
-        println!("AI Provider: {:?}", config.ai.provider);
-        return Ok(());
     }
 
     // Set panic hook to restore terminal gracefully
@@ -115,3 +124,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
+fn print_help(config: &Config) {
+    let icons = prowly::ui::Icons::new(config.use_nerd_font);
+    if config.language == prowly::i18n::Language::Ja {
+        println!("{} Prowly v0.1.0", icons.branch());
+        println!("全面統合AIコパイロット搭載 ターミナル Git & GitHub クライアント\n");
+        println!("使用方法:");
+        println!("    prowly [オプション] [リポジトリパス]\n");
+        println!("引数:");
+        println!("    <PATH>            開く Git リポジトリのディレクトリパス [デフォルト: .]\n");
+        println!("オプション:");
+        println!("    -h, --help        このヘルプメッセージを表示して終了");
+        println!("    -v, --version     バージョン情報および設定サマリーを表示して終了");
+        println!("        --info        詳細な診断・設定情報を表示して終了");
+        println!("        --theme <NAME>    UIカラーテーマを指定 (例: tokyo_night, catppuccin_mocha, dracula 等)");
+        println!("        --lang <CODE>     UI表示言語を指定 (en, ja)");
+        println!("        --no-nerd-font    Nerd Font グリフを無効化 (ASCII/Unicode フォールバックを使用)");
+    } else {
+        println!("{} Prowly v0.1.0", icons.branch());
+        println!("Terminal Git & GitHub client with Omnipresent AI\n");
+        println!("USAGE:");
+        println!("    prowly [OPTIONS] [PATH]\n");
+        println!("ARGS:");
+        println!("    <PATH>            Path to Git repository directory [default: .]\n");
+        println!("OPTIONS:");
+        println!("    -h, --help        Print this help message and exit");
+        println!("    -v, --version     Print version and configuration summary and exit");
+        println!("        --info        Print diagnostic configuration information and exit");
+        println!("        --theme <NAME>    Set UI color theme (e.g., tokyo_night, catppuccin_mocha, dracula)");
+        println!("        --lang <CODE>     Set UI language (en, ja)");
+        println!("        --no-nerd-font    Disable Nerd Font glyphs (use ASCII/Unicode fallback)");
+    }
+}
+

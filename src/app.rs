@@ -151,6 +151,7 @@ pub struct App {
 
     // GitHub Integration
     pub github_service: GitHubService,
+    pub is_repo_private: Option<bool>,
 
     // Modals
     pub ai_modal: AiAssistantModal,
@@ -225,6 +226,7 @@ impl App {
             actions_view: ActionsView::new(),
             alerts_view: AlertsView::new(),
             github_service,
+            is_repo_private: None,
             ai_modal: AiAssistantModal::new(),
             context_menu: ContextMenu::new(),
             command_palette: CommandPaletteModal::new(),
@@ -249,6 +251,11 @@ impl App {
     /// Set event sender for asynchronous background operations.
     pub fn set_event_sender(&mut self, sender: tokio::sync::mpsc::UnboundedSender<AppEvent>) {
         self.event_sender = Some(sender);
+    }
+
+    /// Set repository visibility explicitly (true = private, false = public).
+    pub fn set_repo_visibility(&mut self, is_private: bool) {
+        self.is_repo_private = Some(is_private);
     }
 
     /// Refresh repository status, directory map, and active diff from Git engine.
@@ -298,6 +305,7 @@ impl App {
                 self.config.add_recent_repository(p_str.clone());
                 let _ = self.config.save();
                 self.git_service = Some(git);
+                self.is_repo_private = None;
                 self.refresh_git_status();
                 self.refresh_worktrees();
                 self.refresh_github();
@@ -364,6 +372,9 @@ impl App {
             if let Some(sender) = self.event_sender.clone() {
                 let gh = self.github_service.clone();
                 tokio::spawn(async move {
+                    if let Ok(meta) = gh.get_repo_metadata(&target, false).await {
+                        let _ = sender.send(AppEvent::GitHubRepoMetadataLoaded(meta));
+                    }
                     if let Ok(prs) = gh.list_pull_requests(&target, false).await {
                         let _ = sender.send(AppEvent::GitHubPrsLoaded(prs));
                     }
@@ -376,6 +387,9 @@ impl App {
                 });
             } else if tokio::runtime::Handle::try_current().is_err() {
                 let gh = &self.github_service;
+                if let Ok(meta) = block_on_safe(gh.get_repo_metadata(&target, false)) {
+                    self.is_repo_private = Some(meta.is_private);
+                }
                 if let Ok(prs) = block_on_safe(gh.list_pull_requests(&target, false)) {
                     self.prs_view.set_prs(prs);
                 }
@@ -452,6 +466,9 @@ impl App {
             AppEvent::Tick => {}
             AppEvent::StatusMessage(msg) => {
                 self.last_status = Some(msg);
+            }
+            AppEvent::GitHubRepoMetadataLoaded(meta) => {
+                self.is_repo_private = Some(meta.is_private);
             }
             AppEvent::GitHubPrsLoaded(prs) => {
                 self.prs_view.set_prs(prs);
@@ -2697,22 +2714,23 @@ impl App {
 
         // Bottom Header Row with Metadata Capsules
         let gh_target = self.github_target();
-        let repo_label = if let Some(target) = gh_target {
-            format!(
-                "{}/{} ({})",
-                target.owner,
-                target.repo,
-                self.i18n.t("header.private")
-            )
+        let (repo_icon, repo_label) = if let Some(target) = gh_target {
+            let is_priv = self.is_repo_private.unwrap_or(false);
+            let (icon, vis) = if is_priv {
+                (self.icons.lock_private(), self.i18n.t("header.private"))
+            } else {
+                (self.icons.globe_public(), self.i18n.t("header.public"))
+            };
+            (icon, format!("{}/{} ({})", target.owner, target.repo, vis))
         } else if let Some(git) = &self.git_service {
             let name = git
                 .workdir()
                 .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("repo");
-            format!("local @ {} ({})", name, self.i18n.t("header.private"))
+            (self.icons.folder_closed(), format!("local @ {}", name))
         } else {
-            format!("user @ repo ({})", self.i18n.t("header.private"))
+            (self.icons.folder_closed(), "local @ repo".to_string())
         };
 
         let (ci_icon, ci_label) = if let Some(run) = self.actions_view.runs.first() {
@@ -2735,7 +2753,7 @@ impl App {
         let mut bottom_spans = Vec::new();
         bottom_spans.push(Span::raw("  "));
         bottom_spans.extend(pill(
-            Some(""),
+            Some(repo_icon),
             &repo_label,
             self.theme.dim_fg,
             self.theme.selection_bg,
