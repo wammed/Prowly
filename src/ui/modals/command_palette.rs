@@ -53,6 +53,11 @@ impl PaletteAction {
             shortcut: None,
         },
         PaletteAction {
+            id: "fetch",
+            title: "Git: Fetch from All Remotes",
+            shortcut: Some("F5"),
+        },
+        PaletteAction {
             id: "stash",
             title: "Git: Stash All Changes",
             shortcut: None,

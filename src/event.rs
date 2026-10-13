@@ -19,6 +19,8 @@ pub enum AppEvent {
     Tick,
     StatusMessage(String),
     GitFetchCompleted(Result<String, String>),
+    GitPullCompleted(Result<String, String>),
+    GitPushCompleted(Result<String, String>),
     GitHubRepoMetadataLoaded(RepoMetadata),
     GitHubPrsLoaded(Vec<PullRequestItem>),
     GitHubRunsLoaded(Vec<WorkflowRunItem>),

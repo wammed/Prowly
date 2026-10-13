@@ -176,6 +176,9 @@ pub struct App {
 
     /// Last time an auto-fetch was triggered
     pub last_auto_fetch: std::time::Instant,
+
+    /// Last time local git status was refreshed
+    pub last_status_check: std::time::Instant,
 }
 
 impl App {
@@ -244,6 +247,7 @@ impl App {
             event_sender: None,
             needs_clear: false,
             last_auto_fetch: std::time::Instant::now(),
+            last_status_check: std::time::Instant::now(),
         };
 
         app.refresh_git_status();
@@ -299,6 +303,88 @@ impl App {
             } else {
                 // Synchronous fallback (e.g. testing)
                 let _ = git.cli_fetch();
+            }
+        }
+    }
+
+    /// Trigger background non-blocking git pull to incorporate remote changes into current branch.
+    pub fn trigger_background_pull(&mut self) {
+        if let Some(git) = &self.git_service {
+            self.last_status = Some("Pulling from remote...".to_string());
+            let workdir = git.workdir().to_path_buf();
+            if let Some(sender) = self.event_sender.clone() {
+                tokio::spawn(async move {
+                    let res = tokio::task::spawn_blocking(move || {
+                        std::process::Command::new("git")
+                            .current_dir(&workdir)
+                            .args(["pull"])
+                            .output()
+                            .map_err(|e| e.to_string())
+                            .and_then(|out| {
+                                if out.status.success() {
+                                    let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                                    let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+                                    let msg = if !stdout.is_empty() { stdout } else { stderr };
+                                    Ok(if msg.is_empty() { "Pulled updates".to_string() } else { msg })
+                                } else {
+                                    Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+                                }
+                            })
+                    })
+                    .await;
+
+                    match res {
+                        Ok(pull_res) => {
+                            let _ = sender.send(AppEvent::GitPullCompleted(pull_res));
+                        }
+                        Err(e) => {
+                            let _ = sender.send(AppEvent::GitPullCompleted(Err(e.to_string())));
+                        }
+                    }
+                });
+            } else {
+                let _ = git.cli_pull();
+            }
+        }
+    }
+
+    /// Trigger background non-blocking git push to publish local commits to remote.
+    pub fn trigger_background_push(&mut self) {
+        if let Some(git) = &self.git_service {
+            self.last_status = Some("Pushing to remote...".to_string());
+            let workdir = git.workdir().to_path_buf();
+            if let Some(sender) = self.event_sender.clone() {
+                tokio::spawn(async move {
+                    let res = tokio::task::spawn_blocking(move || {
+                        std::process::Command::new("git")
+                            .current_dir(&workdir)
+                            .args(["push"])
+                            .output()
+                            .map_err(|e| e.to_string())
+                            .and_then(|out| {
+                                if out.status.success() {
+                                    let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                                    let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+                                    let msg = if !stdout.is_empty() { stdout } else { stderr };
+                                    Ok(if msg.is_empty() { "Pushed updates".to_string() } else { msg })
+                                } else {
+                                    Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+                                }
+                            })
+                    })
+                    .await;
+
+                    match res {
+                        Ok(push_res) => {
+                            let _ = sender.send(AppEvent::GitPushCompleted(push_res));
+                        }
+                        Err(e) => {
+                            let _ = sender.send(AppEvent::GitPushCompleted(Err(e.to_string())));
+                        }
+                    }
+                });
+            } else {
+                let _ = git.cli_push();
             }
         }
     }
@@ -509,6 +595,12 @@ impl App {
                 self.needs_clear = true;
             }
             AppEvent::Tick => {
+                // Auto-refresh git status every 1.5s to detect local filesystem changes and CLI commits
+                if self.last_status_check.elapsed() >= std::time::Duration::from_millis(1500) {
+                    self.last_status_check = std::time::Instant::now();
+                    self.refresh_git_status();
+                }
+
                 let interval = self.config.git.auto_fetch_interval_secs;
                 if interval > 0 && self.last_auto_fetch.elapsed() >= std::time::Duration::from_secs(interval) {
                     self.last_auto_fetch = std::time::Instant::now();
@@ -518,7 +610,25 @@ impl App {
             AppEvent::StatusMessage(msg) => {
                 self.last_status = Some(msg);
             }
-            AppEvent::GitFetchCompleted(_res) => {
+            AppEvent::GitFetchCompleted(res) => {
+                match res {
+                    Ok(msg) => self.last_status = Some(format!("Fetch: {}", msg)),
+                    Err(e) => self.last_status = Some(format!("Fetch failed: {}", e)),
+                }
+                self.refresh_git_status();
+            }
+            AppEvent::GitPullCompleted(res) => {
+                match res {
+                    Ok(msg) => self.last_status = Some(format!("Pull: {}", msg)),
+                    Err(e) => self.last_status = Some(format!("Pull failed: {}", e)),
+                }
+                self.refresh_git_status();
+            }
+            AppEvent::GitPushCompleted(res) => {
+                match res {
+                    Ok(msg) => self.last_status = Some(format!("Push: {}", msg)),
+                    Err(e) => self.last_status = Some(format!("Push failed: {}", e)),
+                }
                 self.refresh_git_status();
             }
             AppEvent::GitHubRepoMetadataLoaded(meta) => {
@@ -1254,6 +1364,11 @@ impl App {
                 self.last_status = Some("Refreshed repository status and GitHub data (fetching remote...)".to_string());
             }
 
+            // F5: Fetch remote updates
+            KeyCode::F(5) => {
+                self.trigger_background_fetch();
+            }
+
             // Worktree actions in Worktrees tab
             KeyCode::Char('W') => {
                 if self.active_tab == AppTab::Worktrees {
@@ -1464,6 +1579,22 @@ impl App {
             return;
         }
 
+        // 6.2. Click on Fetch header button
+        if self.layout_areas.hits_fetch(x, y)
+            && mouse.kind == MouseEventKind::Down(MouseButton::Left)
+        {
+            self.trigger_background_fetch();
+            return;
+        }
+
+        // 6.4. Click on Pull header button
+        if self.layout_areas.hits_pull(x, y)
+            && mouse.kind == MouseEventKind::Down(MouseButton::Left)
+        {
+            self.trigger_background_pull();
+            return;
+        }
+
         // 7. Click on Sync / Remote Diff header button
         if self.layout_areas.hits_sync(x, y)
             && mouse.kind == MouseEventKind::Down(MouseButton::Left)
@@ -1636,7 +1767,10 @@ impl App {
                                 self.changes_view.hit_test_action_buttons(x, y, self.icons.use_nerd_font)
                             {
                                 match btn_action {
+                                    ChangesButtonAction::Commit => self.commit_staged_only(),
                                     ChangesButtonAction::CommitAndSync => self.commit_staged(),
+                                    ChangesButtonAction::Pull => self.trigger_background_pull(),
+                                    ChangesButtonAction::Fetch => self.trigger_background_fetch(),
                                     ChangesButtonAction::AiGenerate => {
                                         self.trigger_ai_generate_commit()
                                     }
@@ -1742,32 +1876,9 @@ impl App {
                 }
             }
             "commit" => self.commit_staged(),
-            "push" => {
-                if let Some(git) = &self.git_service {
-                    match git.cli_push() {
-                        Ok(msg) => {
-                            self.last_status = Some(format!("Push successful: {}", msg));
-                            self.refresh_git_status();
-                        }
-                        Err(e) => {
-                            self.last_status = Some(format!("Push failed: {}", e));
-                        }
-                    }
-                }
-            }
-            "pull" => {
-                if let Some(git) = &self.git_service {
-                    match git.cli_pull() {
-                        Ok(msg) => {
-                            self.last_status = Some(format!("Pull successful: {}", msg));
-                            self.refresh_git_status();
-                        }
-                        Err(e) => {
-                            self.last_status = Some(format!("Pull failed: {}", e));
-                        }
-                    }
-                }
-            }
+            "push" => self.trigger_background_push(),
+            "pull" => self.trigger_background_pull(),
+            "fetch" => self.trigger_background_fetch(),
             "stash" => {
                 if let Some(git) = &self.git_service {
                     match git.cli_stash_save("Prowly stash") {
@@ -1962,8 +2073,17 @@ impl App {
         }
     }
 
+    /// Commit staged changes locally without pushing.
+    pub fn commit_staged_only(&mut self) {
+        self.do_commit_staged(false);
+    }
+
     /// Commit staged changes using summary and description inputs, then push (Commit & Sync).
     pub fn commit_staged(&mut self) {
+        self.do_commit_staged(true);
+    }
+
+    fn do_commit_staged(&mut self, push: bool) {
         let summary = if self.changes_view.commit_summary.trim().is_empty() {
             self.last_status =
                 Some("Please enter a commit message or press Ctrl+G for AI message".to_string());
@@ -2005,11 +2125,15 @@ impl App {
             match git.commit_with_description(&summary, desc) {
                 Ok(oid) => {
                     let short_oid = &oid.to_string()[..7.min(oid.to_string().len())];
-                    let push_status = match git.cli_push() {
-                        Ok(_) => " & Synced (pushed)".to_string(),
-                        Err(e) => format!(" (push warning: {})", e),
-                    };
-                    self.last_status = Some(format!("Committed: {}{}", short_oid, push_status));
+                    if push {
+                        let push_status = match git.cli_push() {
+                            Ok(_) => " & Synced (pushed)".to_string(),
+                            Err(e) => format!(" (push warning: {})", e),
+                        };
+                        self.last_status = Some(format!("Committed: {}{}", short_oid, push_status));
+                    } else {
+                        self.last_status = Some(format!("Committed locally: {} (unpushed)", short_oid));
+                    }
                     self.changes_view.commit_summary.clear();
                     self.changes_view.commit_description.clear();
                     self.changes_view.focus = ChangesFocus::FileList;
@@ -2631,10 +2755,18 @@ impl App {
         top_spans.push(Span::raw(" "));
 
         // 3. Git Branch & Sync status Split Capsule
-        let branch_stats = format!(
-            "↑{} ↓{}",
-            self.repo_status.ahead, self.repo_status.behind
-        );
+        let uncommitted_count = self.repo_status.files.len();
+        let branch_stats = if uncommitted_count > 0 {
+            format!(
+                "↑{} ↓{} (*{})",
+                self.repo_status.ahead, self.repo_status.behind, uncommitted_count
+            )
+        } else {
+            format!(
+                "↑{} ↓{}",
+                self.repo_status.ahead, self.repo_status.behind
+            )
+        };
         let branch_spans = split_pill(
             Some(self.icons.branch()),
             &self.repo_status.branch,
@@ -2657,7 +2789,57 @@ impl App {
         top_spans.extend(branch_spans);
         top_spans.push(Span::raw(" "));
 
-        // 4. Sync State Capsule
+        // 4. Fetch Capsule Button
+        let fetch_spans = pill(
+            Some("󰦗"),
+            "Fetch",
+            self.theme.primary,
+            self.theme.selection_bg,
+            self.theme.header_bg,
+            self.icons.use_nerd_font,
+        );
+        let fetch_w = crate::ui::capsule::spans_width(&fetch_spans) as u16;
+        let fetch_x = branch_x + branch_w + 1;
+        self.layout_areas.fetch_button = Rect {
+            x: fetch_x,
+            y: top_area.y,
+            width: fetch_w.min(top_area.width.saturating_sub(fetch_x)),
+            height: 1,
+        };
+        top_spans.extend(fetch_spans);
+        top_spans.push(Span::raw(" "));
+
+        // 5. Pull Capsule Button (highlights in warning if behind > 0)
+        let pull_label = if self.repo_status.behind > 0 {
+            format!("Pull (↓{})", self.repo_status.behind)
+        } else {
+            "Pull".to_string()
+        };
+        let (pull_fg, pull_bg) = if self.repo_status.behind > 0 {
+            (self.theme.bg, self.theme.warning)
+        } else {
+            (self.theme.secondary, self.theme.selection_bg)
+        };
+        let pull_spans = pill(
+            Some("󰦖"),
+            &pull_label,
+            pull_fg,
+            pull_bg,
+            self.theme.header_bg,
+            self.icons.use_nerd_font,
+        );
+        let pull_w = crate::ui::capsule::spans_width(&pull_spans) as u16;
+        let pull_x = fetch_x + fetch_w + 1;
+        self.layout_areas.pull_button = Rect {
+            x: pull_x,
+            y: top_area.y,
+            width: pull_w.min(top_area.width.saturating_sub(pull_x)),
+            height: 1,
+        };
+        top_spans.extend(pull_spans);
+        top_spans.push(Span::raw(" "));
+
+        // 6. Sync State Capsule
         let sync_spans = pill(
             Some(sync_icon),
             sync_label,
@@ -2667,7 +2849,7 @@ impl App {
             self.icons.use_nerd_font,
         );
         let sync_w = crate::ui::capsule::spans_width(&sync_spans) as u16;
-        let sync_x = branch_x + branch_w + 1;
+        let sync_x = pull_x + pull_w + 1;
         self.layout_areas.sync_button = Rect {
             x: sync_x,
             y: top_area.y,

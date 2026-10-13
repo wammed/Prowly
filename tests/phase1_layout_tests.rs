@@ -74,4 +74,13 @@ fn test_mouse_hit_testing() {
     assert!(contains_point(rect, 29, 14));
     assert!(!contains_point(rect, 30, 10));
     assert!(!contains_point(rect, 9, 10));
+
+    // Test fetch and pull button hits
+    let mut layout_with_fetch = layout;
+    layout_with_fetch.fetch_button = Rect::new(50, 0, 8, 1);
+    layout_with_fetch.pull_button = Rect::new(59, 0, 7, 1);
+    assert!(layout_with_fetch.hits_fetch(52, 0));
+    assert!(!layout_with_fetch.hits_fetch(60, 0));
+    assert!(layout_with_fetch.hits_pull(60, 0));
+    assert!(!layout_with_fetch.hits_pull(52, 0));
 }

@@ -11,6 +11,8 @@ pub struct LayoutAreas {
     pub header_bottom: Rect,
     pub open_repo_button: Rect,
     pub branch_button: Rect,
+    pub fetch_button: Rect,
+    pub pull_button: Rect,
     pub sync_button: Rect,
     pub ai_status_button: Rect,
     pub palette_button: Rect,
@@ -154,6 +156,8 @@ impl LayoutAreas {
             header_bottom,
             open_repo_button,
             branch_button,
+            fetch_button: Rect::default(),
+            pull_button: Rect::default(),
             sync_button,
             ai_status_button,
             palette_button,
@@ -203,6 +207,16 @@ impl LayoutAreas {
     /// Check if coordinates (x, y) hit the branch button in header.
     pub fn hits_branch(&self, x: u16, y: u16) -> bool {
         contains_point(self.branch_button, x, y)
+    }
+
+    /// Check if coordinates (x, y) hit the fetch button in header.
+    pub fn hits_fetch(&self, x: u16, y: u16) -> bool {
+        contains_point(self.fetch_button, x, y)
+    }
+
+    /// Check if coordinates (x, y) hit the pull button in header.
+    pub fn hits_pull(&self, x: u16, y: u16) -> bool {
+        contains_point(self.pull_button, x, y)
     }
 
     /// Check if coordinates (x, y) hit the remote sync indicator in header.

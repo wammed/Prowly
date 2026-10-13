@@ -26,7 +26,10 @@ pub enum ChangesFocus {
 /// Action button clicked in Changes view.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChangesButtonAction {
+    Commit,
     CommitAndSync,
+    Pull,
+    Fetch,
     AiGenerate,
     AiReview,
     StashAll,
@@ -107,7 +110,10 @@ impl ChangesView {
         let rel_x = x.saturating_sub(area.x);
         // Pill widths depending on nerd font mode
         let buttons = [
+            ("Commit", ChangesButtonAction::Commit),
             ("Commit & Sync", ChangesButtonAction::CommitAndSync),
+            ("Pull", ChangesButtonAction::Pull),
+            ("Fetch", ChangesButtonAction::Fetch),
             ("AI Generate", ChangesButtonAction::AiGenerate),
             ("AI Review", ChangesButtonAction::AiReview),
             ("Stash All", ChangesButtonAction::StashAll),
@@ -463,9 +469,36 @@ impl ChangesView {
         let mut buttons = Vec::new();
         buttons.extend(crate::ui::capsule::pill(
             Some(icons.commit()),
+            "Commit",
+            theme.primary,
+            theme.selection_bg,
+            theme.bg,
+            icons.use_nerd_font,
+        ));
+        buttons.push(Span::raw(" "));
+        buttons.extend(crate::ui::capsule::pill(
+            Some(icons.commit()),
             "Commit & Sync",
             theme.bg,
             theme.success,
+            theme.bg,
+            icons.use_nerd_font,
+        ));
+        buttons.push(Span::raw(" "));
+        buttons.extend(crate::ui::capsule::pill(
+            Some("󰦖"),
+            "Pull",
+            theme.secondary,
+            theme.selection_bg,
+            theme.bg,
+            icons.use_nerd_font,
+        ));
+        buttons.push(Span::raw(" "));
+        buttons.extend(crate::ui::capsule::pill(
+            Some("󰦗"),
+            "Fetch",
+            theme.info,
+            theme.selection_bg,
             theme.bg,
             icons.use_nerd_font,
         ));

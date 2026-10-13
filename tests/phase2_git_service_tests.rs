@@ -264,5 +264,89 @@ fn test_git_ahead_and_behind_sync() {
     assert!(unpulled[0].contains("Commit from remote user"));
 }
 
+#[test]
+fn test_external_cli_commit_detection() {
+    let remote_dir = TempDir::new().unwrap();
+    let local_dir = TempDir::new().unwrap();
+
+    git2::Repository::init_bare(remote_dir.path()).unwrap();
+
+    let repo = git2::Repository::init(local_dir.path()).unwrap();
+    let mut config = repo.config().unwrap();
+    config.set_str("user.name", "Tester").unwrap();
+    config.set_str("user.email", "tester@test.local").unwrap();
+    fs::write(local_dir.path().join("base.txt"), "base\n").unwrap();
+    let git = GitService::open(local_dir.path()).unwrap();
+    git.stage_all().unwrap();
+    git.commit("Initial commit").unwrap();
+    repo.remote("origin", remote_dir.path().to_str().unwrap()).unwrap();
+    git.cli_push().unwrap();
+
+    assert_eq!(git.get_status().unwrap().ahead, 0);
+
+    // Commit via external git CLI command!
+    fs::write(local_dir.path().join("external.txt"), "external\n").unwrap();
+    let _ = std::process::Command::new("git")
+        .current_dir(local_dir.path())
+        .args(["add", "."])
+        .output()
+        .unwrap();
+    let _ = std::process::Command::new("git")
+        .current_dir(local_dir.path())
+        .args(["commit", "-m", "External commit from terminal"])
+        .output()
+        .unwrap();
+
+    let status = git.get_status().unwrap();
+    assert_eq!(status.ahead, 1, "Status should detect commit made by external git CLI");
+}
+
+#[test]
+fn test_cli_pull_updates_local_branch() {
+    let remote_dir = TempDir::new().unwrap();
+    let local1_dir = TempDir::new().unwrap();
+    let local2_dir = TempDir::new().unwrap();
+
+    git2::Repository::init_bare(remote_dir.path()).unwrap();
+
+    let repo1 = git2::Repository::init(local1_dir.path()).unwrap();
+    let mut config1 = repo1.config().unwrap();
+    config1.set_str("user.name", "Tester1").unwrap();
+    config1.set_str("user.email", "tester1@test.local").unwrap();
+    fs::write(local1_dir.path().join("base.txt"), "base\n").unwrap();
+    let git1 = GitService::open(local1_dir.path()).unwrap();
+    git1.stage_all().unwrap();
+    git1.commit("Initial commit").unwrap();
+    repo1.remote("origin", remote_dir.path().to_str().unwrap()).unwrap();
+    git1.cli_push().unwrap();
+
+    // Local 2 clones, creates commit, and pushes
+    let repo2 = git2::Repository::clone(remote_dir.path().to_str().unwrap(), local2_dir.path()).unwrap();
+    let mut config2 = repo2.config().unwrap();
+    config2.set_str("user.name", "Tester2").unwrap();
+    config2.set_str("user.email", "tester2@test.local").unwrap();
+    fs::write(local2_dir.path().join("file2.txt"), "content2\n").unwrap();
+    let git2 = GitService::open(local2_dir.path()).unwrap();
+    git2.stage_all().unwrap();
+    git2.commit("Commit from user 2").unwrap();
+    git2.cli_push().unwrap();
+
+    // Local 1 fetches and sees behind: 1
+    git1.cli_fetch().unwrap();
+    let status_before = git1.get_status().unwrap();
+    assert_eq!(status_before.behind, 1);
+
+    // Local 1 pulls
+    let pull_res = git1.cli_pull();
+    assert!(pull_res.is_ok(), "Pull should succeed: {:?}", pull_res);
+
+    // After pull, behind should be 0, and file2.txt should exist locally
+    let status_after = git1.get_status().unwrap();
+    assert_eq!(status_after.behind, 0);
+    assert!(local1_dir.path().join("file2.txt").exists());
+}
+
+
+
 
 
