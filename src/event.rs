@@ -18,6 +18,7 @@ pub enum AppEvent {
     Resize(u16, u16),
     Tick,
     StatusMessage(String),
+    GitFetchCompleted(Result<String, String>),
     GitHubRepoMetadataLoaded(RepoMetadata),
     GitHubPrsLoaded(Vec<PullRequestItem>),
     GitHubRunsLoaded(Vec<WorkflowRunItem>),

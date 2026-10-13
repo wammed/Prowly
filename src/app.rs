@@ -173,6 +173,9 @@ pub struct App {
 
     /// Flag requesting full terminal clear and buffer reset on next frame
     pub needs_clear: bool,
+
+    /// Last time an auto-fetch was triggered
+    pub last_auto_fetch: std::time::Instant,
 }
 
 impl App {
@@ -240,6 +243,7 @@ impl App {
             show_all_files: false,
             event_sender: None,
             needs_clear: false,
+            last_auto_fetch: std::time::Instant::now(),
         };
 
         app.refresh_git_status();
@@ -256,6 +260,47 @@ impl App {
     /// Set repository visibility explicitly (true = private, false = public).
     pub fn set_repo_visibility(&mut self, is_private: bool) {
         self.is_repo_private = Some(is_private);
+    }
+
+    /// Trigger background non-blocking git fetch to sync remote tracking refs.
+    pub fn trigger_background_fetch(&mut self) {
+        if let Some(git) = &self.git_service {
+            let workdir = git.workdir().to_path_buf();
+            if let Some(sender) = self.event_sender.clone() {
+                tokio::spawn(async move {
+                    let res = tokio::task::spawn_blocking(move || {
+                        std::process::Command::new("git")
+                            .current_dir(&workdir)
+                            .args(["fetch", "--all", "--prune"])
+                            .output()
+                            .map_err(|e| e.to_string())
+                            .and_then(|out| {
+                                if out.status.success() {
+                                    let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                                    let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+                                    let msg = if !stdout.is_empty() { stdout } else { stderr };
+                                    Ok(if msg.is_empty() { "Fetched updates".to_string() } else { msg })
+                                } else {
+                                    Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+                                }
+                            })
+                    })
+                    .await;
+
+                    match res {
+                        Ok(fetch_res) => {
+                            let _ = sender.send(AppEvent::GitFetchCompleted(fetch_res));
+                        }
+                        Err(e) => {
+                            let _ = sender.send(AppEvent::GitFetchCompleted(Err(e.to_string())));
+                        }
+                    }
+                });
+            } else {
+                // Synchronous fallback (e.g. testing)
+                let _ = git.cli_fetch();
+            }
+        }
     }
 
     /// Refresh repository status, directory map, and active diff from Git engine.
@@ -463,9 +508,18 @@ impl App {
                 self.layout_areas = LayoutAreas::compute(Rect::new(0, 0, w, h));
                 self.needs_clear = true;
             }
-            AppEvent::Tick => {}
+            AppEvent::Tick => {
+                let interval = self.config.git.auto_fetch_interval_secs;
+                if interval > 0 && self.last_auto_fetch.elapsed() >= std::time::Duration::from_secs(interval) {
+                    self.last_auto_fetch = std::time::Instant::now();
+                    self.trigger_background_fetch();
+                }
+            }
             AppEvent::StatusMessage(msg) => {
                 self.last_status = Some(msg);
+            }
+            AppEvent::GitFetchCompleted(_res) => {
+                self.refresh_git_status();
             }
             AppEvent::GitHubRepoMetadataLoaded(meta) => {
                 self.is_repo_private = Some(meta.is_private);
@@ -1191,10 +1245,13 @@ impl App {
                 self.open_selected_in_editor();
             }
 
-            // 'R': Refresh GitHub data
+            // 'R': Refresh GitHub data, repository status, and trigger background fetch
             KeyCode::Char('R') => {
+                self.refresh_git_status();
+                self.refresh_worktrees();
                 self.refresh_github();
-                self.last_status = Some("Refreshed GitHub PRs, Actions, and Alerts".to_string());
+                self.trigger_background_fetch();
+                self.last_status = Some("Refreshed repository status and GitHub data (fetching remote...)".to_string());
             }
 
             // Worktree actions in Worktrees tab
@@ -1755,6 +1812,7 @@ impl App {
                 self.refresh_git_status();
                 self.refresh_worktrees();
                 self.refresh_github();
+                self.trigger_background_fetch();
                 self.last_status = Some("Refreshed repository status and GitHub data".to_string());
             }
             "ai_ci_failure" => self.trigger_ai_ci_analysis(),
@@ -2024,6 +2082,7 @@ impl App {
 
     /// Open Remote Diff Preview dropdown.
     pub fn open_remote_diff_preview(&mut self) {
+        self.trigger_background_fetch();
         if let Some(git) = &self.git_service {
             if let Ok((unpushed, unpulled)) = git.get_unpushed_unpulled_commits() {
                 let upstream = self.repo_status.upstream.clone();

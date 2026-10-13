@@ -99,6 +99,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut app = App::new(config);
     app.set_event_sender(events.sender());
     app.refresh_github();
+    app.trigger_background_fetch();
 
     // Run TUI event loop
     while !app.should_quit {

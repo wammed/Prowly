@@ -64,17 +64,60 @@ impl GitService {
                 branch_name = name.to_string();
             }
 
+            let local_oid = head
+                .peel_to_commit()
+                .map(|c| c.id())
+                .ok()
+                .or_else(|| head.target());
+
             if let Ok(local_branch) = self.repo.find_branch(&branch_name, git2::BranchType::Local) {
-                if let Ok(upstream) = local_branch.upstream() {
+                let upstream_branch = local_branch.upstream().ok().or_else(|| {
+                    self.repo
+                        .find_branch(&format!("origin/{}", branch_name), git2::BranchType::Remote)
+                        .ok()
+                });
+
+                if let Some(upstream) = upstream_branch {
                     if let Ok(Some(up_name)) = upstream.name() {
                         upstream_name = Some(up_name.to_string());
                     }
-                    if let (Some(local_oid), Some(up_oid)) =
-                        (head.target(), upstream.get().target())
-                    {
-                        if let Ok((a, b)) = self.repo.graph_ahead_behind(local_oid, up_oid) {
+
+                    let up_oid = upstream
+                        .get()
+                        .peel_to_commit()
+                        .map(|c| c.id())
+                        .ok()
+                        .or_else(|| upstream.get().target());
+
+                    if let (Some(l_oid), Some(u_oid)) = (local_oid, up_oid) {
+                        if let Ok((a, b)) = self.repo.graph_ahead_behind(l_oid, u_oid) {
                             ahead = a;
                             behind = b;
+                        }
+                    }
+                }
+            }
+
+            // CLI Fallback: If ahead/behind couldn't be determined or upstream was not found,
+            // query git CLI which natively understands tracking configurations
+            if upstream_name.is_none() || (ahead == 0 && behind == 0) {
+                if let Ok(cli_res) = self.run_git_cli(&["rev-list", "--left-right", "--count", "HEAD...@{upstream}"]) {
+                    let parts: Vec<&str> = cli_res.split_whitespace().collect();
+                    if parts.len() == 2 {
+                        if let (Ok(a), Ok(b)) = (parts[0].parse::<usize>(), parts[1].parse::<usize>()) {
+                            ahead = a;
+                            behind = b;
+                        }
+                    }
+                } else if let Ok(cli_res) = self.run_git_cli(&["rev-list", "--left-right", "--count", &format!("HEAD...origin/{}", branch_name)]) {
+                    let parts: Vec<&str> = cli_res.split_whitespace().collect();
+                    if parts.len() == 2 {
+                        if let (Ok(a), Ok(b)) = (parts[0].parse::<usize>(), parts[1].parse::<usize>()) {
+                            ahead = a;
+                            behind = b;
+                            if upstream_name.is_none() {
+                                upstream_name = Some(format!("origin/{}", branch_name));
+                            }
                         }
                     }
                 }
@@ -475,6 +518,11 @@ impl GitService {
                 Err(e)
             }
         }
+    }
+
+    /// Invoke Git CLI to fetch all remotes.
+    pub fn cli_fetch(&self) -> Result<String, GitError> {
+        self.run_git_cli(&["fetch", "--all", "--prune"])
     }
 
     /// Invoke Git CLI for pull.

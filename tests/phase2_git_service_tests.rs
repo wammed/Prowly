@@ -199,4 +199,70 @@ fn test_git_cli_push_auto_upstream_fallback() {
     assert_eq!(status.ahead, 0);
 }
 
+#[test]
+fn test_git_ahead_and_behind_sync() {
+    let remote_dir = TempDir::new().unwrap();
+    let local1_dir = TempDir::new().unwrap();
+    let local2_dir = TempDir::new().unwrap();
+
+    // 1. Bare remote
+    git2::Repository::init_bare(remote_dir.path()).unwrap();
+
+    // 2. Local 1 init and push initial commit
+    let repo1 = git2::Repository::init(local1_dir.path()).unwrap();
+    let mut config1 = repo1.config().unwrap();
+    config1.set_str("user.name", "Tester1").unwrap();
+    config1.set_str("user.email", "tester1@test.local").unwrap();
+    fs::write(local1_dir.path().join("base.txt"), "base content\n").unwrap();
+    let mut index1 = repo1.index().unwrap();
+    index1.add_path(std::path::Path::new("base.txt")).unwrap();
+    let tree_oid1 = index1.write_tree().unwrap();
+    index1.write().unwrap();
+    let tree1 = repo1.find_tree(tree_oid1).unwrap();
+    let sig1 = repo1.signature().unwrap();
+    repo1.commit(Some("HEAD"), &sig1, &sig1, "Base commit", &tree1, &[]).unwrap();
+    repo1.remote("origin", remote_dir.path().to_str().unwrap()).unwrap();
+
+    let git1 = GitService::open(local1_dir.path()).unwrap();
+    git1.cli_push().unwrap();
+
+    // 3. Local 2 clones from remote, adds a remote commit, and pushes
+    let repo2 = git2::Repository::clone(remote_dir.path().to_str().unwrap(), local2_dir.path()).unwrap();
+    let mut config2 = repo2.config().unwrap();
+    config2.set_str("user.name", "Tester2").unwrap();
+    config2.set_str("user.email", "tester2@test.local").unwrap();
+    let git2 = GitService::open(local2_dir.path()).unwrap();
+    fs::write(local2_dir.path().join("from_tester2.txt"), "tester2\n").unwrap();
+    git2.stage_all().unwrap();
+    git2.commit("Commit from remote user").unwrap();
+    git2.cli_push().unwrap();
+
+    // 4. Local 1 creates a local commit without pushing (should be ahead: 1)
+    fs::write(local1_dir.path().join("local_only.txt"), "local commit\n").unwrap();
+    git1.stage_all().unwrap();
+    git1.commit("Local unpushed commit").unwrap();
+
+    let status_before_fetch = git1.get_status().unwrap();
+    assert_eq!(status_before_fetch.ahead, 1);
+    // Before fetch, local1's refs/remotes/origin does not have tester2's commit yet, so behind is 0
+    assert_eq!(status_before_fetch.behind, 0);
+
+    // 5. Run cli_fetch() in Local 1
+    let fetch_res = git1.cli_fetch();
+    assert!(fetch_res.is_ok(), "Fetch should succeed: {:?}", fetch_res);
+
+    // 6. After fetch, local 1 should reflect ahead: 1, behind: 1
+    let status_after_fetch = git1.get_status().unwrap();
+    assert_eq!(status_after_fetch.ahead, 1);
+    assert_eq!(status_after_fetch.behind, 1);
+
+    // 7. Verify unpushed and unpulled commit subjects
+    let (unpushed, unpulled) = git1.get_unpushed_unpulled_commits().unwrap();
+    assert_eq!(unpushed.len(), 1);
+    assert!(unpushed[0].contains("Local unpushed commit"));
+    assert_eq!(unpulled.len(), 1);
+    assert!(unpulled[0].contains("Commit from remote user"));
+}
+
+
 
