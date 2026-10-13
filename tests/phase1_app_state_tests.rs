@@ -269,5 +269,57 @@ fn test_repo_badge_visibility_rendering() {
     );
 }
 
+#[test]
+fn test_stage_all_action_button_and_batch_staging() {
+    use prowly::ui::views::changes::ChangesButtonAction;
+    use ratatui::layout::Rect;
+
+    let mut app = App::new(Config::default());
+    app.git_service = None;
+    app.layout_areas.right_content = Rect {
+        x: 0,
+        y: 0,
+        width: 140,
+        height: 30,
+    };
+    app.changes_view.actions_bar_area = Rect {
+        x: 10,
+        y: 20,
+        width: 120,
+        height: 1,
+    };
+
+    // 1. Verify hit_test_action_buttons hits StageAll at relative x=0..14
+    let hit = app.changes_view.hit_test_action_buttons(12, 20, true);
+    assert_eq!(hit, Some(ChangesButtonAction::StageAll));
+
+    // 2. Prepare mock repo status with unstaged files
+    app.repo_status.files = vec![
+        prowly::git::GitFileItem {
+            path: "file1.txt".to_string(),
+            status: prowly::git::FileStatus::Modified,
+            staged: false,
+        },
+        prowly::git::GitFileItem {
+            path: "file2.txt".to_string(),
+            status: prowly::git::FileStatus::Untracked,
+            staged: false,
+        },
+    ];
+
+    // 3. Trigger Stage All via mouse event on the action button
+    let mouse = crossterm::event::MouseEvent {
+        kind: crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left),
+        column: 12,
+        row: 20,
+        modifiers: crossterm::event::KeyModifiers::NONE,
+    };
+    app.handle_mouse(mouse);
+
+    // 4. Verify all files are now staged
+    assert!(app.repo_status.files.iter().all(|f| f.staged));
+    assert_eq!(app.last_status.as_deref(), Some("Staged all files"));
+}
+
 
 

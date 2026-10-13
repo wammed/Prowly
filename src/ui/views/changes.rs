@@ -26,6 +26,7 @@ pub enum ChangesFocus {
 /// Action button clicked in Changes view.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChangesButtonAction {
+    StageAll,
     Commit,
     CommitAndSync,
     Pull,
@@ -110,6 +111,7 @@ impl ChangesView {
         let rel_x = x.saturating_sub(area.x);
         // Pill widths depending on nerd font mode
         let buttons = [
+            ("Stage All", ChangesButtonAction::StageAll),
             ("Commit", ChangesButtonAction::Commit),
             ("Commit & Sync", ChangesButtonAction::CommitAndSync),
             ("Pull", ChangesButtonAction::Pull),
@@ -467,6 +469,15 @@ impl ChangesView {
 
         // Action buttons bar with GUI pills
         let mut buttons = Vec::new();
+        buttons.extend(crate::ui::capsule::pill(
+            Some(icons.checkbox_checked()),
+            "Stage All",
+            theme.success,
+            theme.selection_bg,
+            theme.bg,
+            icons.use_nerd_font,
+        ));
+        buttons.push(Span::raw(" "));
         buttons.extend(crate::ui::capsule::pill(
             Some(icons.commit()),
             "Commit",

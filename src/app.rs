@@ -1374,13 +1374,7 @@ impl App {
             },
 
             // 'a': Stage All
-            KeyCode::Char('a') => {
-                if let Some(git) = &self.git_service {
-                    let _ = git.stage_all();
-                    self.refresh_git_status();
-                    self.last_status = Some("Staged all files".to_string());
-                }
-            }
+            KeyCode::Char('a') => self.stage_all_files(),
 
             // 'u': Unstage All
             KeyCode::Char('u') => {
@@ -1910,6 +1904,7 @@ impl App {
                                 self.changes_view.hit_test_action_buttons(x, y, self.icons.use_nerd_font)
                             {
                                 match btn_action {
+                                    ChangesButtonAction::StageAll => self.stage_all_files(),
                                     ChangesButtonAction::Commit => self.commit_staged_only(),
                                     ChangesButtonAction::CommitAndSync => self.commit_staged(),
                                     ChangesButtonAction::Pull => self.trigger_background_pull(),
@@ -2012,13 +2007,7 @@ impl App {
     /// Execute an action selected from the Command Palette.
     pub fn execute_palette_action(&mut self, action_id: &str) {
         match action_id {
-            "stage_all" => {
-                if let Some(git) = &self.git_service {
-                    let _ = git.stage_all();
-                    self.refresh_git_status();
-                    self.last_status = Some("Staged all files".to_string());
-                }
-            }
+            "stage_all" => self.stage_all_files(),
             "unstage_all" => {
                 if let Some(git) = &self.git_service {
                     let _ = git.unstage_all();
@@ -2202,6 +2191,26 @@ impl App {
             {
                 item_mut.staged = !item_mut.staged;
             }
+        }
+    }
+
+    /// Stage all changed files.
+    pub fn stage_all_files(&mut self) {
+        if let Some(git) = &self.git_service {
+            match git.stage_all() {
+                Ok(_) => {
+                    self.refresh_git_status();
+                    self.last_status = Some("Staged all files".to_string());
+                }
+                Err(e) => {
+                    self.last_status = Some(format!("Failed to stage all: {}", e));
+                }
+            }
+        } else {
+            for f in &mut self.repo_status.files {
+                f.staged = true;
+            }
+            self.last_status = Some("Staged all files".to_string());
         }
     }
 
