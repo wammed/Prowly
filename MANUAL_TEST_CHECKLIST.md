@@ -118,6 +118,13 @@
   - [ ] メニューから `Copy File Path`（または <kbd>y</kbd> キー）を選択すると、対象パスがシステムクリップボードにコピーされる
 - [ ] **5.5 単一ファイルのStash**
   - [ ] メニューから `Stash this file` を選択すると、そのファイルのみがピンポイントでStash退避される
+- [ ] **5.6 Markdown 簡易プレビュー (Preview Markdown)**
+  - [ ] ファイル行でメニューを開き、`Preview Markdown (m)` を選択（またはコマンドパレットから `View: Preview Markdown for Selected File` を実行）
+  - [ ] フローティングモーダルが開き、見出し・太字・コードブロック・リスト・引用等がテーマに沿った配色でリッチに描画される
+  - [ ] <kbd>j</kbd> / <kbd>k</kbd> / <kbd>PageDown</kbd> / <kbd>PageUp</kbd> / <kbd>Ctrl+d</kbd> / <kbd>Ctrl+u</kbd> でスムーズにスクロールできる
+  - [ ] <kbd>g</kbd> / <kbd>G</kbd> で先頭・末尾へ即時ジャンプできる
+  - [ ] <kbd>y</kbd> キーで内容がクリップボードにコピーされる
+  - [ ] <kbd>Esc</kbd> または <kbd>q</kbd> でモーダルが正常に閉じる
 
 ---
 

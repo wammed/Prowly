@@ -19,9 +19,9 @@ use crate::services::{
 use crate::ui::layout::LayoutAreas;
 use crate::ui::modals::{
     AiAssistantModal, BranchSwitcherModal, CommandPaletteModal, ConflictResolverModal, ContextMenu,
-    ContextMenuAction, HistoryActionState, HistoryActionsModal, HistoryMenuAction, OpenRepoAction,
-    OpenRepoModal, PaletteEnterResult, RebaseModal, RemoteDiffPreviewModal, SettingsAction,
-    SettingsModal,
+    ContextMenuAction, HistoryActionState, HistoryActionsModal, HistoryMenuAction,
+    MarkdownPreviewModal, OpenRepoAction, OpenRepoModal, PaletteEnterResult, RebaseModal,
+    RemoteDiffPreviewModal, SettingsAction, SettingsModal,
 };
 use crate::ui::theme::{Theme, ThemeId};
 use crate::ui::views::{
@@ -170,6 +170,7 @@ pub struct App {
     pub history_modal: HistoryActionsModal,
     pub remote_diff_preview: RemoteDiffPreviewModal,
     pub rebase_modal: RebaseModal,
+    pub markdown_preview_modal: MarkdownPreviewModal,
     pub settings_modal: SettingsModal,
     pub open_repo_modal: OpenRepoModal,
 
@@ -251,6 +252,7 @@ impl App {
             history_modal: HistoryActionsModal::new(),
             remote_diff_preview: RemoteDiffPreviewModal::new(),
             rebase_modal: RebaseModal::new(),
+            markdown_preview_modal: MarkdownPreviewModal::new(),
             settings_modal: SettingsModal::new(),
             open_repo_modal: OpenRepoModal::new(),
             all_repo_files: Vec::new(),
@@ -901,6 +903,31 @@ impl App {
         if self.remote_diff_preview.is_open {
             match key.code {
                 KeyCode::Esc | KeyCode::Enter => self.remote_diff_preview.close(),
+                _ => {}
+            }
+            return;
+        }
+
+        // 3.5. Markdown Preview Modal captures keys
+        if self.markdown_preview_modal.is_open {
+            match key.code {
+                KeyCode::Esc | KeyCode::Char('q') => self.markdown_preview_modal.close(),
+                KeyCode::Up | KeyCode::Char('k') => self.markdown_preview_modal.scroll_up(1),
+                KeyCode::Down | KeyCode::Char('j') => self.markdown_preview_modal.scroll_down(1),
+                KeyCode::PageUp => self.markdown_preview_modal.scroll_up(15),
+                KeyCode::PageDown => self.markdown_preview_modal.scroll_down(15),
+                KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    self.markdown_preview_modal.scroll_up(10);
+                }
+                KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    self.markdown_preview_modal.scroll_down(10);
+                }
+                KeyCode::Char('g') | KeyCode::Home => self.markdown_preview_modal.scroll_to_top(),
+                KeyCode::Char('G') | KeyCode::End => self.markdown_preview_modal.scroll_to_bottom(),
+                KeyCode::Char('y') => {
+                    let _ = self.clipboard.copy_text(&self.markdown_preview_modal.raw_content);
+                    self.last_status = Some("Copied Markdown content to clipboard".to_string());
+                }
                 _ => {}
             }
             return;
@@ -2001,6 +2028,9 @@ impl App {
                 let ctx = self.capture_ai_context();
                 self.ai_modal.open_with_context(&ctx);
             }
+            ContextMenuAction::PreviewMarkdown => {
+                self.open_markdown_preview_for_selected();
+            }
         }
     }
 
@@ -2058,6 +2088,7 @@ impl App {
             "stage_selected" => self.toggle_stage_selected(),
             "stash_selected" => self.stash_selected_file(),
             "open_editor" => self.open_selected_in_editor(),
+            "preview_markdown" => self.open_markdown_preview_for_selected(),
             "reveal_file_manager" => self.reveal_selected_in_file_manager(),
             "refresh" => {
                 self.refresh_git_status();
@@ -2534,6 +2565,37 @@ impl App {
                     self.refresh_git_status();
                 }
             }
+        }
+    }
+
+    /// Open Markdown preview modal for currently targeted or selected file.
+    pub fn open_markdown_preview_for_selected(&mut self) {
+        let file_path = self.context_menu.target_file.clone().or_else(|| {
+            self.filtered_files()
+                .get(self.changes_view.file_scroll.selected_index)
+                .map(|item| item.path.clone())
+        });
+
+        if let Some(rel_path) = file_path {
+            let full_path = if let Some(git) = &self.git_service {
+                git.workdir().join(&rel_path)
+            } else {
+                std::path::PathBuf::from(&rel_path)
+            };
+
+            match std::fs::read_to_string(&full_path) {
+                Ok(content) => {
+                    self.markdown_preview_modal
+                        .open(rel_path.clone(), content, &self.theme);
+                    self.last_status = Some(format!("Previewing Markdown: {}", rel_path));
+                }
+                Err(e) => {
+                    self.last_status =
+                        Some(format!("Could not read file ({}): {}", rel_path, e));
+                }
+            }
+        } else {
+            self.last_status = Some("No file selected for Markdown preview".to_string());
         }
     }
 
@@ -3021,6 +3083,12 @@ impl App {
         // 14. History Actions Modal Overlay (if open)
         if self.history_modal.is_open {
             self.history_modal
+                .render(frame, &self.theme, &self.icons, area);
+        }
+
+        // 15. Markdown Preview Modal Overlay (if open)
+        if self.markdown_preview_modal.is_open {
+            self.markdown_preview_modal
                 .render(frame, &self.theme, &self.icons, area);
         }
     }

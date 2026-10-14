@@ -3,6 +3,7 @@
 pub mod capsule;
 pub mod icons;
 pub mod layout;
+pub mod markdown;
 pub mod modals;
 pub mod theme;
 pub mod views;

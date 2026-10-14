@@ -31,6 +31,14 @@ fn test_context_menu_navigation() {
 
     menu.previous();
     assert_eq!(menu.selected_action(), ContextMenuAction::SafeDiscard);
+
+    // Navigate to PreviewMarkdown
+    menu.next(); // CopyPath
+    menu.next(); // CopyDiff
+    menu.next(); // AskAi
+    menu.next(); // PreviewMarkdown
+    assert_eq!(menu.selected_action(), ContextMenuAction::PreviewMarkdown);
+    assert_eq!(menu.selected_action().label(), "Preview Markdown (m)");
 }
 
 #[test]

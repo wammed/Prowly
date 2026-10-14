@@ -108,6 +108,11 @@ impl PaletteAction {
             shortcut: Some("e"),
         },
         PaletteAction {
+            id: "preview_markdown",
+            title: "View: Preview Markdown for Selected File",
+            shortcut: Some("m"),
+        },
+        PaletteAction {
             id: "reveal_file_manager",
             title: "View: Reveal Selected in File Manager",
             shortcut: None,

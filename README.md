@@ -57,6 +57,10 @@ Whether you prefer keyboard shortcuts or intuitive mouse interactions (clicking,
   - Layer 2: 110+ Standard Git CLI Subcommands Catalog with category badges & descriptions.
   - Layer 3: Direct argument/option input with Tab flag autocompletion.
   - Features breadcrumbs navigation, Esc/Backspace hierarchical rollback, direct shortcut jumps, and a safety guard with two-step Enter confirmation for destructive operations.
+- 📝 **Markdown Rich Preview (`m` / Context Menu / Command Palette)**:
+  - Scrollable floating modal overlay rendering READMEs, documentation, and PR descriptions in rich terminal formatting matching your active color theme.
+  - Full support for headings (H1-H6), bold, italic, inline code, fenced code blocks with language tags, checklists, bullet/numbered lists, blockquotes, and links.
+  - Fast page scrolling (`PgUp`/`PgDn`), top/bottom jump (`g`/`G`), and direct clipboard copy (`y`).
 - 🎨 **21 Curated Color Themes**: Catppuccin, Tokyo Night, Gruvbox, Nord, Dracula, Solarized, One, Rosé Pine, Monokai Pro, Synthwave '84, Everforest Dark.
 - 🌐 **Full Bilingual Support**: Instant switching between English and Japanese (`l`).
 - 🚀 **App Launcher Integration**: Seamless FreeDesktop integration with `Terminal=true` to automatically launch in your desktop environment's default terminal.
@@ -185,6 +189,15 @@ prowly /path/to/repo
 | `w` | Save resolved changes to file |
 | `n` | Create new worktree |
 | `x` | Prune / Remove selected worktree |
+
+### Markdown Preview Modal
+| Shortcut | Action |
+|:---|:---|
+| `j` / `k` or `↓` / `↑` | Scroll down / up by 1 line |
+| `PageDown` / `PageUp` or `Ctrl+d` / `Ctrl+u` | Fast scroll by 15 / 10 lines |
+| `g` / `G` or `Home` / `End` | Jump to top / bottom of document |
+| `y` | Copy raw Markdown text to clipboard |
+| `q` / `Esc` | Close preview modal |
 
 ### Mouse Operations & Terminal Compatibility (Right-Click Interception)
 

@@ -21,6 +21,7 @@ pub enum ContextMenuAction {
     CopyPath,
     CopyDiff,
     AskAi,
+    PreviewMarkdown,
 }
 
 impl ContextMenuAction {
@@ -30,6 +31,7 @@ impl ContextMenuAction {
         ContextMenuAction::CopyPath,
         ContextMenuAction::CopyDiff,
         ContextMenuAction::AskAi,
+        ContextMenuAction::PreviewMarkdown,
         ContextMenuAction::OpenEditor,
         ContextMenuAction::RevealFileManager,
         ContextMenuAction::StashFile,
@@ -45,6 +47,7 @@ impl ContextMenuAction {
             Self::CopyPath => "Copy File Path (y)",
             Self::CopyDiff => "Copy Diff Snippet",
             Self::AskAi => "Ask AI about this file (?)",
+            Self::PreviewMarkdown => "Preview Markdown (m)",
         }
     }
 }
@@ -175,6 +178,7 @@ impl ContextMenu {
                     ContextMenuAction::CopyPath => icons.get(crate::ui::IconId::Copy),
                     ContextMenuAction::CopyDiff => icons.get(crate::ui::IconId::Copy),
                     ContextMenuAction::AskAi => icons.ai_sparkle(),
+                    ContextMenuAction::PreviewMarkdown => icons.file(),
                 };
 
                 let style = if is_sel {
