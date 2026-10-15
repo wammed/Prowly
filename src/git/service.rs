@@ -316,7 +316,7 @@ impl GitService {
     /// Compute structured diff for a file (or whole repo if path is None).
     pub fn get_diff(&self, file_path: Option<&str>, staged: bool) -> Result<FileDiff, GitError> {
         let mut opts = DiffOptions::new();
-        opts.include_untracked(true).recurse_untracked_dirs(true);
+        opts.include_untracked(true).recurse_untracked_dirs(false);
         if let Some(p) = file_path {
             opts.pathspec(p);
         }

@@ -45,6 +45,7 @@ pub struct ChangesRenderParams<'a> {
     pub i18n: &'a I18n,
     pub icons: &'a Icons,
     pub area: Rect,
+    pub hover_pos: Option<(u16, u16)>,
 }
 
 /// Changes view controller.
@@ -176,6 +177,7 @@ impl ChangesView {
             i18n,
             icons,
             area,
+            hover_pos,
         } = params;
 
         // Vertical layout: Top (Files + Diff preview, Min) -> Bottom (Commit box + Actions, Length 6)
@@ -199,13 +201,13 @@ impl ChangesView {
         self.file_list_area = file_list_area;
 
         // 1. Render File List
-        self.render_file_list(frame, files, theme, i18n, icons, file_list_area);
+        self.render_file_list(frame, files, theme, i18n, icons, file_list_area, hover_pos);
 
         // 2. Render Diff Preview
         self.diff_view.render(frame, active_diff, theme, diff_area);
 
         // 3. Render Commit box & Actions bar
-        self.render_commit_controls(frame, theme, i18n, icons, bottom_area);
+        self.render_commit_controls(frame, theme, i18n, icons, bottom_area, hover_pos);
     }
 
     fn render_file_list(
@@ -216,6 +218,7 @@ impl ChangesView {
         i18n: &I18n,
         icons: &Icons,
         area: Rect,
+        hover_pos: Option<(u16, u16)>,
     ) {
         let is_focused = self.focus == ChangesFocus::FileList;
         let border_color = if is_focused {
@@ -259,12 +262,18 @@ impl ChangesView {
             width: menu_btn_w,
             height: 1,
         };
-        let menu_p = Paragraph::new(Span::styled(
-            " [ 󰍜 Menu ▾ ] ",
+        let is_menu_hovered = hover_pos.map_or(false, |(hx, hy)| self.hit_test_menu_button(hx, hy));
+        let menu_style = if is_menu_hovered {
+            Style::default()
+                .bg(theme.secondary)
+                .fg(theme.bg)
+                .add_modifier(Modifier::BOLD)
+        } else {
             Style::default()
                 .fg(theme.secondary)
-                .add_modifier(Modifier::BOLD),
-        ));
+                .add_modifier(Modifier::BOLD)
+        };
+        let menu_p = Paragraph::new(Span::styled(" [ 󰍜 Menu ▾ ] ", menu_style));
         frame.render_widget(menu_p, self.file_list_menu_area);
 
         self.file_scroll.set_total_items(files.len());
@@ -345,6 +354,7 @@ impl ChangesView {
         i18n: &I18n,
         icons: &Icons,
         area: Rect,
+        hover_pos: Option<(u16, u16)>,
     ) {
         let is_any_commit_focused = self.focus == ChangesFocus::CommitSummary
             || self.focus == ChangesFocus::CommitDescription;
@@ -468,84 +478,153 @@ impl ChangesView {
         }
 
         // Action buttons bar with GUI pills
+        let hovered_action = if let Some((hx, hy)) = hover_pos {
+            self.hit_test_action_buttons(hx, hy, icons.use_nerd_font)
+        } else {
+            None
+        };
+
         let mut buttons = Vec::new();
+
+        let is_stage_hovered = hovered_action == Some(ChangesButtonAction::StageAll);
+        let (stage_fg, stage_bg) = if is_stage_hovered {
+            (theme.bg, theme.success)
+        } else {
+            (theme.success, theme.selection_bg)
+        };
         buttons.extend(crate::ui::capsule::pill(
             Some(icons.checkbox_checked()),
             "Stage All",
-            theme.success,
-            theme.selection_bg,
+            stage_fg,
+            stage_bg,
             theme.bg,
             icons.use_nerd_font,
         ));
         buttons.push(Span::raw(" "));
+
+        let is_commit_hovered = hovered_action == Some(ChangesButtonAction::Commit);
+        let (commit_fg, commit_bg) = if is_commit_hovered {
+            (theme.bg, theme.primary)
+        } else {
+            (theme.primary, theme.selection_bg)
+        };
         buttons.extend(crate::ui::capsule::pill(
             Some(icons.commit()),
             "Commit",
-            theme.primary,
-            theme.selection_bg,
+            commit_fg,
+            commit_bg,
             theme.bg,
             icons.use_nerd_font,
         ));
         buttons.push(Span::raw(" "));
+
+        let is_sync_hovered = hovered_action == Some(ChangesButtonAction::CommitAndSync);
+        let (sync_fg, sync_bg) = if is_sync_hovered {
+            (theme.bg, theme.border_focused)
+        } else {
+            (theme.bg, theme.success)
+        };
         buttons.extend(crate::ui::capsule::pill(
             Some(icons.commit()),
             "Commit & Sync",
-            theme.bg,
-            theme.success,
+            sync_fg,
+            sync_bg,
             theme.bg,
             icons.use_nerd_font,
         ));
         buttons.push(Span::raw(" "));
+
+        let is_pull_hovered = hovered_action == Some(ChangesButtonAction::Pull);
+        let (pull_fg, pull_bg) = if is_pull_hovered {
+            (theme.bg, theme.secondary)
+        } else {
+            (theme.secondary, theme.selection_bg)
+        };
         buttons.extend(crate::ui::capsule::pill(
             Some("󰦖"),
             "Pull",
-            theme.secondary,
-            theme.selection_bg,
+            pull_fg,
+            pull_bg,
             theme.bg,
             icons.use_nerd_font,
         ));
         buttons.push(Span::raw(" "));
+
+        let is_fetch_hovered = hovered_action == Some(ChangesButtonAction::Fetch);
+        let (fetch_fg, fetch_bg) = if is_fetch_hovered {
+            (theme.bg, theme.info)
+        } else {
+            (theme.info, theme.selection_bg)
+        };
         buttons.extend(crate::ui::capsule::pill(
             Some("󰦗"),
             "Fetch",
-            theme.info,
-            theme.selection_bg,
+            fetch_fg,
+            fetch_bg,
             theme.bg,
             icons.use_nerd_font,
         ));
         buttons.push(Span::raw(" "));
+
+        let is_gen_hovered = hovered_action == Some(ChangesButtonAction::AiGenerate);
+        let (gen_fg, gen_bg) = if is_gen_hovered {
+            (theme.bg, theme.ai_sparkle)
+        } else {
+            (theme.ai_sparkle, theme.selection_bg)
+        };
         buttons.extend(crate::ui::capsule::pill(
             Some(icons.ai_sparkle()),
             "AI Generate",
-            theme.ai_sparkle,
-            theme.selection_bg,
+            gen_fg,
+            gen_bg,
             theme.bg,
             icons.use_nerd_font,
         ));
         buttons.push(Span::raw(" "));
+
+        let is_rev_hovered = hovered_action == Some(ChangesButtonAction::AiReview);
+        let (rev_fg, rev_bg) = if is_rev_hovered {
+            (theme.bg, theme.info)
+        } else {
+            (theme.info, theme.selection_bg)
+        };
         buttons.extend(crate::ui::capsule::pill(
             Some(icons.ai_sparkle()),
             "AI Review",
-            theme.info,
-            theme.selection_bg,
+            rev_fg,
+            rev_bg,
             theme.bg,
             icons.use_nerd_font,
         ));
         buttons.push(Span::raw(" "));
+
+        let is_stash_hovered = hovered_action == Some(ChangesButtonAction::StashAll);
+        let (stash_fg, stash_bg) = if is_stash_hovered {
+            (theme.bg, theme.secondary)
+        } else {
+            (theme.secondary, theme.selection_bg)
+        };
         buttons.extend(crate::ui::capsule::pill(
             Some(icons.stash()),
             "Stash All",
-            theme.secondary,
-            theme.selection_bg,
+            stash_fg,
+            stash_bg,
             theme.bg,
             icons.use_nerd_font,
         ));
         buttons.push(Span::raw(" "));
+
+        let is_discard_hovered = hovered_action == Some(ChangesButtonAction::DiscardSafe);
+        let (discard_fg, discard_bg) = if is_discard_hovered {
+            (theme.bg, theme.error)
+        } else {
+            (theme.error, theme.selection_bg)
+        };
         buttons.extend(crate::ui::capsule::pill(
             Some(icons.get(crate::ui::IconId::Trash)),
             "Discard (Safe)",
-            theme.error,
-            theme.selection_bg,
+            discard_fg,
+            discard_bg,
             theme.bg,
             icons.use_nerd_font,
         ));

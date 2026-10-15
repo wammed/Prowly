@@ -189,6 +189,9 @@ pub struct App {
 
     /// Last time local git status was refreshed
     pub last_status_check: std::time::Instant,
+
+    /// Current mouse hover coordinates in terminal cells
+    pub hover_pos: Option<(u16, u16)>,
 }
 
 impl App {
@@ -261,6 +264,7 @@ impl App {
             needs_clear: false,
             last_auto_fetch: std::time::Instant::now(),
             last_status_check: std::time::Instant::now(),
+            hover_pos: None,
         };
 
         app.refresh_git_status();
@@ -604,7 +608,13 @@ impl App {
     pub fn handle_event(&mut self, event: AppEvent) {
         match event {
             AppEvent::Key(key) => self.handle_key(key),
-            AppEvent::Mouse(mouse) => self.handle_mouse(mouse),
+            AppEvent::Mouse(mouse) => {
+                self.hover_pos = Some((mouse.column, mouse.row));
+                self.handle_mouse(mouse);
+            }
+            AppEvent::MouseMoved(x, y) => {
+                self.hover_pos = Some((x, y));
+            }
             AppEvent::Resize(w, h) => {
                 self.layout_areas = LayoutAreas::compute(Rect::new(0, 0, w, h));
                 self.needs_clear = true;
@@ -3076,6 +3086,7 @@ impl App {
 
         // 13. Settings Modal Overlay (if open)
         if self.settings_modal.is_open {
+            self.settings_modal.hover_pos = self.hover_pos;
             self.settings_modal
                 .render(frame, &self.theme, &self.icons, &self.i18n, area);
         }
@@ -3090,6 +3101,18 @@ impl App {
         if self.markdown_preview_modal.is_open {
             self.markdown_preview_modal
                 .render(frame, &self.theme, &self.icons, area);
+        }
+    }
+
+    /// Check whether mouse cursor is currently hovering within given rectangle.
+    pub fn is_hovered(&self, rect: Rect) -> bool {
+        if let Some((x, y)) = self.hover_pos {
+            x >= rect.x
+                && x < rect.x.saturating_add(rect.width)
+                && y >= rect.y
+                && y < rect.y.saturating_add(rect.height)
+        } else {
+            false
         }
     }
 
@@ -3153,11 +3176,17 @@ impl App {
         top_spans.push(Span::raw(" "));
 
         // 2. Repo Path Capsule
+        let is_repo_hovered = self.is_hovered(self.layout_areas.open_repo_button);
+        let (repo_fg, repo_bg) = if is_repo_hovered {
+            (self.theme.bg, self.theme.accent)
+        } else {
+            (self.theme.fg, self.theme.selection_bg)
+        };
         let repo_spans = pill(
             Some(""),
             &repo_path,
-            self.theme.fg,
-            self.theme.selection_bg,
+            repo_fg,
+            repo_bg,
             self.theme.header_bg,
             self.icons.use_nerd_font,
         );
@@ -3185,6 +3214,12 @@ impl App {
                 self.repo_status.ahead, self.repo_status.behind
             )
         };
+        let is_branch_hovered = self.is_hovered(self.layout_areas.branch_button);
+        let branch_right_bg = if is_branch_hovered {
+            self.theme.border_focused
+        } else {
+            self.theme.selection_bg
+        };
         let branch_spans = split_pill(
             Some(self.icons.branch()),
             &self.repo_status.branch,
@@ -3192,7 +3227,7 @@ impl App {
             self.theme.info,
             &branch_stats,
             self.theme.info,
-            self.theme.selection_bg,
+            branch_right_bg,
             self.theme.header_bg,
             self.icons.use_nerd_font,
         );
@@ -3208,11 +3243,17 @@ impl App {
         top_spans.push(Span::raw(" "));
 
         // 4. Fetch Capsule Button
+        let is_fetch_hovered = self.is_hovered(self.layout_areas.fetch_button);
+        let (fetch_fg, fetch_bg) = if is_fetch_hovered {
+            (self.theme.bg, self.theme.primary)
+        } else {
+            (self.theme.primary, self.theme.selection_bg)
+        };
         let fetch_spans = pill(
             Some("󰦗"),
             "Fetch",
-            self.theme.primary,
-            self.theme.selection_bg,
+            fetch_fg,
+            fetch_bg,
             self.theme.header_bg,
             self.icons.use_nerd_font,
         );
@@ -3233,7 +3274,10 @@ impl App {
         } else {
             "Pull".to_string()
         };
-        let (pull_fg, pull_bg) = if self.repo_status.behind > 0 {
+        let is_pull_hovered = self.is_hovered(self.layout_areas.pull_button);
+        let (pull_fg, pull_bg) = if is_pull_hovered {
+            (self.theme.bg, self.theme.secondary)
+        } else if self.repo_status.behind > 0 {
             (self.theme.bg, self.theme.warning)
         } else {
             (self.theme.secondary, self.theme.selection_bg)
@@ -3258,11 +3302,17 @@ impl App {
         top_spans.push(Span::raw(" "));
 
         // 6. Sync State Capsule
+        let is_sync_hovered = self.is_hovered(self.layout_areas.sync_button);
+        let (sync_fg, sync_bg) = if is_sync_hovered {
+            (self.theme.bg, self.theme.info)
+        } else {
+            (self.theme.bg, sync_color)
+        };
         let sync_spans = pill(
             Some(sync_icon),
             sync_label,
-            self.theme.bg,
-            sync_color,
+            sync_fg,
+            sync_bg,
             self.theme.header_bg,
             self.icons.use_nerd_font,
         );
@@ -3302,51 +3352,81 @@ impl App {
             )
         };
 
+        let is_help_hovered = self.is_hovered(self.layout_areas.help_button);
+        let (help_fg, help_bg) = if is_help_hovered {
+            (self.theme.bg, self.theme.fg)
+        } else {
+            (self.theme.dim_fg, self.theme.selection_bg)
+        };
         let help_spans = pill(
             Some(""),
             "Help",
-            self.theme.dim_fg,
-            self.theme.selection_bg,
+            help_fg,
+            help_bg,
             self.theme.header_bg,
             self.icons.use_nerd_font,
         );
         let help_w = crate::ui::capsule::spans_width(&help_spans) as u16;
 
+        let is_settings_hovered = self.is_hovered(self.layout_areas.settings_button);
+        let (settings_fg, settings_bg) = if is_settings_hovered {
+            (self.theme.bg, self.theme.primary)
+        } else {
+            (self.theme.primary, self.theme.selection_bg)
+        };
         let settings_spans = pill(
             Some(""),
             "Settings",
-            self.theme.primary,
-            self.theme.selection_bg,
+            settings_fg,
+            settings_bg,
             self.theme.header_bg,
             self.icons.use_nerd_font,
         );
         let settings_w = crate::ui::capsule::spans_width(&settings_spans) as u16;
 
+        let is_palette_hovered = self.is_hovered(self.layout_areas.palette_button);
+        let (palette_fg, palette_bg) = if is_palette_hovered {
+            (self.theme.bg, self.theme.accent)
+        } else {
+            (self.theme.accent, self.theme.selection_bg)
+        };
         let palette_spans = pill(
             Some(self.icons.ai_sparkle()),
             "Palette",
-            self.theme.accent,
-            self.theme.selection_bg,
+            palette_fg,
+            palette_bg,
             self.theme.header_bg,
             self.icons.use_nerd_font,
         );
         let palette_w = crate::ui::capsule::spans_width(&palette_spans) as u16;
 
+        let is_menu_hovered = self.is_hovered(self.layout_areas.menu_button);
+        let (menu_fg, menu_bg) = if is_menu_hovered {
+            (self.theme.bg, self.theme.secondary)
+        } else {
+            (self.theme.secondary, self.theme.selection_bg)
+        };
         let menu_spans = pill(
             Some("󰍜"),
             "Menu",
-            self.theme.secondary,
-            self.theme.selection_bg,
+            menu_fg,
+            menu_bg,
             self.theme.header_bg,
             self.icons.use_nerd_font,
         );
         let menu_w = crate::ui::capsule::spans_width(&menu_spans) as u16;
 
+        let is_ai_hovered = self.is_hovered(self.layout_areas.ai_status_button);
+        let (ai_pill_fg, ai_pill_bg) = if is_ai_hovered {
+            (self.theme.bg, self.theme.ai_sparkle)
+        } else {
+            (ai_fg, self.theme.selection_bg)
+        };
         let ai_spans = pill(
             Some(ai_icon),
             &ai_label,
-            ai_fg,
-            self.theme.selection_bg,
+            ai_pill_fg,
+            ai_pill_bg,
             self.theme.header_bg,
             self.icons.use_nerd_font,
         );
@@ -3448,6 +3528,7 @@ impl App {
         // Render Segmented Control Pill Tabs
         let mut tab_spans = Vec::new();
         tab_spans.push(Span::raw(" "));
+        let mut cur_x = 1u16;
         for tab in AppTab::ALL {
             let key = tab.title_key();
             let text = self.i18n.t(key);
@@ -3461,8 +3542,27 @@ impl App {
             };
 
             let is_active = *tab == self.active_tab;
+            let sample_pill = pill(
+                Some(icon_str),
+                &text,
+                self.theme.bg,
+                self.theme.primary,
+                self.theme.bg,
+                self.icons.use_nerd_font,
+            );
+            let pill_w = crate::ui::capsule::spans_width(&sample_pill) as u16;
+            let tab_rect = Rect {
+                x: self.layout_areas.right_tabs.x + cur_x,
+                y: self.layout_areas.right_tabs.y,
+                width: pill_w,
+                height: 1,
+            };
+            let is_hovered = self.is_hovered(tab_rect);
+
             let (fg, bg) = if is_active {
                 (self.theme.bg, self.theme.primary)
+            } else if is_hovered {
+                (self.theme.primary, self.theme.selection_bg)
             } else {
                 (self.theme.dim_fg, self.theme.selection_bg)
             };
@@ -3476,6 +3576,7 @@ impl App {
                 self.icons.use_nerd_font,
             ));
             tab_spans.push(Span::raw(" "));
+            cur_x += pill_w + 1;
         }
 
         frame.render_widget(Paragraph::new(Line::from(tab_spans)), self.layout_areas.right_tabs);
@@ -3520,6 +3621,7 @@ impl App {
                     i18n: &self.i18n,
                     icons: &icons,
                     area: inner,
+                    hover_pos: self.hover_pos,
                 };
                 self.changes_view.render(frame, params);
             }

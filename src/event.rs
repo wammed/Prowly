@@ -15,6 +15,7 @@ use crate::github::{AlertItem, PullRequestItem, RepoMetadata, WorkflowRunItem};
 pub enum AppEvent {
     Key(KeyEvent),
     Mouse(MouseEvent),
+    MouseMoved(u16, u16),
     Resize(u16, u16),
     Tick,
     StatusMessage(String),
@@ -51,6 +52,7 @@ impl EventHandler {
         tokio::spawn(async move {
             let mut reader = EventStream::new();
             let mut tick_timer = tokio::time::interval(tick_rate);
+            let mut last_mouse_cell: Option<(u16, u16)> = None;
 
             loop {
                 tokio::select! {
@@ -68,8 +70,19 @@ impl EventHandler {
                                     }
                                 }
                                 CrosstermEvent::Mouse(mouse) => {
-                                    if event_sender.send(AppEvent::Mouse(mouse)).is_err() {
-                                        break;
+                                    if matches!(mouse.kind, crossterm::event::MouseEventKind::Moved) {
+                                        let cell = (mouse.column, mouse.row);
+                                        if last_mouse_cell != Some(cell) {
+                                            last_mouse_cell = Some(cell);
+                                            if event_sender.send(AppEvent::MouseMoved(cell.0, cell.1)).is_err() {
+                                                break;
+                                            }
+                                        }
+                                    } else {
+                                        last_mouse_cell = Some((mouse.column, mouse.row));
+                                        if event_sender.send(AppEvent::Mouse(mouse)).is_err() {
+                                            break;
+                                        }
                                     }
                                 }
                                 CrosstermEvent::Resize(w, h)
@@ -98,5 +111,10 @@ impl EventHandler {
     /// Await the next event in the queue.
     pub async fn next(&mut self) -> Option<AppEvent> {
         self.receiver.recv().await
+    }
+
+    /// Attempt to fetch an event immediately without waiting.
+    pub fn try_recv(&mut self) -> Result<AppEvent, tokio::sync::mpsc::error::TryRecvError> {
+        self.receiver.try_recv()
     }
 }

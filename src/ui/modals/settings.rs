@@ -50,6 +50,7 @@ pub struct SettingsModal {
     pub focused_input: Option<SettingsInputFocus>,
     pub status_banner: Option<String>,
     pub scroll_offset: u16,
+    pub hover_pos: Option<(u16, u16)>,
 }
 
 /// Helper to calculate layout of theme chips wrapped across multiple lines.
@@ -103,6 +104,7 @@ impl SettingsModal {
             focused_input: None,
             status_banner: None,
             scroll_offset: 0,
+            hover_pos: None,
         }
     }
 
@@ -550,16 +552,48 @@ impl SettingsModal {
 
         let mut lines = Vec::new();
 
+        let is_hovered = |x_start: u16, x_end: u16, y: u16| -> bool {
+            if let Some((mx, my)) = self.hover_pos {
+                if mx >= inner.x && mx < inner.x + inner.width && my >= inner.y && my < inner.y + inner.height {
+                    let rx = mx - inner.x;
+                    let cy = (my - inner.y) + self.scroll_offset;
+                    cy == y && rx >= x_start && rx < x_end
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        };
+
         // 1. Header action buttons
-        let save_style = Style::default()
-            .bg(theme.success)
-            .fg(theme.bg)
-            .add_modifier(Modifier::BOLD);
-        let cancel_style = Style::default().fg(theme.dim_fg);
         let title_w = UnicodeWidthStr::width("Preferences & AI Integration");
         let save_w = UnicodeWidthStr::width(" [ 💾 Save ] ");
         let cancel_w = UnicodeWidthStr::width(" [ ❌ Cancel ] ");
         let pad = (inner.width as usize).saturating_sub(title_w + save_w + cancel_w + 1);
+
+        let is_save_hovered = is_hovered(pad as u16, (pad + save_w) as u16, 0);
+        let save_style = if is_save_hovered {
+            Style::default()
+                .bg(theme.border_focused)
+                .fg(theme.bg)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default()
+                .bg(theme.success)
+                .fg(theme.bg)
+                .add_modifier(Modifier::BOLD)
+        };
+
+        let is_cancel_hovered = is_hovered((pad + save_w + 1) as u16, (pad + save_w + 1 + cancel_w) as u16, 0);
+        let cancel_style = if is_cancel_hovered {
+            Style::default()
+                .fg(theme.error)
+                .add_modifier(Modifier::BOLD | Modifier::UNDERLINED)
+        } else {
+            Style::default().fg(theme.dim_fg)
+        };
+
         lines.push(Line::from(vec![
             Span::styled(
                 "Preferences & AI Integration",
@@ -580,13 +614,18 @@ impl SettingsModal {
             } else {
                 Span::raw(" ".repeat(10))
             }];
-            for &(tid, name, _, _) in row {
+            for &(tid, name, start_x, end_x) in row {
                 let is_sel = self.theme == tid;
+                let is_chip_hovered = is_hovered(start_x, end_x, 1 + r_idx as u16);
                 let style = if is_sel {
                     Style::default()
                         .bg(theme.primary)
                         .fg(theme.bg)
                         .add_modifier(Modifier::BOLD)
+                } else if is_chip_hovered {
+                    Style::default()
+                        .fg(theme.accent)
+                        .add_modifier(Modifier::BOLD | Modifier::UNDERLINED)
                 } else {
                     Style::default().fg(theme.fg)
                 };
@@ -597,11 +636,20 @@ impl SettingsModal {
         }
 
         // 3. Language & Nerd Font row
+        let is_en_hovered = is_hovered(10, 23, 2 + offset);
+        let is_ja_hovered = is_hovered(23, 36, 2 + offset);
+        let is_nf_on_hovered = is_hovered(54, 62, 2 + offset);
+        let is_nf_off_hovered = is_hovered(62, 71, 2 + offset);
+
         let lang_en_style = if self.language == Language::En {
             Style::default()
                 .bg(theme.primary)
                 .fg(theme.bg)
                 .add_modifier(Modifier::BOLD)
+        } else if is_en_hovered {
+            Style::default()
+                .fg(theme.primary)
+                .add_modifier(Modifier::BOLD | Modifier::UNDERLINED)
         } else {
             Style::default().fg(theme.dim_fg)
         };
@@ -610,6 +658,10 @@ impl SettingsModal {
                 .bg(theme.primary)
                 .fg(theme.bg)
                 .add_modifier(Modifier::BOLD)
+        } else if is_ja_hovered {
+            Style::default()
+                .fg(theme.primary)
+                .add_modifier(Modifier::BOLD | Modifier::UNDERLINED)
         } else {
             Style::default().fg(theme.dim_fg)
         };
@@ -619,6 +671,10 @@ impl SettingsModal {
                 .bg(theme.success)
                 .fg(theme.bg)
                 .add_modifier(Modifier::BOLD)
+        } else if is_nf_on_hovered {
+            Style::default()
+                .fg(theme.success)
+                .add_modifier(Modifier::BOLD | Modifier::UNDERLINED)
         } else {
             Style::default().fg(theme.dim_fg)
         };
@@ -627,6 +683,10 @@ impl SettingsModal {
                 .bg(theme.warning)
                 .fg(theme.bg)
                 .add_modifier(Modifier::BOLD)
+        } else if is_nf_off_hovered {
+            Style::default()
+                .fg(theme.warning)
+                .add_modifier(Modifier::BOLD | Modifier::UNDERLINED)
         } else {
             Style::default().fg(theme.dim_fg)
         };
@@ -793,11 +853,21 @@ impl SettingsModal {
         lines.push(card_header("󰊢 GIT ENGINE & TOOLS / Git・外部ツール", false));
 
         // 9. Git Engine Preferences
+        let is_soft_on_hovered = is_hovered(14, 22, 12 + offset);
+        let is_soft_off_hovered = is_hovered(22, 31, 12 + offset);
+        let is_af_off_hovered = is_hovered(48, 57, 12 + offset);
+        let is_af_30_hovered = is_hovered(57, 66, 12 + offset);
+        let is_af_60_hovered = is_hovered(66, 75, 12 + offset);
+
         let soft_on = if self.git_soft_discard {
             Style::default()
                 .bg(theme.success)
                 .fg(theme.bg)
                 .add_modifier(Modifier::BOLD)
+        } else if is_soft_on_hovered {
+            Style::default()
+                .fg(theme.success)
+                .add_modifier(Modifier::BOLD | Modifier::UNDERLINED)
         } else {
             Style::default().fg(theme.dim_fg)
         };
@@ -806,6 +876,10 @@ impl SettingsModal {
                 .bg(theme.warning)
                 .fg(theme.bg)
                 .add_modifier(Modifier::BOLD)
+        } else if is_soft_off_hovered {
+            Style::default()
+                .fg(theme.warning)
+                .add_modifier(Modifier::BOLD | Modifier::UNDERLINED)
         } else {
             Style::default().fg(theme.dim_fg)
         };
@@ -814,6 +888,10 @@ impl SettingsModal {
                 .bg(theme.info)
                 .fg(theme.bg)
                 .add_modifier(Modifier::BOLD)
+        } else if is_af_off_hovered {
+            Style::default()
+                .fg(theme.info)
+                .add_modifier(Modifier::BOLD | Modifier::UNDERLINED)
         } else {
             Style::default().fg(theme.dim_fg)
         };
@@ -822,6 +900,10 @@ impl SettingsModal {
                 .bg(theme.info)
                 .fg(theme.bg)
                 .add_modifier(Modifier::BOLD)
+        } else if is_af_30_hovered {
+            Style::default()
+                .fg(theme.info)
+                .add_modifier(Modifier::BOLD | Modifier::UNDERLINED)
         } else {
             Style::default().fg(theme.dim_fg)
         };
@@ -830,6 +912,10 @@ impl SettingsModal {
                 .bg(theme.info)
                 .fg(theme.bg)
                 .add_modifier(Modifier::BOLD)
+        } else if is_af_60_hovered {
+            Style::default()
+                .fg(theme.info)
+                .add_modifier(Modifier::BOLD | Modifier::UNDERLINED)
         } else {
             Style::default().fg(theme.dim_fg)
         };

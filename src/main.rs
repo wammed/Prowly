@@ -111,6 +111,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         if let Some(event) = events.next().await {
             app.handle_event(event);
+            while let Ok(next_event) = events.try_recv() {
+                app.handle_event(next_event);
+            }
         }
     }
 
