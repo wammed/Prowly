@@ -54,38 +54,54 @@ impl LayoutAreas {
         let header_bottom = header_rows[1];
 
         // Header buttons on the left/middle:
-        // Prowly title (10), Open Repo / Path (~22), Branch button (~22), Sync status (~14)
+        // Prowly title (10), Open Repo / Path (~20), Branch button (~18), Fetch (10), Pull (10), Sync status (~14)
         let open_repo_x = header_top.x + 10;
         let open_repo_button = Rect {
             x: open_repo_x.min(header_top.width),
             y: header_top.y,
-            width: 22.min(header_top.width.saturating_sub(open_repo_x)),
+            width: 20.min(header_top.width.saturating_sub(open_repo_x)),
             height: 1,
         };
 
-        let branch_x = open_repo_x + 23;
+        let branch_x = open_repo_x + 21;
         let branch_button = Rect {
             x: branch_x.min(header_top.width),
             y: header_top.y,
-            width: 22.min(header_top.width.saturating_sub(branch_x)),
+            width: 18.min(header_top.width.saturating_sub(branch_x)),
             height: 1,
         };
 
-        let sync_x = branch_x + 23;
+        let fetch_x = branch_x + 19;
+        let fetch_button = Rect {
+            x: fetch_x.min(header_top.width),
+            y: header_top.y,
+            width: 10.min(header_top.width.saturating_sub(fetch_x)),
+            height: 1,
+        };
+
+        let pull_x = fetch_x + 11;
+        let pull_button = Rect {
+            x: pull_x.min(header_top.width),
+            y: header_top.y,
+            width: 10.min(header_top.width.saturating_sub(pull_x)),
+            height: 1,
+        };
+
+        let sync_x = pull_x + 11;
         let sync_button = Rect {
             x: sync_x.min(header_top.width),
             y: header_top.y,
-            width: 16.min(header_top.width.saturating_sub(sync_x)),
+            width: 14.min(header_top.width.saturating_sub(sync_x)),
             height: 1,
         };
 
         // Top right buttons:
-        // [? Help] (10), [  Settings ] (14), [ 󰘳 Palette ] (13), [ 󰍜 Menu ] (10), [ 󱚣 AI: ... ] (34)
-        let help_width = 10;
-        let settings_width = 14;
-        let palette_width = 13;
-        let menu_width = 10;
-        let ai_width = 34;
+        // [? Help] (8), [  Settings ] (12), [ 󰘳 Palette ] (11), [ 󰍜 Menu ] (8), [ 󱚣 AI: ... ] (24)
+        let help_width = 8;
+        let settings_width = 12;
+        let palette_width = 11;
+        let menu_width = 8;
+        let ai_width = 24;
 
         let help_x = header_top.x + header_top.width.saturating_sub(help_width);
         let settings_x = help_x.saturating_sub(settings_width);
@@ -156,8 +172,8 @@ impl LayoutAreas {
             header_bottom,
             open_repo_button,
             branch_button,
-            fetch_button: Rect::default(),
-            pull_button: Rect::default(),
+            fetch_button,
+            pull_button,
             sync_button,
             ai_status_button,
             palette_button,

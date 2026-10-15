@@ -3123,7 +3123,7 @@ impl App {
         // Path formatting
         let repo_path = if let Some(git) = &self.git_service {
             let p = git.workdir();
-            if let Ok(home) = std::env::var("HOME") {
+            let full_str = if let Ok(home) = std::env::var("HOME") {
                 let home_path = std::path::Path::new(&home);
                 if let Ok(rel) = p.strip_prefix(home_path) {
                     format!("~/{}", rel.display())
@@ -3132,6 +3132,16 @@ impl App {
                 }
             } else {
                 p.display().to_string()
+            };
+            if top_area.width < 140 && full_str.len() > 16 {
+                format!(
+                    "…/{}",
+                    p.file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or(&full_str)
+                )
+            } else {
+                full_str
             }
         } else {
             let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
@@ -3176,6 +3186,21 @@ impl App {
         top_spans.push(Span::raw(" "));
 
         // 2. Repo Path Capsule
+        let open_repo_x = top_area.x + 1 + brand_w + 1;
+        let repo_w = crate::ui::capsule::spans_width(&pill(
+            Some(""),
+            &repo_path,
+            self.theme.fg,
+            self.theme.selection_bg,
+            self.theme.header_bg,
+            self.icons.use_nerd_font,
+        )) as u16;
+        self.layout_areas.open_repo_button = Rect {
+            x: open_repo_x,
+            y: top_area.y,
+            width: repo_w.min(top_area.width.saturating_sub(open_repo_x)),
+            height: 1,
+        };
         let is_repo_hovered = self.is_hovered(self.layout_areas.open_repo_button);
         let (repo_fg, repo_bg) = if is_repo_hovered {
             (self.theme.bg, self.theme.accent)
@@ -3190,14 +3215,6 @@ impl App {
             self.theme.header_bg,
             self.icons.use_nerd_font,
         );
-        let repo_w = crate::ui::capsule::spans_width(&repo_spans) as u16;
-        let open_repo_x = top_area.x + 1 + brand_w + 1;
-        self.layout_areas.open_repo_button = Rect {
-            x: open_repo_x,
-            y: top_area.y,
-            width: repo_w.min(top_area.width.saturating_sub(open_repo_x)),
-            height: 1,
-        };
         top_spans.extend(repo_spans);
         top_spans.push(Span::raw(" "));
 
@@ -3213,6 +3230,24 @@ impl App {
                 "↑{} ↓{}",
                 self.repo_status.ahead, self.repo_status.behind
             )
+        };
+        let branch_x = open_repo_x + repo_w + 1;
+        let branch_w = crate::ui::capsule::spans_width(&split_pill(
+            Some(self.icons.branch()),
+            &self.repo_status.branch,
+            self.theme.bg,
+            self.theme.info,
+            &branch_stats,
+            self.theme.info,
+            self.theme.selection_bg,
+            self.theme.header_bg,
+            self.icons.use_nerd_font,
+        )) as u16;
+        self.layout_areas.branch_button = Rect {
+            x: branch_x,
+            y: top_area.y,
+            width: branch_w.min(top_area.width.saturating_sub(branch_x)),
+            height: 1,
         };
         let is_branch_hovered = self.is_hovered(self.layout_areas.branch_button);
         let branch_right_bg = if is_branch_hovered {
@@ -3231,18 +3266,25 @@ impl App {
             self.theme.header_bg,
             self.icons.use_nerd_font,
         );
-        let branch_w = crate::ui::capsule::spans_width(&branch_spans) as u16;
-        let branch_x = open_repo_x + repo_w + 1;
-        self.layout_areas.branch_button = Rect {
-            x: branch_x,
-            y: top_area.y,
-            width: branch_w.min(top_area.width.saturating_sub(branch_x)),
-            height: 1,
-        };
         top_spans.extend(branch_spans);
         top_spans.push(Span::raw(" "));
 
         // 4. Fetch Capsule Button
+        let fetch_x = branch_x + branch_w + 1;
+        let fetch_w = crate::ui::capsule::spans_width(&pill(
+            Some("󰦗"),
+            "Fetch",
+            self.theme.primary,
+            self.theme.selection_bg,
+            self.theme.header_bg,
+            self.icons.use_nerd_font,
+        )) as u16;
+        self.layout_areas.fetch_button = Rect {
+            x: fetch_x,
+            y: top_area.y,
+            width: fetch_w.min(top_area.width.saturating_sub(fetch_x)),
+            height: 1,
+        };
         let is_fetch_hovered = self.is_hovered(self.layout_areas.fetch_button);
         let (fetch_fg, fetch_bg) = if is_fetch_hovered {
             (self.theme.bg, self.theme.primary)
@@ -3257,14 +3299,6 @@ impl App {
             self.theme.header_bg,
             self.icons.use_nerd_font,
         );
-        let fetch_w = crate::ui::capsule::spans_width(&fetch_spans) as u16;
-        let fetch_x = branch_x + branch_w + 1;
-        self.layout_areas.fetch_button = Rect {
-            x: fetch_x,
-            y: top_area.y,
-            width: fetch_w.min(top_area.width.saturating_sub(fetch_x)),
-            height: 1,
-        };
         top_spans.extend(fetch_spans);
         top_spans.push(Span::raw(" "));
 
@@ -3273,6 +3307,21 @@ impl App {
             format!("Pull (↓{})", self.repo_status.behind)
         } else {
             "Pull".to_string()
+        };
+        let pull_x = fetch_x + fetch_w + 1;
+        let pull_w = crate::ui::capsule::spans_width(&pill(
+            Some("󰦖"),
+            &pull_label,
+            self.theme.secondary,
+            self.theme.selection_bg,
+            self.theme.header_bg,
+            self.icons.use_nerd_font,
+        )) as u16;
+        self.layout_areas.pull_button = Rect {
+            x: pull_x,
+            y: top_area.y,
+            width: pull_w.min(top_area.width.saturating_sub(pull_x)),
+            height: 1,
         };
         let is_pull_hovered = self.is_hovered(self.layout_areas.pull_button);
         let (pull_fg, pull_bg) = if is_pull_hovered {
@@ -3290,18 +3339,25 @@ impl App {
             self.theme.header_bg,
             self.icons.use_nerd_font,
         );
-        let pull_w = crate::ui::capsule::spans_width(&pull_spans) as u16;
-        let pull_x = fetch_x + fetch_w + 1;
-        self.layout_areas.pull_button = Rect {
-            x: pull_x,
-            y: top_area.y,
-            width: pull_w.min(top_area.width.saturating_sub(pull_x)),
-            height: 1,
-        };
         top_spans.extend(pull_spans);
         top_spans.push(Span::raw(" "));
 
         // 6. Sync State Capsule
+        let sync_x = pull_x + pull_w + 1;
+        let sync_w = crate::ui::capsule::spans_width(&pill(
+            Some(sync_icon),
+            sync_label,
+            self.theme.bg,
+            sync_color,
+            self.theme.header_bg,
+            self.icons.use_nerd_font,
+        )) as u16;
+        self.layout_areas.sync_button = Rect {
+            x: sync_x,
+            y: top_area.y,
+            width: sync_w.min(top_area.width.saturating_sub(sync_x)),
+            height: 1,
+        };
         let is_sync_hovered = self.is_hovered(self.layout_areas.sync_button);
         let (sync_fg, sync_bg) = if is_sync_hovered {
             (self.theme.bg, self.theme.info)
@@ -3316,14 +3372,6 @@ impl App {
             self.theme.header_bg,
             self.icons.use_nerd_font,
         );
-        let sync_w = crate::ui::capsule::spans_width(&sync_spans) as u16;
-        let sync_x = pull_x + pull_w + 1;
-        self.layout_areas.sync_button = Rect {
-            x: sync_x,
-            y: top_area.y,
-            width: sync_w.min(top_area.width.saturating_sub(sync_x)),
-            height: 1,
-        };
         top_spans.extend(sync_spans);
 
         frame.render_widget(
@@ -3334,9 +3382,18 @@ impl App {
         // Top right buttons: AI Status Chip, [ 󰍜 Menu ], [  Settings ], [? Help]
         let (ai_connected, ai_prov, ai_mod) = self.ai_connection_status();
         let (ai_icon, ai_label, ai_fg) = if ai_connected {
+            let model_display = if top_area.width < 135 {
+                "".to_string()
+            } else if ai_mod.len() > 12 {
+                format!(" ({})", &ai_mod[..10])
+            } else if !ai_mod.is_empty() {
+                format!(" ({})", ai_mod)
+            } else {
+                "".to_string()
+            };
             (
                 "󱚣",
-                format!("AI: {} ({})", ai_prov, ai_mod),
+                format!("AI: {}{}", ai_prov, model_display),
                 self.theme.ai_sparkle,
             )
         } else {
@@ -3352,6 +3409,16 @@ impl App {
             )
         };
 
+        let help_w = crate::ui::capsule::spans_width(&pill(
+            Some(""),
+            "Help",
+            self.theme.dim_fg,
+            self.theme.selection_bg,
+            self.theme.header_bg,
+            self.icons.use_nerd_font,
+        )) as u16;
+        let help_x = top_area.x + top_area.width.saturating_sub(help_w);
+        self.layout_areas.help_button = Rect { x: help_x, y: top_area.y, width: help_w, height: 1 };
         let is_help_hovered = self.is_hovered(self.layout_areas.help_button);
         let (help_fg, help_bg) = if is_help_hovered {
             (self.theme.bg, self.theme.fg)
@@ -3366,8 +3433,17 @@ impl App {
             self.theme.header_bg,
             self.icons.use_nerd_font,
         );
-        let help_w = crate::ui::capsule::spans_width(&help_spans) as u16;
 
+        let settings_w = crate::ui::capsule::spans_width(&pill(
+            Some(""),
+            "Settings",
+            self.theme.primary,
+            self.theme.selection_bg,
+            self.theme.header_bg,
+            self.icons.use_nerd_font,
+        )) as u16;
+        let settings_x = help_x.saturating_sub(settings_w);
+        self.layout_areas.settings_button = Rect { x: settings_x, y: top_area.y, width: settings_w, height: 1 };
         let is_settings_hovered = self.is_hovered(self.layout_areas.settings_button);
         let (settings_fg, settings_bg) = if is_settings_hovered {
             (self.theme.bg, self.theme.primary)
@@ -3382,8 +3458,17 @@ impl App {
             self.theme.header_bg,
             self.icons.use_nerd_font,
         );
-        let settings_w = crate::ui::capsule::spans_width(&settings_spans) as u16;
 
+        let palette_w = crate::ui::capsule::spans_width(&pill(
+            Some(self.icons.ai_sparkle()),
+            "Palette",
+            self.theme.accent,
+            self.theme.selection_bg,
+            self.theme.header_bg,
+            self.icons.use_nerd_font,
+        )) as u16;
+        let palette_x = settings_x.saturating_sub(palette_w);
+        self.layout_areas.palette_button = Rect { x: palette_x, y: top_area.y, width: palette_w, height: 1 };
         let is_palette_hovered = self.is_hovered(self.layout_areas.palette_button);
         let (palette_fg, palette_bg) = if is_palette_hovered {
             (self.theme.bg, self.theme.accent)
@@ -3398,8 +3483,17 @@ impl App {
             self.theme.header_bg,
             self.icons.use_nerd_font,
         );
-        let palette_w = crate::ui::capsule::spans_width(&palette_spans) as u16;
 
+        let menu_w = crate::ui::capsule::spans_width(&pill(
+            Some("󰍜"),
+            "Menu",
+            self.theme.secondary,
+            self.theme.selection_bg,
+            self.theme.header_bg,
+            self.icons.use_nerd_font,
+        )) as u16;
+        let menu_x = palette_x.saturating_sub(menu_w);
+        self.layout_areas.menu_button = Rect { x: menu_x, y: top_area.y, width: menu_w, height: 1 };
         let is_menu_hovered = self.is_hovered(self.layout_areas.menu_button);
         let (menu_fg, menu_bg) = if is_menu_hovered {
             (self.theme.bg, self.theme.secondary)
@@ -3414,8 +3508,21 @@ impl App {
             self.theme.header_bg,
             self.icons.use_nerd_font,
         );
-        let menu_w = crate::ui::capsule::spans_width(&menu_spans) as u16;
 
+        let raw_ai_w = crate::ui::capsule::spans_width(&pill(
+            Some(ai_icon),
+            &ai_label,
+            ai_fg,
+            self.theme.selection_bg,
+            self.theme.header_bg,
+            self.icons.use_nerd_font,
+        )) as u16;
+        let min_ai_x = (sync_x + sync_w + 1).min(menu_x);
+        let ideal_ai_x = menu_x.saturating_sub(raw_ai_w);
+        let ai_x = ideal_ai_x.max(min_ai_x);
+        let ai_w = menu_x.saturating_sub(ai_x);
+        self.layout_areas.ai_status_button = Rect { x: ai_x, y: top_area.y, width: ai_w, height: 1 };
+        self.layout_areas.ask_ai_button = self.layout_areas.ai_status_button;
         let is_ai_hovered = self.is_hovered(self.layout_areas.ai_status_button);
         let (ai_pill_fg, ai_pill_bg) = if is_ai_hovered {
             (self.theme.bg, self.theme.ai_sparkle)
@@ -3430,22 +3537,10 @@ impl App {
             self.theme.header_bg,
             self.icons.use_nerd_font,
         );
-        let ai_w = crate::ui::capsule::spans_width(&ai_spans) as u16;
 
-        let help_x = top_area.x + top_area.width.saturating_sub(help_w);
-        let settings_x = help_x.saturating_sub(settings_w);
-        let palette_x = settings_x.saturating_sub(palette_w);
-        let menu_x = palette_x.saturating_sub(menu_w);
-        let ai_x = menu_x.saturating_sub(ai_w);
-
-        self.layout_areas.help_button = Rect { x: help_x, y: top_area.y, width: help_w, height: 1 };
-        self.layout_areas.settings_button = Rect { x: settings_x, y: top_area.y, width: settings_w, height: 1 };
-        self.layout_areas.palette_button = Rect { x: palette_x, y: top_area.y, width: palette_w, height: 1 };
-        self.layout_areas.menu_button = Rect { x: menu_x, y: top_area.y, width: menu_w, height: 1 };
-        self.layout_areas.ai_status_button = Rect { x: ai_x, y: top_area.y, width: ai_w, height: 1 };
-        self.layout_areas.ask_ai_button = self.layout_areas.ai_status_button;
-
-        frame.render_widget(Paragraph::new(Line::from(ai_spans)), self.layout_areas.ai_status_button);
+        if ai_w >= 4 {
+            frame.render_widget(Paragraph::new(Line::from(ai_spans)), self.layout_areas.ai_status_button);
+        }
         frame.render_widget(Paragraph::new(Line::from(menu_spans)), self.layout_areas.menu_button);
         frame.render_widget(Paragraph::new(Line::from(palette_spans)), self.layout_areas.palette_button);
         frame.render_widget(Paragraph::new(Line::from(settings_spans)), self.layout_areas.settings_button);
