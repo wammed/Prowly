@@ -16,4 +16,3 @@ pub use modals::AiAssistantModal;
 pub use theme::{Theme, ThemeId};
 pub use views::{ChangesFocus, ChangesView, DiffView};
 pub use virtual_scroll::{HighlightCache, VirtualScroll};
-

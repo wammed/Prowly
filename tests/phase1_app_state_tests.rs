@@ -197,7 +197,8 @@ fn test_app_commit_staged_auto_stages_and_prevents_empty() {
     index.write().unwrap();
     let tree = repo.find_tree(tree_oid).unwrap();
     let sig = repo.signature().unwrap();
-    repo.commit(Some("HEAD"), &sig, &sig, "init", &tree, &[]).unwrap();
+    repo.commit(Some("HEAD"), &sig, &sig, "init", &tree, &[])
+        .unwrap();
 
     let mut app = App::new(Config::default());
     app.switch_repository(repo_path);
@@ -221,7 +222,11 @@ fn test_app_commit_staged_auto_stages_and_prevents_empty() {
 
     // Status should be committed (even without prior manual staging!)
     let status_str = app.last_status.unwrap_or_default();
-    assert!(status_str.starts_with("Committed:"), "Expected Committed: prefix, got: {}", status_str);
+    assert!(
+        status_str.starts_with("Committed:"),
+        "Expected Committed: prefix, got: {}",
+        status_str
+    );
 
     // After commit, working directory and files should be clean
     assert!(app.repo_status.files.is_empty());
@@ -233,7 +238,13 @@ fn test_repo_badge_visibility_rendering() {
         let backend = ratatui::backend::TestBackend::new(120, 30);
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
         terminal.draw(|f| app.render(f)).unwrap();
-        terminal.backend().buffer().content().iter().map(|c| c.symbol()).collect()
+        terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|c| c.symbol())
+            .collect()
     };
 
     let mut app = App::new(Config::default());
@@ -241,13 +252,22 @@ fn test_repo_badge_visibility_rendering() {
     // 1. When is_repo_private is Some(false) (Public)
     app.set_repo_visibility(false);
     let content = render_content(&mut app);
-    assert!(content.contains("Public"), "Expected Public badge when is_repo_private=false");
-    assert!(!content.contains("Private"), "Did not expect Private badge when is_repo_private=false");
+    assert!(
+        content.contains("Public"),
+        "Expected Public badge when is_repo_private=false"
+    );
+    assert!(
+        !content.contains("Private"),
+        "Did not expect Private badge when is_repo_private=false"
+    );
 
     // 2. When is_repo_private is Some(true) (Private)
     app.set_repo_visibility(true);
     let content2 = render_content(&mut app);
-    assert!(content2.contains("Private"), "Expected Private badge when is_repo_private=true");
+    assert!(
+        content2.contains("Private"),
+        "Expected Private badge when is_repo_private=true"
+    );
 
     // 3. In Japanese mode
     app.i18n.set_language(Language::Ja);
@@ -350,17 +370,25 @@ fn test_all_action_buttons_hit_testing() {
         assert_eq!(
             app.changes_view.hit_test_action_buttons(cur_x, 10, true),
             Some(expected_action),
-            "Start of button '{}' at col {}", text, cur_x
+            "Start of button '{}' at col {}",
+            text,
+            cur_x
         );
         assert_eq!(
-            app.changes_view.hit_test_action_buttons(cur_x + w / 2, 10, true),
+            app.changes_view
+                .hit_test_action_buttons(cur_x + w / 2, 10, true),
             Some(expected_action),
-            "Middle of button '{}' at col {}", text, cur_x + w / 2
+            "Middle of button '{}' at col {}",
+            text,
+            cur_x + w / 2
         );
         assert_eq!(
-            app.changes_view.hit_test_action_buttons(cur_x + w - 1, 10, true),
+            app.changes_view
+                .hit_test_action_buttons(cur_x + w - 1, 10, true),
             Some(expected_action),
-            "End of button '{}' at col {}", text, cur_x + w - 1
+            "End of button '{}' at col {}",
+            text,
+            cur_x + w - 1
         );
 
         // Gap between buttons should return None
@@ -368,11 +396,10 @@ fn test_all_action_buttons_hit_testing() {
         assert_eq!(
             app.changes_view.hit_test_action_buttons(cur_x, 10, true),
             None,
-            "Gap after button '{}' at col {}", text, cur_x
+            "Gap after button '{}' at col {}",
+            text,
+            cur_x
         );
         cur_x += 1; // plus space separator
     }
 }
-
-
-

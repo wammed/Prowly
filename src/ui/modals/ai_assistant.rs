@@ -95,11 +95,15 @@ impl AiAssistantModal {
             let shadow_rect = Rect {
                 x: (popup_rect.x + 1).min(area.width.saturating_sub(1)),
                 y: (popup_rect.y + 1).min(area.height.saturating_sub(1)),
-                width: popup_rect.width.min(area.width.saturating_sub(popup_rect.x + 1)),
-                height: popup_rect.height.min(area.height.saturating_sub(popup_rect.y + 1)),
+                width: popup_rect
+                    .width
+                    .min(area.width.saturating_sub(popup_rect.x + 1)),
+                height: popup_rect
+                    .height
+                    .min(area.height.saturating_sub(popup_rect.y + 1)),
             };
-            let shadow_block = Block::default()
-                .style(Style::default().bg(ratatui::style::Color::Rgb(12, 14, 20)));
+            let shadow_block =
+                Block::default().style(Style::default().bg(ratatui::style::Color::Rgb(12, 14, 20)));
             frame.render_widget(shadow_block, shadow_rect);
         }
 
@@ -174,7 +178,8 @@ impl AiAssistantModal {
         frame.render_widget(input_p, chunks[2]);
 
         let query_w = unicode_width::UnicodeWidthStr::width(self.input_query.as_str()) as u16;
-        let cur_x = (input_inner.x + query_w).min(input_inner.x + input_inner.width.saturating_sub(1));
+        let cur_x =
+            (input_inner.x + query_w).min(input_inner.x + input_inner.width.saturating_sub(1));
         frame.set_cursor_position((cur_x, input_inner.y));
 
         // 4. Action bar: [ Apply ] [ Discard / Esc ]

@@ -217,7 +217,8 @@ impl RebaseModal {
             let cur_x = (inner.x + label_w + text_w).min(inner.x + inner.width.saturating_sub(1));
             // The reword input line was pushed near the end (lines.len() - 1)
             let line_y = inner.y + 1 + self.commits.len().min(8) as u16 + 2;
-            frame.set_cursor_position((cur_x, line_y.min(inner.y + inner.height.saturating_sub(1))));
+            frame
+                .set_cursor_position((cur_x, line_y.min(inner.y + inner.height.saturating_sub(1))));
         }
     }
 }

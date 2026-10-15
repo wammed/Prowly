@@ -16,6 +16,7 @@ use crate::i18n::I18n;
 use crate::services::{
     open_external_editor_with_preference, reveal_in_file_manager, BackupService, ClipboardService,
 };
+use crate::ui::capsule::{key_badge, pill, split_pill};
 use crate::ui::layout::LayoutAreas;
 use crate::ui::modals::{
     AiAssistantModal, BranchSwitcherModal, CommandPaletteModal, ConflictResolverModal, ContextMenu,
@@ -26,10 +27,8 @@ use crate::ui::modals::{
 use crate::ui::theme::{Theme, ThemeId};
 use crate::ui::views::{
     changes::{ChangesButtonAction, ChangesFocus, ChangesRenderParams},
-    ActionsView, AlertsView, ChangesView, DirectoryMap, HistoryView, PrsView,
-    WorktreesView,
+    ActionsView, AlertsView, ChangesView, DirectoryMap, HistoryView, PrsView, WorktreesView,
 };
-use crate::ui::capsule::{key_badge, pill, split_pill};
 use crate::ui::Icons;
 use crossterm::event::{KeyCode, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::{
@@ -298,10 +297,16 @@ impl App {
                             .map_err(|e| e.to_string())
                             .and_then(|out| {
                                 if out.status.success() {
-                                    let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                                    let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+                                    let stdout =
+                                        String::from_utf8_lossy(&out.stdout).trim().to_string();
+                                    let stderr =
+                                        String::from_utf8_lossy(&out.stderr).trim().to_string();
                                     let msg = if !stdout.is_empty() { stdout } else { stderr };
-                                    Ok(if msg.is_empty() { "Fetched updates".to_string() } else { msg })
+                                    Ok(if msg.is_empty() {
+                                        "Fetched updates".to_string()
+                                    } else {
+                                        msg
+                                    })
                                 } else {
                                     Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
                                 }
@@ -340,10 +345,16 @@ impl App {
                             .map_err(|e| e.to_string())
                             .and_then(|out| {
                                 if out.status.success() {
-                                    let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                                    let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+                                    let stdout =
+                                        String::from_utf8_lossy(&out.stdout).trim().to_string();
+                                    let stderr =
+                                        String::from_utf8_lossy(&out.stderr).trim().to_string();
                                     let msg = if !stdout.is_empty() { stdout } else { stderr };
-                                    Ok(if msg.is_empty() { "Pulled updates".to_string() } else { msg })
+                                    Ok(if msg.is_empty() {
+                                        "Pulled updates".to_string()
+                                    } else {
+                                        msg
+                                    })
                                 } else {
                                     Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
                                 }
@@ -381,10 +392,16 @@ impl App {
                             .map_err(|e| e.to_string())
                             .and_then(|out| {
                                 if out.status.success() {
-                                    let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                                    let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+                                    let stdout =
+                                        String::from_utf8_lossy(&out.stdout).trim().to_string();
+                                    let stderr =
+                                        String::from_utf8_lossy(&out.stderr).trim().to_string();
                                     let msg = if !stdout.is_empty() { stdout } else { stderr };
-                                    Ok(if msg.is_empty() { "Pushed updates".to_string() } else { msg })
+                                    Ok(if msg.is_empty() {
+                                        "Pushed updates".to_string()
+                                    } else {
+                                        msg
+                                    })
                                 } else {
                                     Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
                                 }
@@ -627,7 +644,9 @@ impl App {
                 }
 
                 let interval = self.config.git.auto_fetch_interval_secs;
-                if interval > 0 && self.last_auto_fetch.elapsed() >= std::time::Duration::from_secs(interval) {
+                if interval > 0
+                    && self.last_auto_fetch.elapsed() >= std::time::Duration::from_secs(interval)
+                {
                     self.last_auto_fetch = std::time::Instant::now();
                     self.trigger_background_fetch();
                 }
@@ -935,7 +954,9 @@ impl App {
                 KeyCode::Char('g') | KeyCode::Home => self.markdown_preview_modal.scroll_to_top(),
                 KeyCode::Char('G') | KeyCode::End => self.markdown_preview_modal.scroll_to_bottom(),
                 KeyCode::Char('y') => {
-                    let _ = self.clipboard.copy_text(&self.markdown_preview_modal.raw_content);
+                    let _ = self
+                        .clipboard
+                        .copy_text(&self.markdown_preview_modal.raw_content);
                     self.last_status = Some("Copied Markdown content to clipboard".to_string());
                 }
                 _ => {}
@@ -1048,58 +1069,54 @@ impl App {
                 KeyCode::PageUp => self.command_palette.page_up(10),
                 KeyCode::PageDown => self.command_palette.page_down(10),
                 KeyCode::Backspace => self.command_palette.pop_char(),
-                KeyCode::Enter => {
-                    match self.command_palette.handle_enter() {
-                        PaletteEnterResult::LayerChanged => {}
-                        PaletteEnterResult::ExecuteAction(action_id) => {
-                            self.command_palette.close();
-                            self.execute_palette_action(action_id);
-                        }
-                        PaletteEnterResult::ExecuteGitCommand { subcommand, args } => {
-                            self.command_palette.close();
-                            self.execute_git_cli(&subcommand, &args);
-                        }
-                        PaletteEnterResult::ExecuteAiCommand(cmd) => {
-                            self.command_palette.close();
-                            let _ = std::process::Command::new("sh")
-                                .args(["-c", &cmd])
-                                .output();
-                            self.last_status = Some(format!("Executed: {}", cmd));
-                            self.refresh_git_status();
-                            self.needs_clear = true;
-                        }
-                        PaletteEnterResult::DangerWarning(warn) => {
-                            self.last_status = Some(format!("⚠️ Safety Guard: {}", warn));
-                        }
-                        PaletteEnterResult::RequestAi(req) => {
-                            let branch = self.repo_status.branch.clone();
-                            let client = crate::ai::create_ai_client(&self.config.ai);
-                            let lang = self.config.language;
-                            if let Some(sender) = self.event_sender.clone() {
-                                tokio::spawn(async move {
-                                    let res = translate_natural_language_to_git(
-                                        &req,
-                                        &branch,
-                                        client.as_ref(),
-                                        lang,
-                                    )
-                                    .await
-                                    .map_err(|e| e.to_string());
-                                    let _ = sender.send(AppEvent::AiCommandSuggested(res));
-                                });
-                            } else if tokio::runtime::Handle::try_current().is_err() {
-                                if let Ok(suggested) = block_on_safe(translate_natural_language_to_git(
+                KeyCode::Enter => match self.command_palette.handle_enter() {
+                    PaletteEnterResult::LayerChanged => {}
+                    PaletteEnterResult::ExecuteAction(action_id) => {
+                        self.command_palette.close();
+                        self.execute_palette_action(action_id);
+                    }
+                    PaletteEnterResult::ExecuteGitCommand { subcommand, args } => {
+                        self.command_palette.close();
+                        self.execute_git_cli(&subcommand, &args);
+                    }
+                    PaletteEnterResult::ExecuteAiCommand(cmd) => {
+                        self.command_palette.close();
+                        let _ = std::process::Command::new("sh").args(["-c", &cmd]).output();
+                        self.last_status = Some(format!("Executed: {}", cmd));
+                        self.refresh_git_status();
+                        self.needs_clear = true;
+                    }
+                    PaletteEnterResult::DangerWarning(warn) => {
+                        self.last_status = Some(format!("⚠️ Safety Guard: {}", warn));
+                    }
+                    PaletteEnterResult::RequestAi(req) => {
+                        let branch = self.repo_status.branch.clone();
+                        let client = crate::ai::create_ai_client(&self.config.ai);
+                        let lang = self.config.language;
+                        if let Some(sender) = self.event_sender.clone() {
+                            tokio::spawn(async move {
+                                let res = translate_natural_language_to_git(
                                     &req,
                                     &branch,
                                     client.as_ref(),
                                     lang,
-                                )) {
-                                    self.command_palette.ai_suggestion = Some(suggested);
-                                }
+                                )
+                                .await
+                                .map_err(|e| e.to_string());
+                                let _ = sender.send(AppEvent::AiCommandSuggested(res));
+                            });
+                        } else if tokio::runtime::Handle::try_current().is_err() {
+                            if let Ok(suggested) = block_on_safe(translate_natural_language_to_git(
+                                &req,
+                                &branch,
+                                client.as_ref(),
+                                lang,
+                            )) {
+                                self.command_palette.ai_suggestion = Some(suggested);
                             }
                         }
                     }
-                }
+                },
                 KeyCode::Char(c) => self.command_palette.push_char(c),
                 _ => {}
             }
@@ -1367,9 +1384,10 @@ impl App {
                         .get(self.dir_map.scroll.selected_index)
                         .map(|n| n.path_prefix.clone()),
                     FocusedPane::MainContent => match self.active_tab {
-                        AppTab::History => {
-                            self.history_view.selected_commit().map(|c| c.full_hash.clone())
-                        }
+                        AppTab::History => self
+                            .history_view
+                            .selected_commit()
+                            .map(|c| c.full_hash.clone()),
                         AppTab::Prs => self.prs_view.selected_pr().map(|p| p.html_url.clone()),
                         AppTab::Actions => {
                             self.actions_view.selected_run().map(|r| r.html_url.clone())
@@ -1516,7 +1534,9 @@ impl App {
                 self.refresh_history();
                 self.refresh_github();
                 self.trigger_background_fetch();
-                self.last_status = Some("Refreshed repository status and GitHub data (fetching remote...)".to_string());
+                self.last_status = Some(
+                    "Refreshed repository status and GitHub data (fetching remote...)".to_string(),
+                );
             }
 
             // F5: Fetch remote updates
@@ -1654,9 +1674,9 @@ impl App {
         if self.settings_modal.is_open {
             match mouse.kind {
                 MouseEventKind::Down(MouseButton::Left) => {
-                    if let Some(action) = self
-                        .settings_modal
-                        .handle_click(x, y, self.layout_areas.root)
+                    if let Some(action) =
+                        self.settings_modal
+                            .handle_click(x, y, self.layout_areas.root)
                     {
                         match action {
                             SettingsAction::SaveAndApply => {
@@ -1668,7 +1688,8 @@ impl App {
                                     self.i18n = I18n::new(self.config.language);
                                     self.icons = Icons::new(self.config.use_nerd_font);
                                     self.last_status = Some(
-                                        "Saved settings to ~/.config/prowly/config.toml".to_string(),
+                                        "Saved settings to ~/.config/prowly/config.toml"
+                                            .to_string(),
                                     );
                                 }
                                 self.settings_modal.close();
@@ -1937,8 +1958,9 @@ impl App {
                                     .get(self.changes_view.file_scroll.selected_index)
                                     .map(|f| f.path.clone());
                                 self.context_menu.open_at(sel_file, x, y + 1);
-                            } else if let Some(btn_action) =
-                                self.changes_view.hit_test_action_buttons(x, y, self.icons.use_nerd_font)
+                            } else if let Some(btn_action) = self
+                                .changes_view
+                                .hit_test_action_buttons(x, y, self.icons.use_nerd_font)
                             {
                                 match btn_action {
                                     ChangesButtonAction::StageAll => self.stage_all_files(),
@@ -1963,7 +1985,12 @@ impl App {
                                 self.changes_view.hit_test_file_list(x, y)
                             {
                                 self.changes_view.focus = ChangesFocus::FileList;
-                                if self.changes_view.file_scroll.handle_click_row(rel_y).is_some() {
+                                if self
+                                    .changes_view
+                                    .file_scroll
+                                    .handle_click_row(rel_y)
+                                    .is_some()
+                                {
                                     if is_checkbox {
                                         self.toggle_stage_selected();
                                     }
@@ -2308,7 +2335,8 @@ impl App {
                 let hash = commit.hash.clone();
                 match crate::git::checkout_commit(git.workdir(), &hash) {
                     Ok(_) => {
-                        self.last_status = Some(format!("Checked out commit {} (Detached HEAD)", hash));
+                        self.last_status =
+                            Some(format!("Checked out commit {} (Detached HEAD)", hash));
                         self.refresh_git_status();
                         self.refresh_history();
                     }
@@ -2349,7 +2377,8 @@ impl App {
                 let hash = commit.hash.clone();
                 match crate::git::cherry_pick_commit(git.workdir(), &hash) {
                     Ok(_) => {
-                        self.last_status = Some(format!("Cherry-picked commit {} successfully", hash));
+                        self.last_status =
+                            Some(format!("Cherry-picked commit {} successfully", hash));
                         self.refresh_git_status();
                         self.refresh_history();
                     }
@@ -2516,7 +2545,8 @@ impl App {
                         };
                         self.last_status = Some(format!("Committed: {}{}", short_oid, push_status));
                     } else {
-                        self.last_status = Some(format!("Committed locally: {} (unpushed)", short_oid));
+                        self.last_status =
+                            Some(format!("Committed locally: {} (unpushed)", short_oid));
                     }
                     self.changes_view.commit_summary.clear();
                     self.changes_view.commit_description.clear();
@@ -2600,8 +2630,7 @@ impl App {
                     self.last_status = Some(format!("Previewing Markdown: {}", rel_path));
                 }
                 Err(e) => {
-                    self.last_status =
-                        Some(format!("Could not read file ({}): {}", rel_path, e));
+                    self.last_status = Some(format!("Could not read file ({}): {}", rel_path, e));
                 }
             }
         } else {
@@ -3136,9 +3165,7 @@ impl App {
             if top_area.width < 140 && full_str.len() > 16 {
                 format!(
                     "…/{}",
-                    p.file_name()
-                        .and_then(|n| n.to_str())
-                        .unwrap_or(&full_str)
+                    p.file_name().and_then(|n| n.to_str()).unwrap_or(&full_str)
                 )
             } else {
                 full_str
@@ -3226,10 +3253,7 @@ impl App {
                 self.repo_status.ahead, self.repo_status.behind, uncommitted_count
             )
         } else {
-            format!(
-                "↑{} ↓{}",
-                self.repo_status.ahead, self.repo_status.behind
-            )
+            format!("↑{} ↓{}", self.repo_status.ahead, self.repo_status.behind)
         };
         let branch_x = open_repo_x + repo_w + 1;
         let branch_w = crate::ui::capsule::spans_width(&split_pill(
@@ -3402,11 +3426,7 @@ impl App {
             } else {
                 "AI: Disconnected"
             };
-            (
-                "⚠",
-                disconnected_label.to_string(),
-                self.theme.warning,
-            )
+            ("⚠", disconnected_label.to_string(), self.theme.warning)
         };
 
         let help_w = crate::ui::capsule::spans_width(&pill(
@@ -3418,7 +3438,12 @@ impl App {
             self.icons.use_nerd_font,
         )) as u16;
         let help_x = top_area.x + top_area.width.saturating_sub(help_w);
-        self.layout_areas.help_button = Rect { x: help_x, y: top_area.y, width: help_w, height: 1 };
+        self.layout_areas.help_button = Rect {
+            x: help_x,
+            y: top_area.y,
+            width: help_w,
+            height: 1,
+        };
         let is_help_hovered = self.is_hovered(self.layout_areas.help_button);
         let (help_fg, help_bg) = if is_help_hovered {
             (self.theme.bg, self.theme.fg)
@@ -3443,7 +3468,12 @@ impl App {
             self.icons.use_nerd_font,
         )) as u16;
         let settings_x = help_x.saturating_sub(settings_w);
-        self.layout_areas.settings_button = Rect { x: settings_x, y: top_area.y, width: settings_w, height: 1 };
+        self.layout_areas.settings_button = Rect {
+            x: settings_x,
+            y: top_area.y,
+            width: settings_w,
+            height: 1,
+        };
         let is_settings_hovered = self.is_hovered(self.layout_areas.settings_button);
         let (settings_fg, settings_bg) = if is_settings_hovered {
             (self.theme.bg, self.theme.primary)
@@ -3468,7 +3498,12 @@ impl App {
             self.icons.use_nerd_font,
         )) as u16;
         let palette_x = settings_x.saturating_sub(palette_w);
-        self.layout_areas.palette_button = Rect { x: palette_x, y: top_area.y, width: palette_w, height: 1 };
+        self.layout_areas.palette_button = Rect {
+            x: palette_x,
+            y: top_area.y,
+            width: palette_w,
+            height: 1,
+        };
         let is_palette_hovered = self.is_hovered(self.layout_areas.palette_button);
         let (palette_fg, palette_bg) = if is_palette_hovered {
             (self.theme.bg, self.theme.accent)
@@ -3493,7 +3528,12 @@ impl App {
             self.icons.use_nerd_font,
         )) as u16;
         let menu_x = palette_x.saturating_sub(menu_w);
-        self.layout_areas.menu_button = Rect { x: menu_x, y: top_area.y, width: menu_w, height: 1 };
+        self.layout_areas.menu_button = Rect {
+            x: menu_x,
+            y: top_area.y,
+            width: menu_w,
+            height: 1,
+        };
         let is_menu_hovered = self.is_hovered(self.layout_areas.menu_button);
         let (menu_fg, menu_bg) = if is_menu_hovered {
             (self.theme.bg, self.theme.secondary)
@@ -3521,7 +3561,12 @@ impl App {
         let ideal_ai_x = menu_x.saturating_sub(raw_ai_w);
         let ai_x = ideal_ai_x.max(min_ai_x);
         let ai_w = menu_x.saturating_sub(ai_x);
-        self.layout_areas.ai_status_button = Rect { x: ai_x, y: top_area.y, width: ai_w, height: 1 };
+        self.layout_areas.ai_status_button = Rect {
+            x: ai_x,
+            y: top_area.y,
+            width: ai_w,
+            height: 1,
+        };
         self.layout_areas.ask_ai_button = self.layout_areas.ai_status_button;
         let is_ai_hovered = self.is_hovered(self.layout_areas.ai_status_button);
         let (ai_pill_fg, ai_pill_bg) = if is_ai_hovered {
@@ -3539,12 +3584,27 @@ impl App {
         );
 
         if ai_w >= 4 {
-            frame.render_widget(Paragraph::new(Line::from(ai_spans)), self.layout_areas.ai_status_button);
+            frame.render_widget(
+                Paragraph::new(Line::from(ai_spans)),
+                self.layout_areas.ai_status_button,
+            );
         }
-        frame.render_widget(Paragraph::new(Line::from(menu_spans)), self.layout_areas.menu_button);
-        frame.render_widget(Paragraph::new(Line::from(palette_spans)), self.layout_areas.palette_button);
-        frame.render_widget(Paragraph::new(Line::from(settings_spans)), self.layout_areas.settings_button);
-        frame.render_widget(Paragraph::new(Line::from(help_spans)), self.layout_areas.help_button);
+        frame.render_widget(
+            Paragraph::new(Line::from(menu_spans)),
+            self.layout_areas.menu_button,
+        );
+        frame.render_widget(
+            Paragraph::new(Line::from(palette_spans)),
+            self.layout_areas.palette_button,
+        );
+        frame.render_widget(
+            Paragraph::new(Line::from(settings_spans)),
+            self.layout_areas.settings_button,
+        );
+        frame.render_widget(
+            Paragraph::new(Line::from(help_spans)),
+            self.layout_areas.help_button,
+        );
 
         // Bottom Header Row with Metadata Capsules
         let gh_target = self.github_target();
@@ -3607,14 +3667,19 @@ impl App {
         bottom_spans.extend(pill(
             Some(self.icons.get(crate::ui::IconId::Alert)),
             &alert_label,
-            if unread_count > 0 { self.theme.warning } else { self.theme.dim_fg },
+            if unread_count > 0 {
+                self.theme.warning
+            } else {
+                self.theme.dim_fg
+            },
             self.theme.selection_bg,
             self.theme.header_bg,
             self.icons.use_nerd_font,
         ));
 
         frame.render_widget(
-            Paragraph::new(Line::from(bottom_spans)).style(Style::default().bg(self.theme.header_bg)),
+            Paragraph::new(Line::from(bottom_spans))
+                .style(Style::default().bg(self.theme.header_bg)),
             bottom_area,
         );
     }
@@ -3674,7 +3739,10 @@ impl App {
             cur_x += pill_w + 1;
         }
 
-        frame.render_widget(Paragraph::new(Line::from(tab_spans)), self.layout_areas.right_tabs);
+        frame.render_widget(
+            Paragraph::new(Line::from(tab_spans)),
+            self.layout_areas.right_tabs,
+        );
 
         // Render Active Tab Content with Elevated Border
         let is_focused = self.focused_pane == FocusedPane::MainContent;
@@ -3848,7 +3916,11 @@ impl App {
         right_spans.extend(pill(
             Some("󱚣"),
             &ai_footer,
-            if ai_connected { self.theme.ai_sparkle } else { self.theme.warning },
+            if ai_connected {
+                self.theme.ai_sparkle
+            } else {
+                self.theme.warning
+            },
             self.theme.selection_bg,
             self.theme.status_bg,
             self.icons.use_nerd_font,
@@ -3879,7 +3951,10 @@ impl App {
         let pad = width.saturating_sub(left_len + right_len);
 
         let mut all_spans = left_spans;
-        all_spans.push(Span::styled(" ".repeat(pad), Style::default().bg(self.theme.status_bg)));
+        all_spans.push(Span::styled(
+            " ".repeat(pad),
+            Style::default().bg(self.theme.status_bg),
+        ));
         all_spans.extend(right_spans);
 
         let p = Paragraph::new(Line::from(all_spans)).style(

@@ -282,8 +282,8 @@ impl OpenRepoModal {
                 width: rect.width.min(viewport.width.saturating_sub(rect.x + 1)),
                 height: rect.height.min(viewport.height.saturating_sub(rect.y + 1)),
             };
-            let shadow_block = Block::default()
-                .style(Style::default().bg(ratatui::style::Color::Rgb(12, 14, 20)));
+            let shadow_block =
+                Block::default().style(Style::default().bg(ratatui::style::Color::Rgb(12, 14, 20)));
             frame.render_widget(shadow_block, shadow_rect);
         }
 

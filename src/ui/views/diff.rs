@@ -124,9 +124,7 @@ impl DiffView {
             ),
             Span::styled(
                 format!("{}  ", diff.file_path),
-                Style::default()
-                    .fg(theme.fg)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(theme.fg).add_modifier(Modifier::BOLD),
             ),
         ];
         title_spans.extend(crate::ui::capsule::diff_stat_bar(
@@ -170,14 +168,21 @@ impl DiffView {
             THEME_SET.themes.get("base16-ocean.light")
         }
         .or_else(|| THEME_SET.themes.get("base16-ocean.dark"))
-        .unwrap_or_else(|| THEME_SET.themes.values().next().expect("ThemeSet has at least one theme"));
+        .unwrap_or_else(|| {
+            THEME_SET
+                .themes
+                .values()
+                .next()
+                .expect("ThemeSet has at least one theme")
+        });
 
         let mut highlighter = HighlightLines::new(syntax, syn_theme);
 
         let visible = self.scroll.visible_range();
         let mut rendered_lines = Vec::with_capacity(visible.len());
 
-        for (idx, (old_num, new_num, _origin, line_type, content)) in flat_lines.iter().enumerate() {
+        for (idx, (old_num, new_num, _origin, line_type, content)) in flat_lines.iter().enumerate()
+        {
             if idx >= visible.end {
                 break;
             }

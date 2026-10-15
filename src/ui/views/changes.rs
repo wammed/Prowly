@@ -103,36 +103,59 @@ impl ChangesView {
     }
 
     /// Action button specifications (icon, label, action).
-    pub fn action_button_defs(use_nerd_font: bool) -> [(Option<&'static str>, &'static str, ChangesButtonAction); 9] {
+    pub fn action_button_defs(
+        use_nerd_font: bool,
+    ) -> [(Option<&'static str>, &'static str, ChangesButtonAction); 9] {
         if use_nerd_font {
             [
                 (Some(""), "Stage All", ChangesButtonAction::StageAll),
                 (Some("󰊢"), "Commit", ChangesButtonAction::Commit),
-                (Some("󰊢"), "Commit & Sync", ChangesButtonAction::CommitAndSync),
+                (
+                    Some("󰊢"),
+                    "Commit & Sync",
+                    ChangesButtonAction::CommitAndSync,
+                ),
                 (Some("󰦖"), "Pull", ChangesButtonAction::Pull),
                 (Some("󰦗"), "Fetch", ChangesButtonAction::Fetch),
                 (Some("󱚣"), "AI Generate", ChangesButtonAction::AiGenerate),
                 (Some("󱚣"), "AI Review", ChangesButtonAction::AiReview),
                 (Some("󰆓"), "Stash All", ChangesButtonAction::StashAll),
-                (Some(""), "Discard (Safe)", ChangesButtonAction::DiscardSafe),
+                (
+                    Some(""),
+                    "Discard (Safe)",
+                    ChangesButtonAction::DiscardSafe,
+                ),
             ]
         } else {
             [
                 (Some("[x]"), "Stage All", ChangesButtonAction::StageAll),
                 (Some("o"), "Commit", ChangesButtonAction::Commit),
-                (Some("o"), "Commit & Sync", ChangesButtonAction::CommitAndSync),
+                (
+                    Some("o"),
+                    "Commit & Sync",
+                    ChangesButtonAction::CommitAndSync,
+                ),
                 (Some("v"), "Pull", ChangesButtonAction::Pull),
                 (Some("f"), "Fetch", ChangesButtonAction::Fetch),
                 (Some("*"), "AI Generate", ChangesButtonAction::AiGenerate),
                 (Some("*"), "AI Review", ChangesButtonAction::AiReview),
                 (Some("$"), "Stash All", ChangesButtonAction::StashAll),
-                (Some("x"), "Discard (Safe)", ChangesButtonAction::DiscardSafe),
+                (
+                    Some("x"),
+                    "Discard (Safe)",
+                    ChangesButtonAction::DiscardSafe,
+                ),
             ]
         }
     }
 
     /// Check which action button was clicked at (x, y) with exact rendered pill widths.
-    pub fn hit_test_action_buttons(&self, x: u16, y: u16, use_nerd_font: bool) -> Option<ChangesButtonAction> {
+    pub fn hit_test_action_buttons(
+        &self,
+        x: u16,
+        y: u16,
+        use_nerd_font: bool,
+    ) -> Option<ChangesButtonAction> {
         let area = self.actions_bar_area;
         if y != area.y || x < area.x || x >= area.x + area.width {
             return None;
@@ -181,7 +204,11 @@ impl ChangesView {
     /// Check if the file list (middle pane) was clicked, returning relative visual row index and whether checkbox area was hit.
     pub fn hit_test_file_list(&self, x: u16, y: u16) -> Option<(usize, bool)> {
         let r = self.file_list_area;
-        if x > r.x && x < r.x + r.width.saturating_sub(1) && y > r.y && y < r.y + r.height.saturating_sub(1) {
+        if x > r.x
+            && x < r.x + r.width.saturating_sub(1)
+            && y > r.y
+            && y < r.y + r.height.saturating_sub(1)
+        {
             let inner_y = y.saturating_sub(r.y + 1) as usize;
             let is_checkbox = x <= r.x + 5;
             Some((inner_y, is_checkbox))
@@ -341,7 +368,10 @@ impl ChangesView {
                 };
 
                 let cursor_bar = if is_sel {
-                    Span::styled("▎", Style::default().fg(theme.primary).bg(theme.selection_bg))
+                    Span::styled(
+                        "▎",
+                        Style::default().fg(theme.primary).bg(theme.selection_bg),
+                    )
                 } else {
                     Span::styled(" ", Style::default().bg(theme.bg))
                 };
@@ -457,7 +487,8 @@ impl ChangesView {
         if is_summary_focused {
             let label_len = 9u16; // " Commit: "
             let text_w = unicode_width::UnicodeWidthStr::width(self.commit_summary.as_str()) as u16;
-            let cur_x = (chunks[0].x + label_len + text_w).min(chunks[0].x + chunks[0].width.saturating_sub(1));
+            let cur_x = (chunks[0].x + label_len + text_w)
+                .min(chunks[0].x + chunks[0].width.saturating_sub(1));
             frame.set_cursor_position((cur_x, chunks[0].y));
         }
 
@@ -494,8 +525,10 @@ impl ChangesView {
 
         if is_desc_focused {
             let label_len = 9u16; // " Desc:   "
-            let text_w = unicode_width::UnicodeWidthStr::width(self.commit_description.as_str()) as u16;
-            let cur_x = (chunks[1].x + label_len + text_w).min(chunks[1].x + chunks[1].width.saturating_sub(1));
+            let text_w =
+                unicode_width::UnicodeWidthStr::width(self.commit_description.as_str()) as u16;
+            let cur_x = (chunks[1].x + label_len + text_w)
+                .min(chunks[1].x + chunks[1].width.saturating_sub(1));
             frame.set_cursor_position((cur_x, chunks[1].y));
         }
 
@@ -511,16 +544,33 @@ impl ChangesView {
             (theme.success, theme.selection_bg, theme.bg, theme.success),
             (theme.primary, theme.selection_bg, theme.bg, theme.primary),
             (theme.bg, theme.success, theme.bg, theme.border_focused),
-            (theme.secondary, theme.selection_bg, theme.bg, theme.secondary),
+            (
+                theme.secondary,
+                theme.selection_bg,
+                theme.bg,
+                theme.secondary,
+            ),
             (theme.info, theme.selection_bg, theme.bg, theme.info),
-            (theme.ai_sparkle, theme.selection_bg, theme.bg, theme.ai_sparkle),
+            (
+                theme.ai_sparkle,
+                theme.selection_bg,
+                theme.bg,
+                theme.ai_sparkle,
+            ),
             (theme.info, theme.selection_bg, theme.bg, theme.info),
-            (theme.secondary, theme.selection_bg, theme.bg, theme.secondary),
+            (
+                theme.secondary,
+                theme.selection_bg,
+                theme.bg,
+                theme.secondary,
+            ),
             (theme.error, theme.selection_bg, theme.bg, theme.error),
         ];
 
         let mut buttons = Vec::new();
-        for ((icon, text, action), (norm_fg, norm_bg, hov_fg, hov_bg)) in defs.into_iter().zip(button_styles) {
+        for ((icon, text, action), (norm_fg, norm_bg, hov_fg, hov_bg)) in
+            defs.into_iter().zip(button_styles)
+        {
             let is_hovered = hovered_action == Some(action);
             let (fg, bg) = if is_hovered {
                 (hov_fg, hov_bg)

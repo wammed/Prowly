@@ -254,12 +254,10 @@ impl HistoryActionsModal {
         }
 
         lines.push(Line::from(""));
-        lines.push(Line::from(vec![
-            Span::styled(
-                " [↑/↓] Select  [Enter] Execute  [Esc] Cancel",
-                Style::default().fg(theme.dim_fg),
-            ),
-        ]));
+        lines.push(Line::from(vec![Span::styled(
+            " [↑/↓] Select  [Enter] Execute  [Esc] Cancel",
+            Style::default().fg(theme.dim_fg),
+        )]));
 
         let widget = Paragraph::new(lines).style(Style::default().bg(theme.bg));
         frame.render_widget(widget, inner);
@@ -304,11 +302,19 @@ impl HistoryActionsModal {
         let lines = vec![
             Line::from(vec![
                 Span::styled("Target Commit: ", Style::default().fg(theme.dim_fg)),
-                Span::styled(format!("{} - {}", commit.hash, commit.summary), Style::default().fg(theme.fg)),
+                Span::styled(
+                    format!("{} - {}", commit.hash, commit.summary),
+                    Style::default().fg(theme.fg),
+                ),
             ]),
             Line::from(""),
             Line::from(vec![
-                Span::styled("New Branch Name: ", Style::default().fg(theme.primary).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "New Branch Name: ",
+                    Style::default()
+                        .fg(theme.primary)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled(
                     if self.new_branch_name.is_empty() {
                         "type-branch-name..."
@@ -324,9 +330,10 @@ impl HistoryActionsModal {
                 Span::styled("█", Style::default().fg(theme.accent)),
             ]),
             Line::from(""),
-            Line::from(vec![
-                Span::styled(" [Enter] Create Branch  [Esc] Cancel", Style::default().fg(theme.dim_fg)),
-            ]),
+            Line::from(vec![Span::styled(
+                " [Enter] Create Branch  [Esc] Cancel",
+                Style::default().fg(theme.dim_fg),
+            )]),
         ];
 
         let widget = Paragraph::new(lines).style(Style::default().bg(theme.bg));
@@ -375,7 +382,12 @@ impl HistoryActionsModal {
                     "You are about to rewind your current branch to commit: ",
                     Style::default().fg(theme.fg),
                 ),
-                Span::styled(&commit.hash, Style::default().fg(theme.warning).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    &commit.hash,
+                    Style::default()
+                        .fg(theme.warning)
+                        .add_modifier(Modifier::BOLD),
+                ),
             ]),
             Line::from(vec![
                 Span::styled("Message: ", Style::default().fg(theme.dim_fg)),
@@ -383,21 +395,29 @@ impl HistoryActionsModal {
             ]),
             Line::from(""),
             Line::from(vec![
-                Span::styled("Notice: ", Style::default().fg(theme.error).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "Notice: ",
+                    Style::default()
+                        .fg(theme.error)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled(
                     "All commits created AFTER this commit will be discarded from HEAD.",
                     Style::default().fg(theme.fg),
                 ),
             ]),
-            Line::from(vec![
-                Span::styled(
-                    "A safety backup branch (backup/timemachine-...) will be created automatically.",
-                    Style::default().fg(theme.success),
-                ),
-            ]),
+            Line::from(vec![Span::styled(
+                "A safety backup branch (backup/timemachine-...) will be created automatically.",
+                Style::default().fg(theme.success),
+            )]),
             Line::from(""),
             Line::from(vec![
-                Span::styled(" [y / Enter] ", Style::default().fg(theme.warning).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    " [y / Enter] ",
+                    Style::default()
+                        .fg(theme.warning)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled("Confirm Reset    ", Style::default().fg(theme.fg)),
                 Span::styled(" [n / Esc] ", Style::default().fg(theme.dim_fg)),
                 Span::styled("Cancel", Style::default().fg(theme.fg)),

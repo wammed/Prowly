@@ -15,4 +15,3 @@ pub use dir_map::{DirMapNode, DirectoryMap};
 pub use history::{HistoryFocus, HistoryView};
 pub use prs::{PrFocus, PrsView};
 pub use worktrees::WorktreesView;
-

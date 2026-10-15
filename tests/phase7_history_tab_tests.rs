@@ -122,7 +122,10 @@ fn test_get_commit_details_and_diff() {
     assert!(!detail.diff_lines.is_empty());
 
     // Verify diff patch contains additions
-    let has_add = detail.diff_lines.iter().any(|l| l.starts_with("+Second line"));
+    let has_add = detail
+        .diff_lines
+        .iter()
+        .any(|l| l.starts_with("+Second line"));
     assert!(has_add, "Diff should contain added line '+Second line'");
 }
 
@@ -192,8 +195,7 @@ fn test_time_machine_reset_with_safety_backup() {
     );
 
     // Time Machine: Reset back to commit 1 (hashes[0])
-    let backup_branch =
-        time_machine_reset(repo.path(), &hashes[0]).expect("time_machine_reset");
+    let backup_branch = time_machine_reset(repo.path(), &hashes[0]).expect("time_machine_reset");
     assert!(backup_branch.starts_with("backup/timemachine-"));
 
     // Current HEAD must now be at commit 1 (hashes[0])

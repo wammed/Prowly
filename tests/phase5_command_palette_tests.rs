@@ -229,4 +229,3 @@ fn test_safety_guard_destructive_actions() {
         }
     );
 }
-

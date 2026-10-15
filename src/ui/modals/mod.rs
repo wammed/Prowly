@@ -25,4 +25,3 @@ pub use open_repo::{OpenRepoAction, OpenRepoModal};
 pub use rebase_modal::RebaseModal;
 pub use remote_diff_preview::RemoteDiffPreviewModal;
 pub use settings::{SettingsAction, SettingsModal};
-

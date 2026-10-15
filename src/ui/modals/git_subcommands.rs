@@ -17,7 +17,16 @@ impl GitSubcommandDef {
             name: "add",
             description: "Add file contents to the staging index",
             category: "Main",
-            common_flags: &["-p", "--patch", "-u", "--update", "-A", "--all", "-n", "--dry-run"],
+            common_flags: &[
+                "-p",
+                "--patch",
+                "-u",
+                "--update",
+                "-A",
+                "--all",
+                "-n",
+                "--dry-run",
+            ],
         },
         GitSubcommandDef {
             name: "am",
@@ -41,7 +50,18 @@ impl GitSubcommandDef {
             name: "branch",
             description: "List, create, or delete branches",
             category: "Main",
-            common_flags: &["-a", "--all", "-r", "--remotes", "-d", "-D", "-m", "-M", "--merged", "--no-merged"],
+            common_flags: &[
+                "-a",
+                "--all",
+                "-r",
+                "--remotes",
+                "-d",
+                "-D",
+                "-m",
+                "-M",
+                "--merged",
+                "--no-merged",
+            ],
         },
         GitSubcommandDef {
             name: "bundle",
@@ -53,13 +73,24 @@ impl GitSubcommandDef {
             name: "checkout",
             description: "Switch branches or restore working tree files",
             category: "Main",
-            common_flags: &["-b", "-B", "--track", "--detach", "--force", "-p", "--patch"],
+            common_flags: &[
+                "-b", "-B", "--track", "--detach", "--force", "-p", "--patch",
+            ],
         },
         GitSubcommandDef {
             name: "cherry-pick",
             description: "Apply the changes introduced by some existing commits",
             category: "Main",
-            common_flags: &["-e", "--edit", "-n", "--no-commit", "-x", "--abort", "--continue", "--skip"],
+            common_flags: &[
+                "-e",
+                "--edit",
+                "-n",
+                "--no-commit",
+                "-x",
+                "--abort",
+                "--continue",
+                "--skip",
+            ],
         },
         GitSubcommandDef {
             name: "citool",
@@ -77,13 +108,29 @@ impl GitSubcommandDef {
             name: "clone",
             description: "Clone a repository into a new directory",
             category: "Main",
-            common_flags: &["--depth 1", "--branch", "--recurse-submodules", "--bare", "--single-branch"],
+            common_flags: &[
+                "--depth 1",
+                "--branch",
+                "--recurse-submodules",
+                "--bare",
+                "--single-branch",
+            ],
         },
         GitSubcommandDef {
             name: "commit",
             description: "Record changes to the repository",
             category: "Main",
-            common_flags: &["-m", "--amend", "--no-edit", "-a", "--all", "--fixup=", "--squash=", "-v", "--verbose"],
+            common_flags: &[
+                "-m",
+                "--amend",
+                "--no-edit",
+                "-a",
+                "--all",
+                "--fixup=",
+                "--squash=",
+                "-v",
+                "--verbose",
+            ],
         },
         GitSubcommandDef {
             name: "describe",
@@ -95,7 +142,15 @@ impl GitSubcommandDef {
             name: "diff",
             description: "Show changes between commits, commit and working tree, etc",
             category: "Main",
-            common_flags: &["--staged", "--cached", "--stat", "--name-only", "--word-diff", "-w", "--color-words"],
+            common_flags: &[
+                "--staged",
+                "--cached",
+                "--stat",
+                "--name-only",
+                "--word-diff",
+                "-w",
+                "--color-words",
+            ],
         },
         GitSubcommandDef {
             name: "fetch",
@@ -131,7 +186,15 @@ impl GitSubcommandDef {
             name: "log",
             description: "Show commit logs and history",
             category: "Main",
-            common_flags: &["--oneline", "--graph", "--decorate", "-n 10", "--stat", "--author=", "--since="],
+            common_flags: &[
+                "--oneline",
+                "--graph",
+                "--decorate",
+                "-n 10",
+                "--stat",
+                "--author=",
+                "--since=",
+            ],
         },
         GitSubcommandDef {
             name: "maintenance",
@@ -143,7 +206,14 @@ impl GitSubcommandDef {
             name: "merge",
             description: "Join two or more development histories together",
             category: "Main",
-            common_flags: &["--no-ff", "--squash", "--abort", "--continue", "-m", "--strategy="],
+            common_flags: &[
+                "--no-ff",
+                "--squash",
+                "--abort",
+                "--continue",
+                "-m",
+                "--strategy=",
+            ],
         },
         GitSubcommandDef {
             name: "mv",
@@ -167,7 +237,14 @@ impl GitSubcommandDef {
             name: "push",
             description: "Update remote refs along with associated objects",
             category: "Main",
-            common_flags: &["-u", "--set-upstream", "--force-with-lease", "--tags", "--dry-run", "--delete"],
+            common_flags: &[
+                "-u",
+                "--set-upstream",
+                "--force-with-lease",
+                "--tags",
+                "--dry-run",
+                "--delete",
+            ],
         },
         GitSubcommandDef {
             name: "range-diff",
@@ -179,7 +256,15 @@ impl GitSubcommandDef {
             name: "rebase",
             description: "Reapply commits on top of another base tip",
             category: "Main",
-            common_flags: &["-i", "--interactive", "--onto", "--continue", "--abort", "--skip", "--autosquash"],
+            common_flags: &[
+                "-i",
+                "--interactive",
+                "--onto",
+                "--continue",
+                "--abort",
+                "--skip",
+                "--autosquash",
+            ],
         },
         GitSubcommandDef {
             name: "reset",
@@ -233,7 +318,15 @@ impl GitSubcommandDef {
             name: "stash",
             description: "Stash the changes in a dirty working directory away",
             category: "Main",
-            common_flags: &["push -m", "pop", "list", "apply", "drop", "show -p", "--include-untracked"],
+            common_flags: &[
+                "push -m",
+                "pop",
+                "list",
+                "apply",
+                "drop",
+                "show -p",
+                "--include-untracked",
+            ],
         },
         GitSubcommandDef {
             name: "status",
@@ -245,7 +338,13 @@ impl GitSubcommandDef {
             name: "submodule",
             description: "Initialize, update or inspect submodules",
             category: "Main",
-            common_flags: &["update --init --recursive", "status", "sync", "add", "deinit"],
+            common_flags: &[
+                "update --init --recursive",
+                "status",
+                "sync",
+                "add",
+                "deinit",
+            ],
         },
         GitSubcommandDef {
             name: "switch",
@@ -265,7 +364,6 @@ impl GitSubcommandDef {
             category: "Main",
             common_flags: &["list", "add", "remove", "prune", "lock", "unlock"],
         },
-
         // --- Ancillary Manipulators & Interrogators ---
         GitSubcommandDef {
             name: "annotate",
@@ -375,7 +473,6 @@ impl GitSubcommandDef {
             category: "Ancillary",
             common_flags: &["--build-options"],
         },
-
         // --- Low-Level / Plumbing Commands ---
         GitSubcommandDef {
             name: "apply",
@@ -423,7 +520,15 @@ impl GitSubcommandDef {
             name: "ls-files",
             description: "Show information about files in the index and the working tree",
             category: "Plumbing",
-            common_flags: &["-m", "--modified", "-o", "--others", "-d", "--deleted", "--stage"],
+            common_flags: &[
+                "-m",
+                "--modified",
+                "-o",
+                "--others",
+                "-d",
+                "--deleted",
+                "--stage",
+            ],
         },
         GitSubcommandDef {
             name: "ls-remote",
@@ -447,7 +552,12 @@ impl GitSubcommandDef {
             name: "rev-parse",
             description: "Pick out and massage parameters (e.g. resolve HEAD, git dir)",
             category: "Plumbing",
-            common_flags: &["--show-toplevel", "--abbrev-ref HEAD", "--git-dir", "--verify"],
+            common_flags: &[
+                "--show-toplevel",
+                "--abbrev-ref HEAD",
+                "--git-dir",
+                "--verify",
+            ],
         },
         GitSubcommandDef {
             name: "show-ref",
@@ -459,7 +569,12 @@ impl GitSubcommandDef {
             name: "update-index",
             description: "Register file contents in the working tree to the index",
             category: "Plumbing",
-            common_flags: &["--assume-unchanged", "--no-assume-unchanged", "--skip-worktree", "--refresh"],
+            common_flags: &[
+                "--assume-unchanged",
+                "--no-assume-unchanged",
+                "--skip-worktree",
+                "--refresh",
+            ],
         },
         GitSubcommandDef {
             name: "update-ref",
@@ -675,7 +790,12 @@ impl GitSubcommandDef {
             name: "var",
             description: "Show a Git logical variable",
             category: "Plumbing",
-            common_flags: &["-l", "GIT_AUTHOR_IDENT", "GIT_COMMITTER_IDENT", "GIT_EDITOR"],
+            common_flags: &[
+                "-l",
+                "GIT_AUTHOR_IDENT",
+                "GIT_COMMITTER_IDENT",
+                "GIT_EDITOR",
+            ],
         },
         GitSubcommandDef {
             name: "version",

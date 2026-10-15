@@ -485,8 +485,8 @@ impl SettingsModal {
                 width: rect.width.min(viewport.width.saturating_sub(rect.x + 1)),
                 height: rect.height.min(viewport.height.saturating_sub(rect.y + 1)),
             };
-            let shadow_block = Block::default()
-                .style(Style::default().bg(ratatui::style::Color::Rgb(12, 14, 20)));
+            let shadow_block =
+                Block::default().style(Style::default().bg(ratatui::style::Color::Rgb(12, 14, 20)));
             frame.render_widget(shadow_block, shadow_rect);
         }
 
@@ -554,7 +554,11 @@ impl SettingsModal {
 
         let is_hovered = |x_start: u16, x_end: u16, y: u16| -> bool {
             if let Some((mx, my)) = self.hover_pos {
-                if mx >= inner.x && mx < inner.x + inner.width && my >= inner.y && my < inner.y + inner.height {
+                if mx >= inner.x
+                    && mx < inner.x + inner.width
+                    && my >= inner.y
+                    && my < inner.y + inner.height
+                {
                     let rx = mx - inner.x;
                     let cy = (my - inner.y) + self.scroll_offset;
                     cy == y && rx >= x_start && rx < x_end
@@ -585,7 +589,11 @@ impl SettingsModal {
                 .add_modifier(Modifier::BOLD)
         };
 
-        let is_cancel_hovered = is_hovered((pad + save_w + 1) as u16, (pad + save_w + 1 + cancel_w) as u16, 0);
+        let is_cancel_hovered = is_hovered(
+            (pad + save_w + 1) as u16,
+            (pad + save_w + 1 + cancel_w) as u16,
+            0,
+        );
         let cancel_style = if is_cancel_hovered {
             Style::default()
                 .fg(theme.error)
@@ -605,7 +613,10 @@ impl SettingsModal {
             Span::styled(" [ ❌ Cancel ] ", cancel_style),
         ]));
 
-        lines.push(card_header("🎨 APPEARANCE & DISPLAY / 外観・基本設定", true));
+        lines.push(card_header(
+            "🎨 APPEARANCE & DISPLAY / 外観・基本設定",
+            true,
+        ));
 
         // 2. Theme rows
         for (r_idx, row) in theme_rows.iter().enumerate() {

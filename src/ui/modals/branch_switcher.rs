@@ -157,7 +157,12 @@ impl BranchSwitcherModal {
             } else {
                 0
             };
-            for (offset, branch) in filtered.iter().skip(scroll_top).take(visible_height).enumerate() {
+            for (offset, branch) in filtered
+                .iter()
+                .skip(scroll_top)
+                .take(visible_height)
+                .enumerate()
+            {
                 let actual_idx = scroll_top + offset;
                 let is_sel = actual_idx == self.selected_index;
                 let is_current = branch == &self.current_branch;

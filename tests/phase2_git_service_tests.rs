@@ -122,10 +122,12 @@ fn test_git_cli_push_and_ahead_status() {
     index.write().unwrap();
     let tree = repo.find_tree(tree_oid).unwrap();
     let sig = repo.signature().unwrap();
-    repo.commit(Some("HEAD"), &sig, &sig, "Initial commit", &tree, &[]).unwrap();
+    repo.commit(Some("HEAD"), &sig, &sig, "Initial commit", &tree, &[])
+        .unwrap();
 
     // Add remote
-    repo.remote("origin", remote_dir.path().to_str().unwrap()).unwrap();
+    repo.remote("origin", remote_dir.path().to_str().unwrap())
+        .unwrap();
 
     let git = GitService::open(repo_path).unwrap();
 
@@ -137,7 +139,10 @@ fn test_git_cli_push_and_ahead_status() {
         .unwrap();
 
     let status = git.get_status().unwrap();
-    println!("Status after initial push: ahead={}, behind={}", status.ahead, status.behind);
+    println!(
+        "Status after initial push: ahead={}, behind={}",
+        status.ahead, status.behind
+    );
 
     // Make new commit
     fs::write(&file, "hello 2").unwrap();
@@ -145,7 +150,10 @@ fn test_git_cli_push_and_ahead_status() {
     git.commit("second commit").unwrap();
 
     let status_before_push = git.get_status().unwrap();
-    println!("Status before push: ahead={}, behind={}", status_before_push.ahead, status_before_push.behind);
+    println!(
+        "Status before push: ahead={}, behind={}",
+        status_before_push.ahead, status_before_push.behind
+    );
     assert_eq!(status_before_push.ahead, 1);
 
     // Now call cli_push()
@@ -184,16 +192,22 @@ fn test_git_cli_push_auto_upstream_fallback() {
     index.write().unwrap();
     let tree = repo.find_tree(tree_oid).unwrap();
     let sig = repo.signature().unwrap();
-    repo.commit(Some("HEAD"), &sig, &sig, "Initial commit", &tree, &[]).unwrap();
+    repo.commit(Some("HEAD"), &sig, &sig, "Initial commit", &tree, &[])
+        .unwrap();
 
     // Add remote
-    repo.remote("origin", remote_dir.path().to_str().unwrap()).unwrap();
+    repo.remote("origin", remote_dir.path().to_str().unwrap())
+        .unwrap();
 
     let git = GitService::open(repo_path).unwrap();
 
     // Call cli_push() without upstream configured! Should auto fallback to -u origin <branch>
     let push_res = git.cli_push();
-    assert!(push_res.is_ok(), "Push without upstream should succeed via auto-fallback: {:?}", push_res);
+    assert!(
+        push_res.is_ok(),
+        "Push without upstream should succeed via auto-fallback: {:?}",
+        push_res
+    );
 
     let status = git.get_status().unwrap();
     assert_eq!(status.ahead, 0);
@@ -220,14 +234,19 @@ fn test_git_ahead_and_behind_sync() {
     index1.write().unwrap();
     let tree1 = repo1.find_tree(tree_oid1).unwrap();
     let sig1 = repo1.signature().unwrap();
-    repo1.commit(Some("HEAD"), &sig1, &sig1, "Base commit", &tree1, &[]).unwrap();
-    repo1.remote("origin", remote_dir.path().to_str().unwrap()).unwrap();
+    repo1
+        .commit(Some("HEAD"), &sig1, &sig1, "Base commit", &tree1, &[])
+        .unwrap();
+    repo1
+        .remote("origin", remote_dir.path().to_str().unwrap())
+        .unwrap();
 
     let git1 = GitService::open(local1_dir.path()).unwrap();
     git1.cli_push().unwrap();
 
     // 3. Local 2 clones from remote, adds a remote commit, and pushes
-    let repo2 = git2::Repository::clone(remote_dir.path().to_str().unwrap(), local2_dir.path()).unwrap();
+    let repo2 =
+        git2::Repository::clone(remote_dir.path().to_str().unwrap(), local2_dir.path()).unwrap();
     let mut config2 = repo2.config().unwrap();
     config2.set_str("user.name", "Tester2").unwrap();
     config2.set_str("user.email", "tester2@test.local").unwrap();
@@ -279,7 +298,8 @@ fn test_external_cli_commit_detection() {
     let git = GitService::open(local_dir.path()).unwrap();
     git.stage_all().unwrap();
     git.commit("Initial commit").unwrap();
-    repo.remote("origin", remote_dir.path().to_str().unwrap()).unwrap();
+    repo.remote("origin", remote_dir.path().to_str().unwrap())
+        .unwrap();
     git.cli_push().unwrap();
 
     assert_eq!(git.get_status().unwrap().ahead, 0);
@@ -298,7 +318,10 @@ fn test_external_cli_commit_detection() {
         .unwrap();
 
     let status = git.get_status().unwrap();
-    assert_eq!(status.ahead, 1, "Status should detect commit made by external git CLI");
+    assert_eq!(
+        status.ahead, 1,
+        "Status should detect commit made by external git CLI"
+    );
 }
 
 #[test]
@@ -317,11 +340,14 @@ fn test_cli_pull_updates_local_branch() {
     let git1 = GitService::open(local1_dir.path()).unwrap();
     git1.stage_all().unwrap();
     git1.commit("Initial commit").unwrap();
-    repo1.remote("origin", remote_dir.path().to_str().unwrap()).unwrap();
+    repo1
+        .remote("origin", remote_dir.path().to_str().unwrap())
+        .unwrap();
     git1.cli_push().unwrap();
 
     // Local 2 clones, creates commit, and pushes
-    let repo2 = git2::Repository::clone(remote_dir.path().to_str().unwrap(), local2_dir.path()).unwrap();
+    let repo2 =
+        git2::Repository::clone(remote_dir.path().to_str().unwrap(), local2_dir.path()).unwrap();
     let mut config2 = repo2.config().unwrap();
     config2.set_str("user.name", "Tester2").unwrap();
     config2.set_str("user.email", "tester2@test.local").unwrap();
@@ -345,8 +371,3 @@ fn test_cli_pull_updates_local_branch() {
     assert_eq!(status_after.behind, 0);
     assert!(local1_dir.path().join("file2.txt").exists());
 }
-
-
-
-
-

@@ -253,8 +253,10 @@ fn test_settings_modal_all_themes_selectable() {
 
     assert_eq!(found_themes.len(), ThemeId::ALL.len());
     for &tid in ThemeId::ALL {
-        assert!(found_themes.contains(&tid), "Theme {:?} missing from chips", tid);
+        assert!(
+            found_themes.contains(&tid),
+            "Theme {:?} missing from chips",
+            tid
+        );
     }
 }
-
-

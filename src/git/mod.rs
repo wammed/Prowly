@@ -19,4 +19,3 @@ pub use types::{
     DiffHunk, DiffLine, DiffLineType, FileDiff, FileStatus, GitError, GitFileItem, GitRepoStatus,
 };
 pub use worktree::{create_worktree, list_worktrees, remove_worktree, WorktreeItem};
-

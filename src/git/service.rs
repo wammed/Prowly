@@ -101,18 +101,29 @@ impl GitService {
             // CLI Fallback: If ahead/behind couldn't be determined or upstream was not found,
             // query git CLI which natively understands tracking configurations
             if upstream_name.is_none() || (ahead == 0 && behind == 0) {
-                if let Ok(cli_res) = self.run_git_cli(&["rev-list", "--left-right", "--count", "HEAD...@{upstream}"]) {
+                if let Ok(cli_res) =
+                    self.run_git_cli(&["rev-list", "--left-right", "--count", "HEAD...@{upstream}"])
+                {
                     let parts: Vec<&str> = cli_res.split_whitespace().collect();
                     if parts.len() == 2 {
-                        if let (Ok(a), Ok(b)) = (parts[0].parse::<usize>(), parts[1].parse::<usize>()) {
+                        if let (Ok(a), Ok(b)) =
+                            (parts[0].parse::<usize>(), parts[1].parse::<usize>())
+                        {
                             ahead = a;
                             behind = b;
                         }
                     }
-                } else if let Ok(cli_res) = self.run_git_cli(&["rev-list", "--left-right", "--count", &format!("HEAD...origin/{}", branch_name)]) {
+                } else if let Ok(cli_res) = self.run_git_cli(&[
+                    "rev-list",
+                    "--left-right",
+                    "--count",
+                    &format!("HEAD...origin/{}", branch_name),
+                ]) {
                     let parts: Vec<&str> = cli_res.split_whitespace().collect();
                     if parts.len() == 2 {
-                        if let (Ok(a), Ok(b)) = (parts[0].parse::<usize>(), parts[1].parse::<usize>()) {
+                        if let (Ok(a), Ok(b)) =
+                            (parts[0].parse::<usize>(), parts[1].parse::<usize>())
+                        {
                             ahead = a;
                             behind = b;
                             if upstream_name.is_none() {

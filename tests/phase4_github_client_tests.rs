@@ -96,14 +96,22 @@ async fn test_github_service_mock_and_caching() {
 
     // Test RepoMetadata visibility
     let meta_default = service.get_repo_metadata(&target, false).await.unwrap();
-    assert!(!meta_default.is_private, "Default in mock mode should be public (is_private=false)");
+    assert!(
+        !meta_default.is_private,
+        "Default in mock mode should be public (is_private=false)"
+    );
 
     service.set_mock_repo_metadata(true).await;
     let meta_private = service.get_repo_metadata(&target, true).await.unwrap();
-    assert!(meta_private.is_private, "Should return is_private=true after set_mock_repo_metadata(true)");
+    assert!(
+        meta_private.is_private,
+        "Should return is_private=true after set_mock_repo_metadata(true)"
+    );
 
     service.set_mock_repo_metadata(false).await;
     let meta_public = service.get_repo_metadata(&target, true).await.unwrap();
-    assert!(!meta_public.is_private, "Should return is_private=false after set_mock_repo_metadata(false)");
+    assert!(
+        !meta_public.is_private,
+        "Should return is_private=false after set_mock_repo_metadata(false)"
+    );
 }
-

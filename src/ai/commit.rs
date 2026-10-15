@@ -25,9 +25,13 @@ pub fn truncate_diff(diff: &str, max_chars: usize) -> String {
         total_lines += 1;
 
         // Detect file headers to check for lockfiles
-        if line.starts_with("diff --git ") || line.starts_with("--- a/") || line.starts_with("+++ b/") {
+        if line.starts_with("diff --git ")
+            || line.starts_with("--- a/")
+            || line.starts_with("+++ b/")
+        {
             let lower = line.to_lowercase();
-            in_lockfile = lower.contains("lock") || lower.contains(".lock") || lower.ends_with("-lock.json");
+            in_lockfile =
+                lower.contains("lock") || lower.contains(".lock") || lower.ends_with("-lock.json");
             if in_lockfile && line.starts_with("diff --git ") {
                 out.push_str(line);
                 out.push_str("\n[Lockfile changes omitted to preserve context]\n");

@@ -59,9 +59,7 @@ pub fn render_markdown(input: &str, theme: &Theme) -> Vec<Line<'static>> {
                 Span::styled("│ ", Style::default().fg(theme.border)),
                 Span::styled(
                     raw_line.to_string(),
-                    Style::default()
-                        .fg(theme.fg)
-                        .bg(theme.selection_bg),
+                    Style::default().fg(theme.fg).bg(theme.selection_bg),
                 ),
             ]));
             continue;
@@ -102,45 +100,82 @@ pub fn render_markdown(input: &str, theme: &Theme) -> Vec<Line<'static>> {
         if let Some(rest) = trimmed_line.strip_prefix('>') {
             let quote_text = rest.strip_prefix(' ').unwrap_or(rest);
             let mut spans = vec![Span::styled("▌ ", Style::default().fg(theme.secondary))];
-            spans.extend(parse_inline_spans(quote_text, theme, Style::default().fg(theme.dim_fg).add_modifier(Modifier::ITALIC)));
+            spans.extend(parse_inline_spans(
+                quote_text,
+                theme,
+                Style::default()
+                    .fg(theme.dim_fg)
+                    .add_modifier(Modifier::ITALIC),
+            ));
             lines.push(Line::from(spans));
             continue;
         }
 
         // 5. Checkboxes (- [ ], - [x], * [ ], * [x])
-        if let Some(rest) = trimmed_line.strip_prefix("- [x] ").or_else(|| trimmed_line.strip_prefix("* [x] ")) {
-            let mut spans = vec![
-                Span::styled("  ✔ ", Style::default().fg(theme.success).add_modifier(Modifier::BOLD)),
-            ];
-            spans.extend(parse_inline_spans(rest, theme, Style::default().fg(theme.fg)));
+        if let Some(rest) = trimmed_line
+            .strip_prefix("- [x] ")
+            .or_else(|| trimmed_line.strip_prefix("* [x] "))
+        {
+            let mut spans = vec![Span::styled(
+                "  ✔ ",
+                Style::default()
+                    .fg(theme.success)
+                    .add_modifier(Modifier::BOLD),
+            )];
+            spans.extend(parse_inline_spans(
+                rest,
+                theme,
+                Style::default().fg(theme.fg),
+            ));
             lines.push(Line::from(spans));
             continue;
         }
-        if let Some(rest) = trimmed_line.strip_prefix("- [ ] ").or_else(|| trimmed_line.strip_prefix("* [ ] ")) {
-            let mut spans = vec![
-                Span::styled("  ☐ ", Style::default().fg(theme.dim_fg)),
-            ];
-            spans.extend(parse_inline_spans(rest, theme, Style::default().fg(theme.fg)));
+        if let Some(rest) = trimmed_line
+            .strip_prefix("- [ ] ")
+            .or_else(|| trimmed_line.strip_prefix("* [ ] "))
+        {
+            let mut spans = vec![Span::styled("  ☐ ", Style::default().fg(theme.dim_fg))];
+            spans.extend(parse_inline_spans(
+                rest,
+                theme,
+                Style::default().fg(theme.fg),
+            ));
             lines.push(Line::from(spans));
             continue;
         }
 
         // 6. Bullet lists (- item, * item, + item)
-        if let Some(rest) = trimmed_line.strip_prefix("- ").or_else(|| trimmed_line.strip_prefix("* ")).or_else(|| trimmed_line.strip_prefix("+ ")) {
-            let mut spans = vec![
-                Span::styled("  • ", Style::default().fg(theme.primary).add_modifier(Modifier::BOLD)),
-            ];
-            spans.extend(parse_inline_spans(rest, theme, Style::default().fg(theme.fg)));
+        if let Some(rest) = trimmed_line
+            .strip_prefix("- ")
+            .or_else(|| trimmed_line.strip_prefix("* "))
+            .or_else(|| trimmed_line.strip_prefix("+ "))
+        {
+            let mut spans = vec![Span::styled(
+                "  • ",
+                Style::default()
+                    .fg(theme.primary)
+                    .add_modifier(Modifier::BOLD),
+            )];
+            spans.extend(parse_inline_spans(
+                rest,
+                theme,
+                Style::default().fg(theme.fg),
+            ));
             lines.push(Line::from(spans));
             continue;
         }
 
         // 7. Numbered list (e.g. 1. item)
         if let Some((num_str, rest)) = parse_numbered_list(trimmed_line) {
-            let mut spans = vec![
-                Span::styled(format!("  {}. ", num_str), Style::default().fg(theme.primary)),
-            ];
-            spans.extend(parse_inline_spans(rest, theme, Style::default().fg(theme.fg)));
+            let mut spans = vec![Span::styled(
+                format!("  {}. ", num_str),
+                Style::default().fg(theme.primary),
+            )];
+            spans.extend(parse_inline_spans(
+                rest,
+                theme,
+                Style::default().fg(theme.fg),
+            ));
             lines.push(Line::from(spans));
             continue;
         }
@@ -166,7 +201,9 @@ fn render_heading(text: &str, level: usize, theme: &Theme) -> Line<'static> {
         1 => {
             spans.push(Span::styled(
                 "◈ ",
-                Style::default().fg(theme.primary).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(theme.primary)
+                    .add_modifier(Modifier::BOLD),
             ));
             spans.extend(parse_inline_spans(
                 text,
@@ -179,7 +216,9 @@ fn render_heading(text: &str, level: usize, theme: &Theme) -> Line<'static> {
         2 => {
             spans.push(Span::styled(
                 "◆ ",
-                Style::default().fg(theme.accent).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(theme.accent)
+                    .add_modifier(Modifier::BOLD),
             ));
             spans.extend(parse_inline_spans(
                 text,
@@ -192,7 +231,9 @@ fn render_heading(text: &str, level: usize, theme: &Theme) -> Line<'static> {
         3 => {
             spans.push(Span::styled(
                 "◇ ",
-                Style::default().fg(theme.secondary).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(theme.secondary)
+                    .add_modifier(Modifier::BOLD),
             ));
             spans.extend(parse_inline_spans(
                 text,
@@ -203,10 +244,7 @@ fn render_heading(text: &str, level: usize, theme: &Theme) -> Line<'static> {
             ));
         }
         _ => {
-            spans.push(Span::styled(
-                "  ",
-                Style::default(),
-            ));
+            spans.push(Span::styled("  ", Style::default()));
             spans.extend(parse_inline_spans(
                 text,
                 theme,
@@ -244,11 +282,7 @@ fn parse_numbered_list(line: &str) -> Option<(&str, &str)> {
 /// - `` `code` ``
 /// - `~~strikethrough~~`
 /// - `[text](url)`
-pub fn parse_inline_spans(
-    text: &str,
-    theme: &Theme,
-    base_style: Style,
-) -> Vec<Span<'static>> {
+pub fn parse_inline_spans(text: &str, theme: &Theme, base_style: Style) -> Vec<Span<'static>> {
     let mut spans = Vec::new();
     let chars: Vec<char> = text.chars().collect();
     let len = chars.len();

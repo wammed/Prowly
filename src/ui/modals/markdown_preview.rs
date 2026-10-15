@@ -44,7 +44,10 @@ impl MarkdownPreviewModal {
 
     /// Scroll down by n lines.
     pub fn scroll_down(&mut self, n: usize) {
-        let max_scroll = self.rendered_lines.len().saturating_sub(self.viewport_height);
+        let max_scroll = self
+            .rendered_lines
+            .len()
+            .saturating_sub(self.viewport_height);
         self.scroll_offset = (self.scroll_offset + n).min(max_scroll);
     }
 
@@ -60,14 +63,21 @@ impl MarkdownPreviewModal {
 
     /// Jump to the end of the document.
     pub fn scroll_to_bottom(&mut self) {
-        let max_scroll = self.rendered_lines.len().saturating_sub(self.viewport_height);
+        let max_scroll = self
+            .rendered_lines
+            .len()
+            .saturating_sub(self.viewport_height);
         self.scroll_offset = max_scroll;
     }
 
     /// Calculate modal bounding rectangle.
     pub fn modal_rect(&self, viewport: Rect) -> Rect {
-        let width = (viewport.width.saturating_sub(8)).max(40).min(viewport.width);
-        let height = (viewport.height.saturating_sub(4)).max(15).min(viewport.height);
+        let width = (viewport.width.saturating_sub(8))
+            .max(40)
+            .min(viewport.width);
+        let height = (viewport.height.saturating_sub(4))
+            .max(15)
+            .min(viewport.height);
         let x = (viewport.width.saturating_sub(width)) / 2;
         let y = (viewport.height.saturating_sub(height)) / 2;
         Rect {
@@ -122,7 +132,11 @@ impl MarkdownPreviewModal {
             .title_bottom(Span::styled(
                 format!(
                     " [ Lines {}-{} / {} ({}%) ] ",
-                    if total_lines == 0 { 0 } else { visible_start + 1 },
+                    if total_lines == 0 {
+                        0
+                    } else {
+                        visible_start + 1
+                    },
                     visible_end,
                     total_lines,
                     percent

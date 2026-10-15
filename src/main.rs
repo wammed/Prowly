@@ -161,4 +161,3 @@ fn print_help(config: &Config) {
         println!("        --no-nerd-font    Disable Nerd Font glyphs (use ASCII/Unicode fallback)");
     }
 }
-

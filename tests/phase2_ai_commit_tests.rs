@@ -47,7 +47,10 @@ fn test_truncate_diff_large_diff_truncated() {
     let mut large_diff = String::new();
     large_diff.push_str("diff --git a/big.rs b/big.rs\n");
     for i in 0..500 {
-        large_diff.push_str(&format!("+line {} of very large diff text content here\n", i));
+        large_diff.push_str(&format!(
+            "+line {} of very large diff text content here\n",
+            i
+        ));
     }
 
     let truncated = prowly::ai::truncate_diff(&large_diff, 1000);

@@ -55,4 +55,3 @@ fn test_reveal_in_file_manager_path_resolution() {
     let res = reveal_in_file_manager(non_existent);
     assert!(res.is_ok());
 }
-

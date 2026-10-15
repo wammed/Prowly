@@ -13,7 +13,10 @@ pub const CAP_RIGHT: &str = "\u{e0b4}";
 
 /// Calculate the total terminal display width of a list of Spans.
 pub fn spans_width(spans: &[Span]) -> usize {
-    spans.iter().map(|s| UnicodeWidthStr::width(s.content.as_ref())).sum()
+    spans
+        .iter()
+        .map(|s| UnicodeWidthStr::width(s.content.as_ref()))
+        .sum()
 }
 
 /// Create a single capsule/pill badge.
@@ -52,7 +55,10 @@ pub fn pill(
 
         vec![Span::styled(
             content,
-            Style::default().fg(fg).bg(outer_bg).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(fg)
+                .bg(outer_bg)
+                .add_modifier(Modifier::BOLD),
         )]
     }
 }
@@ -86,10 +92,7 @@ pub fn split_pill(
                     .bg(left_bg)
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::styled(
-                right_content,
-                Style::default().fg(right_fg).bg(right_bg),
-            ),
+            Span::styled(right_content, Style::default().fg(right_fg).bg(right_bg)),
             Span::styled(CAP_RIGHT, Style::default().fg(right_bg).bg(outer_bg)),
         ]
     } else {
@@ -119,7 +122,10 @@ pub fn key_badge(
 ) -> Vec<Span<'static>> {
     let mut spans = Vec::new();
     if use_nerd_font {
-        spans.push(Span::styled(CAP_LEFT, Style::default().fg(key_bg).bg(outer_bg)));
+        spans.push(Span::styled(
+            CAP_LEFT,
+            Style::default().fg(key_bg).bg(outer_bg),
+        ));
         spans.push(Span::styled(
             format!(" {} ", key),
             Style::default()
@@ -127,7 +133,10 @@ pub fn key_badge(
                 .bg(key_bg)
                 .add_modifier(Modifier::BOLD),
         ));
-        spans.push(Span::styled(CAP_RIGHT, Style::default().fg(key_bg).bg(outer_bg)));
+        spans.push(Span::styled(
+            CAP_RIGHT,
+            Style::default().fg(key_bg).bg(outer_bg),
+        ));
     } else {
         spans.push(Span::styled(
             format!("[{}]", key),

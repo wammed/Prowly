@@ -66,7 +66,10 @@ impl HistoryView {
         if self.rows.is_empty() {
             return None;
         }
-        let idx = self.scroll.selected_index.min(self.rows.len().saturating_sub(1));
+        let idx = self
+            .scroll
+            .selected_index
+            .min(self.rows.len().saturating_sub(1));
         self.rows.get(idx).and_then(|r| r.commit())
     }
 
@@ -129,13 +132,7 @@ impl HistoryView {
     }
 
     /// Render History view split into left Graph list and right Detail/Diff preview.
-    pub fn render(
-        &mut self,
-        frame: &mut Frame,
-        theme: &Theme,
-        icons: &Icons,
-        area: Rect,
-    ) {
+    pub fn render(&mut self, frame: &mut Frame, theme: &Theme, icons: &Icons, area: Rect) {
         // Horizontal split: 52% Graph & Commits, 48% Diff Preview & Details
         let main_chunks = Layout::default()
             .direction(Direction::Horizontal)
@@ -149,13 +146,7 @@ impl HistoryView {
         self.render_diff_preview(frame, theme, icons, self.diff_area);
     }
 
-    fn render_commit_list(
-        &mut self,
-        frame: &mut Frame,
-        theme: &Theme,
-        icons: &Icons,
-        area: Rect,
-    ) {
+    fn render_commit_list(&mut self, frame: &mut Frame, theme: &Theme, icons: &Icons, area: Rect) {
         let is_focused = self.focus == HistoryFocus::CommitList;
         let border_color = if is_focused {
             theme.border_focused
@@ -174,7 +165,11 @@ impl HistoryView {
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(border_color))
             .title(Span::styled(
-                format!(" {} Git Graph & History ({} commits) ", icons.commit(), commit_count),
+                format!(
+                    " {} Git Graph & History ({} commits) ",
+                    icons.commit(),
+                    commit_count
+                ),
                 Style::default()
                     .fg(theme.primary)
                     .add_modifier(Modifier::BOLD),
@@ -185,9 +180,10 @@ impl HistoryView {
         frame.render_widget(block, area);
 
         if self.rows.is_empty() {
-            let empty_text = Paragraph::new(Line::from(vec![
-                Span::styled(" No commit history available.", Style::default().fg(theme.dim_fg)),
-            ]))
+            let empty_text = Paragraph::new(Line::from(vec![Span::styled(
+                " No commit history available.",
+                Style::default().fg(theme.dim_fg),
+            )]))
             .style(Style::default().bg(theme.bg));
             frame.render_widget(empty_text, inner);
             return;
@@ -298,13 +294,7 @@ impl HistoryView {
         frame.render_widget(widget, inner);
     }
 
-    fn render_diff_preview(
-        &self,
-        frame: &mut Frame,
-        theme: &Theme,
-        icons: &Icons,
-        area: Rect,
-    ) {
+    fn render_diff_preview(&self, frame: &mut Frame, theme: &Theme, icons: &Icons, area: Rect) {
         let is_focused = self.focus == HistoryFocus::DiffPreview;
         let border_color = if is_focused {
             theme.border_focused
@@ -353,7 +343,11 @@ impl HistoryView {
         };
 
         // Split inner into Header/Meta (Length 6..8) -> Diff content (Min 5) -> Help footer (Length 2)
-        let header_height = if detail.stats.is_empty() { 5 } else { 7.min(inner.height.saturating_sub(6)) };
+        let header_height = if detail.stats.is_empty() {
+            5
+        } else {
+            7.min(inner.height.saturating_sub(6))
+        };
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
@@ -370,7 +364,12 @@ impl HistoryView {
         // 1. Meta / Summary header
         let mut header_lines = Vec::new();
         header_lines.push(Line::from(vec![
-            Span::styled("Commit: ", Style::default().fg(theme.primary).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "Commit: ",
+                Style::default()
+                    .fg(theme.primary)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::styled(&detail.hash, Style::default().fg(theme.warning)),
         ]));
         header_lines.push(Line::from(vec![
@@ -382,7 +381,10 @@ impl HistoryView {
         ]));
         header_lines.push(Line::from(vec![
             Span::styled("Message: ", Style::default().fg(theme.dim_fg)),
-            Span::styled(&detail.summary, Style::default().fg(theme.fg).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                &detail.summary,
+                Style::default().fg(theme.fg).add_modifier(Modifier::BOLD),
+            ),
         ]));
 
         if !detail.stats.is_empty() {
@@ -399,12 +401,14 @@ impl HistoryView {
         // 2. Diff preview content (showing first ~20 lines by default or scrolled)
         let diff_lines_count = detail.diff_lines.len();
         let visible_diff_lines = if diff_lines_count == 0 {
-            vec![Line::from(vec![
-                Span::styled(" (No text diff or merge commit without patch changes)", Style::default().fg(theme.dim_fg)),
-            ])]
+            vec![Line::from(vec![Span::styled(
+                " (No text diff or merge commit without patch changes)",
+                Style::default().fg(theme.dim_fg),
+            )])]
         } else {
             let start = self.diff_scroll_offset.min(diff_lines_count);
-            let take_len = (diff_content_area.height as usize).min(diff_lines_count.saturating_sub(start));
+            let take_len =
+                (diff_content_area.height as usize).min(diff_lines_count.saturating_sub(start));
             detail.diff_lines[start..start + take_len]
                 .iter()
                 .map(|line_str| {
@@ -421,12 +425,16 @@ impl HistoryView {
                     } else if line_str.starts_with("@@") {
                         Line::from(Span::styled(
                             line_str.clone(),
-                            Style::default().fg(theme.diff_hunk_fg).add_modifier(Modifier::BOLD),
+                            Style::default()
+                                .fg(theme.diff_hunk_fg)
+                                .add_modifier(Modifier::BOLD),
                         ))
                     } else if line_str.starts_with("diff --git") {
                         Line::from(Span::styled(
                             line_str.clone(),
-                            Style::default().fg(theme.primary).add_modifier(Modifier::BOLD),
+                            Style::default()
+                                .fg(theme.primary)
+                                .add_modifier(Modifier::BOLD),
                         ))
                     } else {
                         Line::from(Span::styled(
@@ -442,7 +450,10 @@ impl HistoryView {
             .borders(Borders::TOP)
             .border_style(Style::default().fg(theme.border))
             .title(Span::styled(
-                format!(" Diff ({} lines, offset {}) ", diff_lines_count, self.diff_scroll_offset),
+                format!(
+                    " Diff ({} lines, offset {}) ",
+                    diff_lines_count, self.diff_scroll_offset
+                ),
                 Style::default().fg(theme.dim_fg),
             ));
         let diff_inner = diff_block.inner(diff_content_area);
@@ -453,7 +464,12 @@ impl HistoryView {
 
         // 3. Footer shortcut bar
         let footer_spans = vec![
-            Span::styled("[Enter/m] ", Style::default().fg(theme.primary).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "[Enter/m] ",
+                Style::default()
+                    .fg(theme.primary)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::raw("Action Menu  "),
             Span::styled("[c] ", Style::default().fg(theme.accent)),
             Span::raw("Checkout  "),
@@ -463,10 +479,16 @@ impl HistoryView {
             Span::raw("Cherry-pick  "),
             Span::styled("[r] ", Style::default().fg(theme.accent)),
             Span::raw("Revert  "),
-            Span::styled("[t] ", Style::default().fg(theme.warning).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "[t] ",
+                Style::default()
+                    .fg(theme.warning)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::raw("Time Machine"),
         ];
-        let footer_widget = Paragraph::new(Line::from(footer_spans)).style(Style::default().bg(theme.bg));
+        let footer_widget =
+            Paragraph::new(Line::from(footer_spans)).style(Style::default().bg(theme.bg));
         frame.render_widget(footer_widget, footer_area);
     }
 }
@@ -476,4 +498,3 @@ impl Default for HistoryView {
         Self::new()
     }
 }
-

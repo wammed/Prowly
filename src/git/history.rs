@@ -148,7 +148,9 @@ pub fn get_commit_details(repo_dir: &Path, commit_hash: &str) -> Result<CommitDe
                 in_stats = true;
                 continue;
             }
-            if !line.is_empty() && (line.contains('|') && (line.contains('+') || line.contains('-'))) {
+            if !line.is_empty()
+                && (line.contains('|') && (line.contains('+') || line.contains('-')))
+            {
                 in_message = false;
                 in_stats = true;
                 detail.stats.push(line.trim().to_string());
@@ -226,7 +228,9 @@ pub fn create_branch_at_commit(
             .output()?;
 
         if !checkout_out.status.success() {
-            let err = String::from_utf8_lossy(&checkout_out.stderr).trim().to_string();
+            let err = String::from_utf8_lossy(&checkout_out.stderr)
+                .trim()
+                .to_string();
             return Err(GitError::Cli(err));
         }
     }
@@ -273,7 +277,9 @@ pub fn time_machine_reset(repo_dir: &Path, commit_hash: &str) -> Result<String, 
         .output()?;
 
     let current_branch = if branch_out.status.success() {
-        String::from_utf8_lossy(&branch_out.stdout).trim().to_string()
+        String::from_utf8_lossy(&branch_out.stdout)
+            .trim()
+            .to_string()
     } else {
         "HEAD".to_string()
     };
@@ -299,7 +305,9 @@ pub fn time_machine_reset(repo_dir: &Path, commit_hash: &str) -> Result<String, 
         .output()?;
 
     if !reset_out.status.success() {
-        let err = String::from_utf8_lossy(&reset_out.stderr).trim().to_string();
+        let err = String::from_utf8_lossy(&reset_out.stderr)
+            .trim()
+            .to_string();
         return Err(GitError::Cli(err));
     }
 
