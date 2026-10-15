@@ -321,5 +321,58 @@ fn test_stage_all_action_button_and_batch_staging() {
     assert_eq!(app.last_status.as_deref(), Some("Staged all files"));
 }
 
+#[test]
+fn test_all_action_buttons_hit_testing() {
+    use ratatui::layout::Rect;
+
+    let mut app = App::new(Config::default());
+    app.changes_view.actions_bar_area = Rect {
+        x: 0,
+        y: 10,
+        width: 200,
+        height: 1,
+    };
+
+    let defs = prowly::ui::views::changes::ChangesView::action_button_defs(true);
+    let mut cur_x = 0;
+    for (icon, text, expected_action) in defs {
+        let pill_spans = prowly::ui::capsule::pill(
+            icon,
+            text,
+            ratatui::style::Color::Reset,
+            ratatui::style::Color::Reset,
+            ratatui::style::Color::Reset,
+            true,
+        );
+        let w = prowly::ui::capsule::spans_width(&pill_spans) as u16;
+
+        // Test start, middle, and end-1 of each pill
+        assert_eq!(
+            app.changes_view.hit_test_action_buttons(cur_x, 10, true),
+            Some(expected_action),
+            "Start of button '{}' at col {}", text, cur_x
+        );
+        assert_eq!(
+            app.changes_view.hit_test_action_buttons(cur_x + w / 2, 10, true),
+            Some(expected_action),
+            "Middle of button '{}' at col {}", text, cur_x + w / 2
+        );
+        assert_eq!(
+            app.changes_view.hit_test_action_buttons(cur_x + w - 1, 10, true),
+            Some(expected_action),
+            "End of button '{}' at col {}", text, cur_x + w - 1
+        );
+
+        // Gap between buttons should return None
+        cur_x += w;
+        assert_eq!(
+            app.changes_view.hit_test_action_buttons(cur_x, 10, true),
+            None,
+            "Gap after button '{}' at col {}", text, cur_x
+        );
+        cur_x += 1; // plus space separator
+    }
+}
+
 
 

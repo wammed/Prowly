@@ -102,7 +102,36 @@ impl ChangesView {
         }
     }
 
-    /// Check which action button was clicked at (x, y).
+    /// Action button specifications (icon, label, action).
+    pub fn action_button_defs(use_nerd_font: bool) -> [(Option<&'static str>, &'static str, ChangesButtonAction); 9] {
+        if use_nerd_font {
+            [
+                (Some(""), "Stage All", ChangesButtonAction::StageAll),
+                (Some("󰊢"), "Commit", ChangesButtonAction::Commit),
+                (Some("󰊢"), "Commit & Sync", ChangesButtonAction::CommitAndSync),
+                (Some("󰦖"), "Pull", ChangesButtonAction::Pull),
+                (Some("󰦗"), "Fetch", ChangesButtonAction::Fetch),
+                (Some("󱚣"), "AI Generate", ChangesButtonAction::AiGenerate),
+                (Some("󱚣"), "AI Review", ChangesButtonAction::AiReview),
+                (Some("󰆓"), "Stash All", ChangesButtonAction::StashAll),
+                (Some(""), "Discard (Safe)", ChangesButtonAction::DiscardSafe),
+            ]
+        } else {
+            [
+                (Some("[x]"), "Stage All", ChangesButtonAction::StageAll),
+                (Some("o"), "Commit", ChangesButtonAction::Commit),
+                (Some("o"), "Commit & Sync", ChangesButtonAction::CommitAndSync),
+                (Some("v"), "Pull", ChangesButtonAction::Pull),
+                (Some("f"), "Fetch", ChangesButtonAction::Fetch),
+                (Some("*"), "AI Generate", ChangesButtonAction::AiGenerate),
+                (Some("*"), "AI Review", ChangesButtonAction::AiReview),
+                (Some("$"), "Stash All", ChangesButtonAction::StashAll),
+                (Some("x"), "Discard (Safe)", ChangesButtonAction::DiscardSafe),
+            ]
+        }
+    }
+
+    /// Check which action button was clicked at (x, y) with exact rendered pill widths.
     pub fn hit_test_action_buttons(&self, x: u16, y: u16, use_nerd_font: bool) -> Option<ChangesButtonAction> {
         let area = self.actions_bar_area;
         if y != area.y || x < area.x || x >= area.x + area.width {
@@ -110,26 +139,19 @@ impl ChangesView {
         }
 
         let rel_x = x.saturating_sub(area.x);
-        // Pill widths depending on nerd font mode
-        let buttons = [
-            ("Stage All", ChangesButtonAction::StageAll),
-            ("Commit", ChangesButtonAction::Commit),
-            ("Commit & Sync", ChangesButtonAction::CommitAndSync),
-            ("Pull", ChangesButtonAction::Pull),
-            ("Fetch", ChangesButtonAction::Fetch),
-            ("AI Generate", ChangesButtonAction::AiGenerate),
-            ("AI Review", ChangesButtonAction::AiReview),
-            ("Stash All", ChangesButtonAction::StashAll),
-            ("Discard (Safe)", ChangesButtonAction::DiscardSafe),
-        ];
+        let defs = Self::action_button_defs(use_nerd_font);
 
         let mut cur_x = 0;
-        for (text, action) in buttons {
-            let w = if use_nerd_font {
-                text.len() as u16 + 5
-            } else {
-                text.len() as u16 + 6
-            };
+        for (icon, text, action) in defs {
+            let pill_spans = crate::ui::capsule::pill(
+                icon,
+                text,
+                ratatui::style::Color::Reset,
+                ratatui::style::Color::Reset,
+                ratatui::style::Color::Reset,
+                use_nerd_font,
+            );
+            let w = crate::ui::capsule::spans_width(&pill_spans) as u16;
             if rel_x >= cur_x && rel_x < cur_x + w {
                 return Some(action);
             }
@@ -484,150 +506,37 @@ impl ChangesView {
             None
         };
 
+        let defs = Self::action_button_defs(icons.use_nerd_font);
+        let button_styles = [
+            (theme.success, theme.selection_bg, theme.bg, theme.success),
+            (theme.primary, theme.selection_bg, theme.bg, theme.primary),
+            (theme.bg, theme.success, theme.bg, theme.border_focused),
+            (theme.secondary, theme.selection_bg, theme.bg, theme.secondary),
+            (theme.info, theme.selection_bg, theme.bg, theme.info),
+            (theme.ai_sparkle, theme.selection_bg, theme.bg, theme.ai_sparkle),
+            (theme.info, theme.selection_bg, theme.bg, theme.info),
+            (theme.secondary, theme.selection_bg, theme.bg, theme.secondary),
+            (theme.error, theme.selection_bg, theme.bg, theme.error),
+        ];
+
         let mut buttons = Vec::new();
-
-        let is_stage_hovered = hovered_action == Some(ChangesButtonAction::StageAll);
-        let (stage_fg, stage_bg) = if is_stage_hovered {
-            (theme.bg, theme.success)
-        } else {
-            (theme.success, theme.selection_bg)
-        };
-        buttons.extend(crate::ui::capsule::pill(
-            Some(icons.checkbox_checked()),
-            "Stage All",
-            stage_fg,
-            stage_bg,
-            theme.bg,
-            icons.use_nerd_font,
-        ));
-        buttons.push(Span::raw(" "));
-
-        let is_commit_hovered = hovered_action == Some(ChangesButtonAction::Commit);
-        let (commit_fg, commit_bg) = if is_commit_hovered {
-            (theme.bg, theme.primary)
-        } else {
-            (theme.primary, theme.selection_bg)
-        };
-        buttons.extend(crate::ui::capsule::pill(
-            Some(icons.commit()),
-            "Commit",
-            commit_fg,
-            commit_bg,
-            theme.bg,
-            icons.use_nerd_font,
-        ));
-        buttons.push(Span::raw(" "));
-
-        let is_sync_hovered = hovered_action == Some(ChangesButtonAction::CommitAndSync);
-        let (sync_fg, sync_bg) = if is_sync_hovered {
-            (theme.bg, theme.border_focused)
-        } else {
-            (theme.bg, theme.success)
-        };
-        buttons.extend(crate::ui::capsule::pill(
-            Some(icons.commit()),
-            "Commit & Sync",
-            sync_fg,
-            sync_bg,
-            theme.bg,
-            icons.use_nerd_font,
-        ));
-        buttons.push(Span::raw(" "));
-
-        let is_pull_hovered = hovered_action == Some(ChangesButtonAction::Pull);
-        let (pull_fg, pull_bg) = if is_pull_hovered {
-            (theme.bg, theme.secondary)
-        } else {
-            (theme.secondary, theme.selection_bg)
-        };
-        buttons.extend(crate::ui::capsule::pill(
-            Some("󰦖"),
-            "Pull",
-            pull_fg,
-            pull_bg,
-            theme.bg,
-            icons.use_nerd_font,
-        ));
-        buttons.push(Span::raw(" "));
-
-        let is_fetch_hovered = hovered_action == Some(ChangesButtonAction::Fetch);
-        let (fetch_fg, fetch_bg) = if is_fetch_hovered {
-            (theme.bg, theme.info)
-        } else {
-            (theme.info, theme.selection_bg)
-        };
-        buttons.extend(crate::ui::capsule::pill(
-            Some("󰦗"),
-            "Fetch",
-            fetch_fg,
-            fetch_bg,
-            theme.bg,
-            icons.use_nerd_font,
-        ));
-        buttons.push(Span::raw(" "));
-
-        let is_gen_hovered = hovered_action == Some(ChangesButtonAction::AiGenerate);
-        let (gen_fg, gen_bg) = if is_gen_hovered {
-            (theme.bg, theme.ai_sparkle)
-        } else {
-            (theme.ai_sparkle, theme.selection_bg)
-        };
-        buttons.extend(crate::ui::capsule::pill(
-            Some(icons.ai_sparkle()),
-            "AI Generate",
-            gen_fg,
-            gen_bg,
-            theme.bg,
-            icons.use_nerd_font,
-        ));
-        buttons.push(Span::raw(" "));
-
-        let is_rev_hovered = hovered_action == Some(ChangesButtonAction::AiReview);
-        let (rev_fg, rev_bg) = if is_rev_hovered {
-            (theme.bg, theme.info)
-        } else {
-            (theme.info, theme.selection_bg)
-        };
-        buttons.extend(crate::ui::capsule::pill(
-            Some(icons.ai_sparkle()),
-            "AI Review",
-            rev_fg,
-            rev_bg,
-            theme.bg,
-            icons.use_nerd_font,
-        ));
-        buttons.push(Span::raw(" "));
-
-        let is_stash_hovered = hovered_action == Some(ChangesButtonAction::StashAll);
-        let (stash_fg, stash_bg) = if is_stash_hovered {
-            (theme.bg, theme.secondary)
-        } else {
-            (theme.secondary, theme.selection_bg)
-        };
-        buttons.extend(crate::ui::capsule::pill(
-            Some(icons.stash()),
-            "Stash All",
-            stash_fg,
-            stash_bg,
-            theme.bg,
-            icons.use_nerd_font,
-        ));
-        buttons.push(Span::raw(" "));
-
-        let is_discard_hovered = hovered_action == Some(ChangesButtonAction::DiscardSafe);
-        let (discard_fg, discard_bg) = if is_discard_hovered {
-            (theme.bg, theme.error)
-        } else {
-            (theme.error, theme.selection_bg)
-        };
-        buttons.extend(crate::ui::capsule::pill(
-            Some(icons.get(crate::ui::IconId::Trash)),
-            "Discard (Safe)",
-            discard_fg,
-            discard_bg,
-            theme.bg,
-            icons.use_nerd_font,
-        ));
+        for ((icon, text, action), (norm_fg, norm_bg, hov_fg, hov_bg)) in defs.into_iter().zip(button_styles) {
+            let is_hovered = hovered_action == Some(action);
+            let (fg, bg) = if is_hovered {
+                (hov_fg, hov_bg)
+            } else {
+                (norm_fg, norm_bg)
+            };
+            buttons.extend(crate::ui::capsule::pill(
+                icon,
+                text,
+                fg,
+                bg,
+                theme.bg,
+                icons.use_nerd_font,
+            ));
+            buttons.push(Span::raw(" "));
+        }
         frame.render_widget(Paragraph::new(Line::from(buttons)), chunks[2]);
     }
 }
