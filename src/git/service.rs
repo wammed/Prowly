@@ -127,7 +127,7 @@ impl GitService {
         // 2. File Statuses
         let mut opts = StatusOptions::new();
         opts.include_untracked(true)
-            .recurse_untracked_dirs(true)
+            .recurse_untracked_dirs(false)
             .include_ignored(false);
 
         let statuses = self.repo.statuses(Some(&mut opts))?;
