@@ -4,7 +4,9 @@ use prowly::config::Config;
 use prowly::git::{HistoryCommitItem, HistoryRow};
 use prowly::github::{GitHubRepoTarget, GitHubService, IssueItem};
 use prowly::ui::modals::context_menu::{ContextMenu, ContextMenuAction};
-use prowly::ui::modals::history_actions::{HistoryActionsModal, HistoryMenuAction, HistoryModalClickResult};
+use prowly::ui::modals::history_actions::{
+    HistoryActionsModal, HistoryMenuAction, HistoryModalClickResult,
+};
 use ratatui::layout::Rect;
 
 #[test]
@@ -87,7 +89,9 @@ fn test_history_actions_modal_mouse_interaction() {
     let res = modal.handle_click(rect.x + 10, inner_y + 3, screen);
     assert_eq!(
         res,
-        Some(HistoryModalClickResult::ExecuteAction(HistoryMenuAction::CreateBranch))
+        Some(HistoryModalClickResult::ExecuteAction(
+            HistoryMenuAction::CreateBranch
+        ))
     );
 }
 
@@ -106,7 +110,8 @@ fn test_history_tab_right_click_opens_commit_context_menu() {
         date: "now".to_string(),
         summary: "initial test commit".to_string(),
     };
-    app.history_view.set_rows(vec![HistoryRow::Commit(commit.clone())]);
+    app.history_view
+        .set_rows(vec![HistoryRow::Commit(commit.clone())]);
 
     // Right-click inside right content area
     let right_click = MouseEvent {
@@ -119,8 +124,14 @@ fn test_history_tab_right_click_opens_commit_context_menu() {
 
     assert!(app.context_menu.is_open);
     assert!(app.context_menu.target_commit.is_some());
-    assert_eq!(app.context_menu.target_commit.as_ref().unwrap().hash, "1234567");
-    assert_eq!(app.context_menu.selected_action(), ContextMenuAction::CheckoutCommit);
+    assert_eq!(
+        app.context_menu.target_commit.as_ref().unwrap().hash,
+        "1234567"
+    );
+    assert_eq!(
+        app.context_menu.selected_action(),
+        ContextMenuAction::CheckoutCommit
+    );
 
     // Context menu hit-test copy SHA
     let action = app.context_menu.selected_action();
@@ -211,7 +222,11 @@ fn test_issues_view_navigation_and_tab_switch() {
     // Yank issue URL via 'y'
     app.handle_key(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
     assert!(app.last_status.is_some());
-    assert!(app.last_status.as_ref().unwrap().contains("https://github.com/wammed/Prowly/issues/101"));
+    assert!(app
+        .last_status
+        .as_ref()
+        .unwrap()
+        .contains("https://github.com/wammed/Prowly/issues/101"));
 
     // Switch to Changes via '1', then back via 'i'
     app.handle_key(KeyEvent::new(KeyCode::Char('1'), KeyModifiers::NONE));
@@ -239,5 +254,8 @@ fn test_issues_switch_button_click() {
     };
 
     app.handle_mouse(click);
-    assert_eq!(app.last_status, Some("Reloading GitHub issues...".to_string()));
+    assert_eq!(
+        app.last_status,
+        Some("Reloading GitHub issues...".to_string())
+    );
 }

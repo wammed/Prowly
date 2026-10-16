@@ -178,27 +178,47 @@ impl HistoryActionsModal {
                 let height = 15.min(screen.height.saturating_sub(4));
                 let x = (screen.width.saturating_sub(width)) / 2;
                 let y = (screen.height.saturating_sub(height)) / 2;
-                Rect { x, y, width, height }
+                Rect {
+                    x,
+                    y,
+                    width,
+                    height,
+                }
             }
             HistoryActionState::BranchInput => {
                 let width = 60.min(screen.width.saturating_sub(4));
                 let height = 9.min(screen.height.saturating_sub(4));
                 let x = (screen.width.saturating_sub(width)) / 2;
                 let y = (screen.height.saturating_sub(height)) / 2;
-                Rect { x, y, width, height }
+                Rect {
+                    x,
+                    y,
+                    width,
+                    height,
+                }
             }
             HistoryActionState::TimeMachineConfirm => {
                 let width = 68.min(screen.width.saturating_sub(4));
                 let height = 12.min(screen.height.saturating_sub(4));
                 let x = (screen.width.saturating_sub(width)) / 2;
                 let y = (screen.height.saturating_sub(height)) / 2;
-                Rect { x, y, width, height }
+                Rect {
+                    x,
+                    y,
+                    width,
+                    height,
+                }
             }
         }
     }
 
     /// Handle mouse click inside or outside modal.
-    pub fn handle_click(&mut self, x: u16, y: u16, screen: Rect) -> Option<HistoryModalClickResult> {
+    pub fn handle_click(
+        &mut self,
+        x: u16,
+        y: u16,
+        screen: Rect,
+    ) -> Option<HistoryModalClickResult> {
         if !self.is_open {
             return None;
         }

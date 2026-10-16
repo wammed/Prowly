@@ -98,7 +98,10 @@ impl IssuesView {
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(border_color))
             .title(Span::styled(
-                format!(" {} GITHUB ISSUES ", icons.get(crate::ui::IconId::IssueOpen)),
+                format!(
+                    " {} GITHUB ISSUES ",
+                    icons.get(crate::ui::IconId::IssueOpen)
+                ),
                 Style::default()
                     .fg(theme.primary)
                     .add_modifier(Modifier::BOLD),
@@ -277,10 +280,7 @@ impl IssuesView {
             if !issue.labels.is_empty() {
                 detail_lines.push(Line::from(vec![
                     Span::styled("Labels: ", Style::default().fg(theme.dim_fg)),
-                    Span::styled(
-                        issue.labels.join(" • "),
-                        Style::default().fg(theme.accent),
-                    ),
+                    Span::styled(issue.labels.join(" • "), Style::default().fg(theme.accent)),
                 ]));
             }
 
@@ -315,11 +315,26 @@ impl IssuesView {
             detail_lines.push(Line::from(""));
             detail_lines.push(Line::from(vec![
                 Span::styled("Shortcuts: ", Style::default().fg(theme.dim_fg)),
-                Span::styled("[o] ", Style::default().fg(theme.primary).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "[o] ",
+                    Style::default()
+                        .fg(theme.primary)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled("Open in Browser   ", Style::default().fg(theme.fg)),
-                Span::styled("[y] ", Style::default().fg(theme.primary).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "[y] ",
+                    Style::default()
+                        .fg(theme.primary)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled("Copy URL   ", Style::default().fg(theme.fg)),
-                Span::styled("[r] ", Style::default().fg(theme.primary).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "[r] ",
+                    Style::default()
+                        .fg(theme.primary)
+                        .add_modifier(Modifier::BOLD),
+                ),
                 Span::styled("Reload Issues", Style::default().fg(theme.fg)),
             ]));
 

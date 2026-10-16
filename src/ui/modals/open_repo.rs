@@ -454,18 +454,14 @@ impl OpenRepoModal {
                     }
                     OpenRepoSection::Recent => {
                         self.recent_scroll.next();
-                        if let Some(r) =
-                            self.recent_repos.get(self.recent_scroll.selected_index)
-                        {
+                        if let Some(r) = self.recent_repos.get(self.recent_scroll.selected_index) {
                             self.path_input = r.clone();
                         }
                     }
                 }
                 None
             }
-            KeyCode::Delete
-            | KeyCode::Char('d')
-            | KeyCode::Char('x')
+            KeyCode::Delete | KeyCode::Char('d') | KeyCode::Char('x')
                 if self.active_section == OpenRepoSection::Recent =>
             {
                 if let Some(r) = self.recent_repos.get(self.recent_scroll.selected_index) {
@@ -529,7 +525,8 @@ impl OpenRepoModal {
         }
 
         // 3. Subdirectories area: exactly subdirs_start .. subdirs_start + subdirs_count
-        if inner_y >= layout.subdirs_start && inner_y < layout.subdirs_start + layout.subdirs_count {
+        if inner_y >= layout.subdirs_start && inner_y < layout.subdirs_start + layout.subdirs_count
+        {
             let row_idx = (inner_y - layout.subdirs_start) as usize;
             let target_idx = self.subdir_scroll.viewport_offset + row_idx;
             self.active_section = OpenRepoSection::Subdirs;
@@ -697,7 +694,8 @@ impl OpenRepoModal {
         )));
 
         // Rows 5..11: Subdirectories list (6 rows)
-        self.subdir_scroll.set_viewport_height(layout.subdirs_count as usize);
+        self.subdir_scroll
+            .set_viewport_height(layout.subdirs_count as usize);
         let visible_subdirs = self.subdir_scroll.visible_range();
         let subdirs_rendered = visible_subdirs.len();
         for (rel_idx, dirname) in self.subdirs[visible_subdirs].iter().enumerate() {
@@ -739,7 +737,8 @@ impl OpenRepoModal {
         )));
 
         // Rows 12..16: Recent Repositories list (4 rows)
-        self.recent_scroll.set_viewport_height(layout.recent_count as usize);
+        self.recent_scroll
+            .set_viewport_height(layout.recent_count as usize);
         let visible_recents = self.recent_scroll.visible_range();
         let recents_rendered = visible_recents.len();
         for (rel_idx, repo_path) in self.recent_repos[visible_recents].iter().enumerate() {
@@ -758,7 +757,10 @@ impl OpenRepoModal {
 
             let max_path_w = (inner.width as usize).saturating_sub(24);
             let display_path = if repo_path.len() > max_path_w {
-                format!("...{}", &repo_path[repo_path.len().saturating_sub(max_path_w - 3)..])
+                format!(
+                    "...{}",
+                    &repo_path[repo_path.len().saturating_sub(max_path_w - 3)..]
+                )
             } else {
                 format!("{:<width$}", repo_path, width = max_path_w)
             };
@@ -770,7 +772,9 @@ impl OpenRepoModal {
                 Span::raw(" "),
                 Span::styled(
                     "[  Open ]",
-                    Style::default().fg(theme.primary).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(theme.primary)
+                        .add_modifier(Modifier::BOLD),
                 ),
                 Span::raw(" "),
                 Span::styled("[ ✕ ]", Style::default().fg(theme.error)),

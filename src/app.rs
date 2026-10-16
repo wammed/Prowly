@@ -21,8 +21,8 @@ use crate::ui::layout::LayoutAreas;
 use crate::ui::modals::{
     AiAssistantModal, BranchSwitcherModal, CommandPaletteModal, ConflictResolverModal, ContextMenu,
     ContextMenuAction, HistoryActionState, HistoryActionsModal, HistoryMenuAction,
-    HistoryModalClickResult, MarkdownPreviewModal, OpenRepoAction, OpenRepoModal, PaletteEnterResult,
-    RebaseModal, RemoteDiffPreviewModal, SettingsAction, SettingsModal,
+    HistoryModalClickResult, MarkdownPreviewModal, OpenRepoAction, OpenRepoModal,
+    PaletteEnterResult, RebaseModal, RemoteDiffPreviewModal, SettingsAction, SettingsModal,
 };
 use crate::ui::theme::{Theme, ThemeId};
 use crate::ui::views::{
@@ -614,7 +614,8 @@ impl App {
                 }
             }
         } else {
-            self.issues_view.status_message = Some("No GitHub remote repository found.".to_string());
+            self.issues_view.status_message =
+                Some("No GitHub remote repository found.".to_string());
         }
     }
 
@@ -1356,7 +1357,10 @@ impl App {
             KeyCode::Char(',') => self.open_settings(),
             KeyCode::Char('o') => {
                 let url = match self.active_tab {
-                    AppTab::Issues => self.issues_view.selected_issue().map(|i| i.html_url.clone()),
+                    AppTab::Issues => self
+                        .issues_view
+                        .selected_issue()
+                        .map(|i| i.html_url.clone()),
                     AppTab::Prs => self.prs_view.selected_pr().map(|p| p.html_url.clone()),
                     AppTab::Actions => self.actions_view.selected_run().map(|r| r.html_url.clone()),
                     AppTab::Alerts => self.alerts_view.selected_alert().map(|a| a.url.clone()),
@@ -1369,7 +1373,9 @@ impl App {
                         #[cfg(target_os = "macos")]
                         let _ = std::process::Command::new("open").arg(&u).spawn();
                         #[cfg(target_os = "windows")]
-                        let _ = std::process::Command::new("cmd").args(["/C", "start", &u]).spawn();
+                        let _ = std::process::Command::new("cmd")
+                            .args(["/C", "start", &u])
+                            .spawn();
                         self.last_status = Some(format!("Opened in browser: {}", u));
                     }
                 } else {
@@ -1428,7 +1434,9 @@ impl App {
                 self.refresh_history();
             }
             KeyCode::Tab => {
-                if self.active_tab == AppTab::Issues && self.focused_pane == FocusedPane::MainContent {
+                if self.active_tab == AppTab::Issues
+                    && self.focused_pane == FocusedPane::MainContent
+                {
                     self.issues_view.toggle_focus();
                 } else {
                     self.focused_pane = match self.focused_pane {
@@ -1495,9 +1503,10 @@ impl App {
                             .history_view
                             .selected_commit()
                             .map(|c| c.full_hash.clone()),
-                        AppTab::Issues => {
-                            self.issues_view.selected_issue().map(|i| i.html_url.clone())
-                        }
+                        AppTab::Issues => self
+                            .issues_view
+                            .selected_issue()
+                            .map(|i| i.html_url.clone()),
                         AppTab::Prs => self.prs_view.selected_pr().map(|p| p.html_url.clone()),
                         AppTab::Actions => {
                             self.actions_view.selected_run().map(|r| r.html_url.clone())
@@ -1864,7 +1873,10 @@ impl App {
         // 2.5. History Actions Modal clicks
         if self.history_modal.is_open {
             if mouse.kind == MouseEventKind::Down(MouseButton::Left) {
-                if let Some(result) = self.history_modal.handle_click(x, y, self.layout_areas.root) {
+                if let Some(result) = self
+                    .history_modal
+                    .handle_click(x, y, self.layout_areas.root)
+                {
                     match result {
                         HistoryModalClickResult::ExecuteAction(action) => {
                             self.execute_history_menu_action(action);

@@ -1,6 +1,8 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use prowly::config::Config;
-use prowly::ui::modals::open_repo::{OpenRepoAction, OpenRepoLayout, OpenRepoModal, OpenRepoSection};
+use prowly::ui::modals::open_repo::{
+    OpenRepoAction, OpenRepoLayout, OpenRepoModal, OpenRepoSection,
+};
 use ratatui::layout::Rect;
 use std::fs;
 use tempfile::tempdir;
@@ -13,10 +15,7 @@ fn test_recent_repositories_click_selection_and_open() {
     fs::create_dir_all(&repo_a).unwrap();
     fs::create_dir_all(&repo_b).unwrap();
 
-    let recents = vec![
-        repo_a.display().to_string(),
-        repo_b.display().to_string(),
-    ];
+    let recents = vec![repo_a.display().to_string(), repo_b.display().to_string()];
 
     let mut modal = OpenRepoModal::new();
     modal.open_at(Some(tmp.path()), &recents);
@@ -111,16 +110,11 @@ fn test_tab_path_autocompletion() {
     modal.completion_state = None;
     modal.path_input = format!("{}/co", tmp.path().display());
     modal.complete_path();
-    assert_eq!(
-        modal.path_input,
-        format!("{}/cool_", tmp.path().display())
-    );
+    assert_eq!(modal.path_input, format!("{}/cool_", tmp.path().display()));
 
     // Pressing Tab again cycles candidate
     modal.complete_path();
-    assert!(
-        modal.path_input.contains("cool_project/") || modal.path_input.contains("cool_other/")
-    );
+    assert!(modal.path_input.contains("cool_project/") || modal.path_input.contains("cool_other/"));
 }
 
 #[test]
