@@ -44,6 +44,7 @@ pub struct SettingsModal {
     pub ai_api_base: String,
     pub git_soft_discard: bool,
     pub git_auto_fetch_secs: u64,
+    pub git_restore_last_repo: bool,
     pub editor_command: String,
 
     pub show_api_key: bool,
@@ -99,6 +100,7 @@ impl SettingsModal {
             ai_api_base: String::new(),
             git_soft_discard: true,
             git_auto_fetch_secs: 60,
+            git_restore_last_repo: true,
             editor_command: String::new(),
             show_api_key: false,
             focused_input: None,
@@ -120,6 +122,7 @@ impl SettingsModal {
         self.ai_api_base = config.ai.api_base.clone().unwrap_or_default();
         self.git_soft_discard = config.git.soft_discard_backup;
         self.git_auto_fetch_secs = config.git.auto_fetch_interval_secs;
+        self.git_restore_last_repo = config.git.restore_last_repository;
         self.editor_command = config.editor.command.clone().unwrap_or_default();
         self.show_api_key = false;
         self.focused_input = None;
@@ -171,6 +174,7 @@ impl SettingsModal {
         };
         config.git.soft_discard_backup = self.git_soft_discard;
         config.git.auto_fetch_interval_secs = self.git_auto_fetch_secs;
+        config.git.restore_last_repository = self.git_restore_last_repo;
         config.editor.command = if self.editor_command.trim().is_empty() {
             None
         } else {
@@ -427,6 +431,12 @@ impl SettingsModal {
                 self.git_auto_fetch_secs = 30;
             } else if inner_x >= 66 && inner_x < 75 {
                 self.git_auto_fetch_secs = 60;
+            }
+            // Restore Repo: [ ON ] (90..98), [ OFF ] (98..107)
+            if inner_x >= 90 && inner_x < 98 {
+                self.git_restore_last_repo = true;
+            } else if inner_x >= 98 && inner_x < 107 {
+                self.git_restore_last_repo = false;
             }
         }
 
@@ -931,15 +941,46 @@ impl SettingsModal {
             Style::default().fg(theme.dim_fg)
         };
 
+        let is_rest_on_hovered = is_hovered(90, 98, 12 + offset);
+        let is_rest_off_hovered = is_hovered(98, 107, 12 + offset);
+        let rest_on = if self.git_restore_last_repo {
+            Style::default()
+                .bg(theme.success)
+                .fg(theme.bg)
+                .add_modifier(Modifier::BOLD)
+        } else if is_rest_on_hovered {
+            Style::default()
+                .fg(theme.success)
+                .add_modifier(Modifier::BOLD | Modifier::UNDERLINED)
+        } else {
+            Style::default().fg(theme.dim_fg)
+        };
+        let rest_off = if !self.git_restore_last_repo {
+            Style::default()
+                .bg(theme.warning)
+                .fg(theme.bg)
+                .add_modifier(Modifier::BOLD)
+        } else if is_rest_off_hovered {
+            Style::default()
+                .fg(theme.warning)
+                .add_modifier(Modifier::BOLD | Modifier::UNDERLINED)
+        } else {
+            Style::default().fg(theme.dim_fg)
+        };
+
         lines.push(Line::from(vec![
             Span::styled("Soft Discard: ", Style::default().fg(theme.secondary)),
             Span::styled(" [ ON ] ", soft_on),
             Span::styled(" [ OFF ] ", soft_off),
-            Span::raw("     "),
+            Span::raw("   "),
             Span::styled("Auto-Fetch: ", Style::default().fg(theme.secondary)),
             Span::styled(" [ Off ] ", af_off),
             Span::styled(" [ 30s ] ", af_30),
             Span::styled(" [ 60s ] ", af_60),
+            Span::raw("   "),
+            Span::styled("Restore Repo: ", Style::default().fg(theme.secondary)),
+            Span::styled(" [ ON ] ", rest_on),
+            Span::styled(" [ OFF ] ", rest_off),
         ]));
 
         // 10. Editor Preferences

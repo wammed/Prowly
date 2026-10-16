@@ -67,6 +67,15 @@ pub enum HistoryActionState {
     TimeMachineConfirm,
 }
 
+/// Result of mouse interaction with history actions modal.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HistoryModalClickResult {
+    ExecuteAction(HistoryMenuAction),
+    ConfirmBranch,
+    ConfirmTimeMachine,
+    Close,
+}
+
 /// Modal controller for interacting with a selected commit.
 #[derive(Debug, Clone)]
 pub struct HistoryActionsModal {
@@ -158,6 +167,88 @@ impl HistoryActionsModal {
     pub fn pop_char(&mut self) {
         if self.state == HistoryActionState::BranchInput {
             self.new_branch_name.pop();
+        }
+    }
+
+    /// Calculate modal bounding box for the current state.
+    pub fn modal_rect(&self, screen: Rect) -> Rect {
+        match self.state {
+            HistoryActionState::Menu => {
+                let width = 64.min(screen.width.saturating_sub(4));
+                let height = 15.min(screen.height.saturating_sub(4));
+                let x = (screen.width.saturating_sub(width)) / 2;
+                let y = (screen.height.saturating_sub(height)) / 2;
+                Rect { x, y, width, height }
+            }
+            HistoryActionState::BranchInput => {
+                let width = 60.min(screen.width.saturating_sub(4));
+                let height = 9.min(screen.height.saturating_sub(4));
+                let x = (screen.width.saturating_sub(width)) / 2;
+                let y = (screen.height.saturating_sub(height)) / 2;
+                Rect { x, y, width, height }
+            }
+            HistoryActionState::TimeMachineConfirm => {
+                let width = 68.min(screen.width.saturating_sub(4));
+                let height = 12.min(screen.height.saturating_sub(4));
+                let x = (screen.width.saturating_sub(width)) / 2;
+                let y = (screen.height.saturating_sub(height)) / 2;
+                Rect { x, y, width, height }
+            }
+        }
+    }
+
+    /// Handle mouse click inside or outside modal.
+    pub fn handle_click(&mut self, x: u16, y: u16, screen: Rect) -> Option<HistoryModalClickResult> {
+        if !self.is_open {
+            return None;
+        }
+
+        let rect = self.modal_rect(screen);
+        if x < rect.x || x >= rect.x + rect.width || y < rect.y || y >= rect.y + rect.height {
+            return Some(HistoryModalClickResult::Close);
+        }
+
+        match self.state {
+            HistoryActionState::Menu => {
+                let inner_y = rect.y + 1;
+                // Header line 0 is subject, line 1 is blank, lines 2.. are actions
+                if y >= inner_y + 2 {
+                    let action_idx = (y - (inner_y + 2)) as usize;
+                    if action_idx < HistoryMenuAction::ALL.len() {
+                        self.selected_menu_idx = action_idx;
+                        return Some(HistoryModalClickResult::ExecuteAction(
+                            HistoryMenuAction::ALL[action_idx],
+                        ));
+                    }
+                }
+                None
+            }
+            HistoryActionState::BranchInput => {
+                let inner_y = rect.y + 1;
+                // Bottom line is cancel/submit instructions (y == rect.y + rect.height - 2)
+                if y >= inner_y + 4 {
+                    if !self.new_branch_name.trim().is_empty() {
+                        Some(HistoryModalClickResult::ConfirmBranch)
+                    } else {
+                        Some(HistoryModalClickResult::Close)
+                    }
+                } else {
+                    None
+                }
+            }
+            HistoryActionState::TimeMachineConfirm => {
+                // Bottom line is Confirm Reset [y] or Cancel [n]
+                let bottom_y = rect.y + rect.height.saturating_sub(2);
+                if y == bottom_y {
+                    if x < rect.x + 30 {
+                        Some(HistoryModalClickResult::ConfirmTimeMachine)
+                    } else {
+                        Some(HistoryModalClickResult::Close)
+                    }
+                } else {
+                    None
+                }
+            }
         }
     }
 

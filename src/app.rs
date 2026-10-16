@@ -21,13 +21,14 @@ use crate::ui::layout::LayoutAreas;
 use crate::ui::modals::{
     AiAssistantModal, BranchSwitcherModal, CommandPaletteModal, ConflictResolverModal, ContextMenu,
     ContextMenuAction, HistoryActionState, HistoryActionsModal, HistoryMenuAction,
-    MarkdownPreviewModal, OpenRepoAction, OpenRepoModal, PaletteEnterResult, RebaseModal,
-    RemoteDiffPreviewModal, SettingsAction, SettingsModal,
+    HistoryModalClickResult, MarkdownPreviewModal, OpenRepoAction, OpenRepoModal, PaletteEnterResult,
+    RebaseModal, RemoteDiffPreviewModal, SettingsAction, SettingsModal,
 };
 use crate::ui::theme::{Theme, ThemeId};
 use crate::ui::views::{
     changes::{ChangesButtonAction, ChangesFocus, ChangesRenderParams},
-    ActionsView, AlertsView, ChangesView, DirectoryMap, HistoryView, PrsView, WorktreesView,
+    ActionsView, AlertsView, ChangesView, DirectoryMap, HistoryView, IssuesView, PrsView,
+    WorktreesView,
 };
 use crate::ui::Icons;
 use crossterm::event::{KeyCode, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
@@ -67,6 +68,7 @@ where
 pub enum AppTab {
     Changes,
     History,
+    Issues,
     Prs,
     Actions,
     Alerts,
@@ -77,6 +79,7 @@ impl AppTab {
     pub const ALL: &'static [AppTab] = &[
         AppTab::Changes,
         AppTab::History,
+        AppTab::Issues,
         AppTab::Prs,
         AppTab::Actions,
         AppTab::Alerts,
@@ -87,20 +90,22 @@ impl AppTab {
         match self {
             Self::Changes => 0,
             Self::History => 1,
-            Self::Prs => 2,
-            Self::Actions => 3,
-            Self::Alerts => 4,
-            Self::Worktrees => 5,
+            Self::Issues => 2,
+            Self::Prs => 3,
+            Self::Actions => 4,
+            Self::Alerts => 5,
+            Self::Worktrees => 6,
         }
     }
 
     pub fn from_index(idx: usize) -> Self {
         match idx {
             1 => Self::History,
-            2 => Self::Prs,
-            3 => Self::Actions,
-            4 => Self::Alerts,
-            5 => Self::Worktrees,
+            2 => Self::Issues,
+            3 => Self::Prs,
+            4 => Self::Actions,
+            5 => Self::Alerts,
+            6 => Self::Worktrees,
             _ => Self::Changes,
         }
     }
@@ -109,6 +114,7 @@ impl AppTab {
         match self {
             Self::Changes => "tabs.changes",
             Self::History => "tabs.history",
+            Self::Issues => "tabs.issues",
             Self::Prs => "tabs.prs",
             Self::Actions => "tabs.actions",
             Self::Alerts => "tabs.alerts",
@@ -153,8 +159,10 @@ pub struct App {
     pub history_view: HistoryView,
     pub worktrees_view: WorktreesView,
     pub prs_view: PrsView,
+    pub issues_view: IssuesView,
     pub actions_view: ActionsView,
     pub alerts_view: AlertsView,
+    pub issues_switch_rect: Rect,
 
     // GitHub Integration
     pub github_service: GitHubService,
@@ -214,7 +222,10 @@ impl App {
 
         if let Some(ref git) = git_service {
             let _ = std::env::set_current_dir(git.workdir());
-            config.add_recent_repository(git.workdir().display().to_string());
+            let p_str = git.workdir().display().to_string();
+            config.add_recent_repository(p_str.clone());
+            config.last_repository = Some(p_str);
+            let _ = config.save();
         }
 
         let gh_token = GitHubService::detect_token();
@@ -242,8 +253,10 @@ impl App {
             history_view: HistoryView::new(),
             worktrees_view: WorktreesView::new(),
             prs_view: PrsView::new(),
+            issues_view: IssuesView::new(),
             actions_view: ActionsView::new(),
             alerts_view: AlertsView::new(),
+            issues_switch_rect: Rect::default(),
             github_service,
             is_repo_private: None,
             ai_modal: AiAssistantModal::new(),
@@ -545,6 +558,9 @@ impl App {
                     if let Ok(prs) = gh.list_pull_requests(&target, false).await {
                         let _ = sender.send(AppEvent::GitHubPrsLoaded(prs));
                     }
+                    if let Ok(issues) = gh.list_issues(&target, false).await {
+                        let _ = sender.send(AppEvent::GitHubIssuesLoaded(issues));
+                    }
                     if let Ok(runs) = gh.list_workflow_runs(&target, false).await {
                         let _ = sender.send(AppEvent::GitHubRunsLoaded(runs));
                     }
@@ -560,6 +576,9 @@ impl App {
                 if let Ok(prs) = block_on_safe(gh.list_pull_requests(&target, false)) {
                     self.prs_view.set_prs(prs);
                 }
+                if let Ok(issues) = block_on_safe(gh.list_issues(&target, false)) {
+                    self.issues_view.set_issues(issues);
+                }
                 if let Ok(runs) = block_on_safe(gh.list_workflow_runs(&target, false)) {
                     self.actions_view.set_runs(runs);
                 }
@@ -567,6 +586,35 @@ impl App {
                     self.alerts_view.set_alerts(alerts);
                 }
             }
+        }
+    }
+
+    /// Load or force refresh GitHub issues.
+    pub fn load_issues(&mut self, force: bool) {
+        let target = self
+            .git_service
+            .as_ref()
+            .and_then(|g| g.remote_url(None))
+            .and_then(|url| GitHubRepoTarget::from_remote_url(&url));
+
+        if let Some(target) = target {
+            self.issues_view.status_message = Some("Loading issues from GitHub...".to_string());
+            if let Some(sender) = self.event_sender.clone() {
+                let gh = self.github_service.clone();
+                tokio::spawn(async move {
+                    if let Ok(issues) = gh.list_issues(&target, force).await {
+                        let _ = sender.send(AppEvent::GitHubIssuesLoaded(issues));
+                    }
+                });
+            } else if tokio::runtime::Handle::try_current().is_err() {
+                let gh = &self.github_service;
+                if let Ok(issues) = block_on_safe(gh.list_issues(&target, force)) {
+                    self.issues_view.set_issues(issues);
+                    self.issues_view.status_message = None;
+                }
+            }
+        } else {
+            self.issues_view.status_message = Some("No GitHub remote repository found.".to_string());
         }
     }
 
@@ -680,6 +728,10 @@ impl App {
             }
             AppEvent::GitHubPrsLoaded(prs) => {
                 self.prs_view.set_prs(prs);
+            }
+            AppEvent::GitHubIssuesLoaded(issues) => {
+                self.issues_view.set_issues(issues);
+                self.issues_view.status_message = None;
             }
             AppEvent::GitHubRunsLoaded(runs) => {
                 self.actions_view.set_runs(runs);
@@ -816,6 +868,24 @@ impl App {
                         self.switch_repository(&path);
                     }
                     OpenRepoAction::Close => self.open_repo_modal.close(),
+                    OpenRepoAction::RemoveRecent(path) => {
+                        self.config.remove_recent_repository(&path);
+                        let _ = self.config.save();
+                        self.open_repo_modal
+                            .recent_repos
+                            .retain(|p| p.trim_end_matches('/') != path.trim_end_matches('/'));
+                        self.open_repo_modal
+                            .recent_scroll
+                            .set_total_items(self.open_repo_modal.recent_repos.len());
+                        if self.open_repo_modal.recent_scroll.selected_index
+                            >= self.open_repo_modal.recent_repos.len()
+                        {
+                            self.open_repo_modal.recent_scroll.selected_index =
+                                self.open_repo_modal.recent_repos.len().saturating_sub(1);
+                        }
+                        self.last_status =
+                            Some(format!("Removed {} from recent repositories", path));
+                    }
                 }
             }
             return;
@@ -1284,7 +1354,28 @@ impl App {
         match key.code {
             KeyCode::Char('q') => self.should_quit = true,
             KeyCode::Char(',') => self.open_settings(),
-            KeyCode::Char('o') => self.open_open_repo(),
+            KeyCode::Char('o') => {
+                let url = match self.active_tab {
+                    AppTab::Issues => self.issues_view.selected_issue().map(|i| i.html_url.clone()),
+                    AppTab::Prs => self.prs_view.selected_pr().map(|p| p.html_url.clone()),
+                    AppTab::Actions => self.actions_view.selected_run().map(|r| r.html_url.clone()),
+                    AppTab::Alerts => self.alerts_view.selected_alert().map(|a| a.url.clone()),
+                    _ => None,
+                };
+                if let Some(u) = url {
+                    if !u.is_empty() {
+                        #[cfg(target_os = "linux")]
+                        let _ = std::process::Command::new("xdg-open").arg(&u).spawn();
+                        #[cfg(target_os = "macos")]
+                        let _ = std::process::Command::new("open").arg(&u).spawn();
+                        #[cfg(target_os = "windows")]
+                        let _ = std::process::Command::new("cmd").args(["/C", "start", &u]).spawn();
+                        self.last_status = Some(format!("Opened in browser: {}", u));
+                    }
+                } else {
+                    self.open_open_repo();
+                }
+            }
             KeyCode::Char('A') => {
                 self.show_all_files = !self.show_all_files;
                 let msg = if self.show_all_files {
@@ -1316,7 +1407,7 @@ impl App {
                 if self.active_tab == AppTab::History {
                     if let Some(c) = self.history_view.selected_commit() {
                         let commit_item = c.clone();
-                        self.history_modal.open(commit_item);
+                        self.context_menu.open_for_commit(commit_item, 40, 10);
                     }
                 } else {
                     let sel_file = self
@@ -1337,23 +1428,39 @@ impl App {
                 self.refresh_history();
             }
             KeyCode::Tab => {
-                self.focused_pane = match self.focused_pane {
-                    FocusedPane::DirectoryMap => FocusedPane::MainContent,
-                    FocusedPane::MainContent => FocusedPane::DirectoryMap,
-                };
+                if self.active_tab == AppTab::Issues && self.focused_pane == FocusedPane::MainContent {
+                    self.issues_view.toggle_focus();
+                } else {
+                    self.focused_pane = match self.focused_pane {
+                        FocusedPane::DirectoryMap => FocusedPane::MainContent,
+                        FocusedPane::MainContent => FocusedPane::DirectoryMap,
+                    };
+                }
             }
-            // Tab switching 1..6
+            // Tab switching 1..7 & 'i'
             KeyCode::Char('1') => self.active_tab = AppTab::Changes,
             KeyCode::Char('2') => {
                 self.active_tab = AppTab::History;
                 self.refresh_history();
             }
-            KeyCode::Char('3') => self.active_tab = AppTab::Prs,
-            KeyCode::Char('4') => self.active_tab = AppTab::Actions,
-            KeyCode::Char('5') => self.active_tab = AppTab::Alerts,
-            KeyCode::Char('6') => {
+            KeyCode::Char('3') => {
+                self.active_tab = AppTab::Issues;
+                if self.issues_view.issues.is_empty() {
+                    self.load_issues(false);
+                }
+            }
+            KeyCode::Char('4') => self.active_tab = AppTab::Prs,
+            KeyCode::Char('5') => self.active_tab = AppTab::Actions,
+            KeyCode::Char('6') => self.active_tab = AppTab::Alerts,
+            KeyCode::Char('7') => {
                 self.active_tab = AppTab::Worktrees;
                 self.refresh_worktrees();
+            }
+            KeyCode::Char('i') => {
+                self.active_tab = AppTab::Issues;
+                if self.issues_view.issues.is_empty() {
+                    self.load_issues(false);
+                }
             }
 
             // Time Machine in History tab / Cycle Theme (t)
@@ -1388,6 +1495,9 @@ impl App {
                             .history_view
                             .selected_commit()
                             .map(|c| c.full_hash.clone()),
+                        AppTab::Issues => {
+                            self.issues_view.selected_issue().map(|i| i.html_url.clone())
+                        }
                         AppTab::Prs => self.prs_view.selected_pr().map(|p| p.html_url.clone()),
                         AppTab::Actions => {
                             self.actions_view.selected_run().map(|r| r.html_url.clone())
@@ -1468,12 +1578,15 @@ impl App {
                 }
             }
 
-            // 'r': Revert in History tab, or Re-run failed CI job in Actions tab
+            // 'r': Revert in History tab, Re-run failed CI in Actions, or Reload in Issues
             KeyCode::Char('r') => {
                 if self.active_tab == AppTab::History {
                     self.revert_selected_commit();
                 } else if self.active_tab == AppTab::Actions {
                     self.rerun_selected_action_job();
+                } else if self.active_tab == AppTab::Issues {
+                    self.load_issues(true);
+                    self.last_status = Some("Reloading GitHub issues...".to_string());
                 }
             }
 
@@ -1566,6 +1679,7 @@ impl App {
                     }
                     AppTab::Worktrees => self.worktrees_view.scroll.previous(),
                     AppTab::Prs => self.prs_view.previous(),
+                    AppTab::Issues => self.issues_view.previous(),
                     AppTab::Actions => self.actions_view.previous(),
                     AppTab::Alerts => self.alerts_view.previous(),
                     AppTab::Changes => {
@@ -1583,6 +1697,7 @@ impl App {
                     }
                     AppTab::Worktrees => self.worktrees_view.scroll.next(),
                     AppTab::Prs => self.prs_view.next(),
+                    AppTab::Issues => self.issues_view.next(),
                     AppTab::Actions => self.actions_view.next(),
                     AppTab::Alerts => self.alerts_view.next(),
                     AppTab::Changes => {
@@ -1722,6 +1837,52 @@ impl App {
                             self.switch_repository(&path);
                         }
                         OpenRepoAction::Close => self.open_repo_modal.close(),
+                        OpenRepoAction::RemoveRecent(path) => {
+                            self.config.remove_recent_repository(&path);
+                            let _ = self.config.save();
+                            self.open_repo_modal
+                                .recent_repos
+                                .retain(|p| p.trim_end_matches('/') != path.trim_end_matches('/'));
+                            self.open_repo_modal
+                                .recent_scroll
+                                .set_total_items(self.open_repo_modal.recent_repos.len());
+                            if self.open_repo_modal.recent_scroll.selected_index
+                                >= self.open_repo_modal.recent_repos.len()
+                            {
+                                self.open_repo_modal.recent_scroll.selected_index =
+                                    self.open_repo_modal.recent_repos.len().saturating_sub(1);
+                            }
+                            self.last_status =
+                                Some(format!("Removed {} from recent repositories", path));
+                        }
+                    }
+                }
+            }
+            return;
+        }
+
+        // 2.5. History Actions Modal clicks
+        if self.history_modal.is_open {
+            if mouse.kind == MouseEventKind::Down(MouseButton::Left) {
+                if let Some(result) = self.history_modal.handle_click(x, y, self.layout_areas.root) {
+                    match result {
+                        HistoryModalClickResult::ExecuteAction(action) => {
+                            self.execute_history_menu_action(action);
+                        }
+                        HistoryModalClickResult::ConfirmBranch => {
+                            let branch_name = self.history_modal.new_branch_name.trim().to_string();
+                            self.history_modal.close();
+                            if !branch_name.is_empty() {
+                                self.create_branch_at_selected_commit(&branch_name);
+                            }
+                        }
+                        HistoryModalClickResult::ConfirmTimeMachine => {
+                            self.history_modal.close();
+                            self.time_machine_reset_to_selected_commit();
+                        }
+                        HistoryModalClickResult::Close => {
+                            self.history_modal.close();
+                        }
                     }
                 }
             }
@@ -1730,6 +1891,17 @@ impl App {
 
         // 3. Right-Click: Open Context Menu
         if mouse.kind == MouseEventKind::Down(MouseButton::Right) {
+            if self.active_tab == AppTab::History {
+                if self.layout_areas.hits_right_content(x, y) {
+                    let rel_y = y.saturating_sub(self.layout_areas.right_content.y + 1) as usize;
+                    self.history_view.scroll.handle_click_row(rel_y);
+                    self.update_active_history_diff();
+                }
+                if let Some(commit) = self.history_view.selected_commit().cloned() {
+                    self.context_menu.open_for_commit(commit, x, y);
+                    return;
+                }
+            }
             let sel_file = self
                 .filtered_files()
                 .get(self.changes_view.file_scroll.selected_index)
@@ -1811,6 +1983,12 @@ impl App {
         if self.layout_areas.hits_menu(x, y)
             && mouse.kind == MouseEventKind::Down(MouseButton::Left)
         {
+            if self.active_tab == AppTab::History {
+                if let Some(commit) = self.history_view.selected_commit().cloned() {
+                    self.context_menu.open_for_commit(commit, x, y + 1);
+                    return;
+                }
+            }
             let sel_file = self
                 .filtered_files()
                 .get(self.changes_view.file_scroll.selected_index)
@@ -1843,6 +2021,15 @@ impl App {
             return;
         }
 
+        // Issues reload / load switch button click
+        if crate::ui::layout::contains_point(self.issues_switch_rect, x, y)
+            && mouse.kind == MouseEventKind::Down(MouseButton::Left)
+        {
+            self.load_issues(true);
+            self.last_status = Some("Reloading GitHub issues...".to_string());
+            return;
+        }
+
         // Tabs bar click
         if self.layout_areas.hits_tabs(x, y)
             && mouse.kind == MouseEventKind::Down(MouseButton::Left)
@@ -1855,6 +2042,7 @@ impl App {
                 let icon_str = match tab {
                     AppTab::Changes => self.icons.branch(),
                     AppTab::History => self.icons.commit(),
+                    AppTab::Issues => self.icons.get(crate::ui::IconId::IssueOpen),
                     AppTab::Prs => self.icons.pr_open(),
                     AppTab::Actions => self.icons.check_success(),
                     AppTab::Alerts => self.icons.get(crate::ui::IconId::Alert),
@@ -1875,6 +2063,10 @@ impl App {
                         self.refresh_worktrees();
                     } else if self.active_tab == AppTab::History {
                         self.refresh_history();
+                    } else if self.active_tab == AppTab::Issues {
+                        if self.issues_view.issues.is_empty() {
+                            self.load_issues(false);
+                        }
                     }
                     return;
                 }
@@ -1945,6 +2137,9 @@ impl App {
                         AppTab::Prs => {
                             self.prs_view.list_scroll.handle_click_row(rel_y);
                         }
+                        AppTab::Issues => {
+                            self.issues_view.list_scroll.handle_click_row(rel_y);
+                        }
                         AppTab::Actions => {
                             self.actions_view.list_scroll.handle_click_row(rel_y);
                         }
@@ -2007,6 +2202,7 @@ impl App {
                     }
                     AppTab::Worktrees => self.worktrees_view.scroll.scroll_down(3),
                     AppTab::Prs => self.prs_view.list_scroll.scroll_down(3),
+                    AppTab::Issues => self.issues_view.list_scroll.scroll_down(3),
                     AppTab::Actions => self.actions_view.list_scroll.scroll_down(3),
                     AppTab::Alerts => self.alerts_view.scroll.scroll_down(3),
                     AppTab::Changes => {
@@ -2021,6 +2217,7 @@ impl App {
                     }
                     AppTab::Worktrees => self.worktrees_view.scroll.scroll_up(3),
                     AppTab::Prs => self.prs_view.list_scroll.scroll_up(3),
+                    AppTab::Issues => self.issues_view.list_scroll.scroll_up(3),
                     AppTab::Actions => self.actions_view.list_scroll.scroll_up(3),
                     AppTab::Alerts => self.alerts_view.scroll.scroll_up(3),
                     AppTab::Changes => {
@@ -2067,6 +2264,45 @@ impl App {
             }
             ContextMenuAction::PreviewMarkdown => {
                 self.open_markdown_preview_for_selected();
+            }
+            ContextMenuAction::CheckoutCommit => {
+                self.checkout_selected_commit();
+            }
+            ContextMenuAction::CreateBranch => {
+                let target_commit = self
+                    .context_menu
+                    .target_commit
+                    .clone()
+                    .or_else(|| self.history_view.selected_commit().cloned());
+                if let Some(commit) = target_commit {
+                    self.history_modal.open_branch_input(commit);
+                }
+            }
+            ContextMenuAction::CherryPick => {
+                self.cherry_pick_selected_commit();
+            }
+            ContextMenuAction::RevertCommit => {
+                self.revert_selected_commit();
+            }
+            ContextMenuAction::TimeMachine => {
+                let target_commit = self
+                    .context_menu
+                    .target_commit
+                    .clone()
+                    .or_else(|| self.history_view.selected_commit().cloned());
+                if let Some(commit) = target_commit {
+                    self.history_modal.open_time_machine(commit);
+                }
+            }
+            ContextMenuAction::CopyCommitSha => {
+                self.copy_selected_commit_sha();
+            }
+            ContextMenuAction::CopyCommitMessage => {
+                self.copy_selected_commit_message();
+            }
+            ContextMenuAction::AskAiCommit => {
+                let ctx = self.capture_ai_context();
+                self.ai_modal.open_with_context(&ctx);
             }
         }
     }
@@ -2144,6 +2380,12 @@ impl App {
             "tab_history" => {
                 self.active_tab = AppTab::History;
                 self.refresh_history();
+            }
+            "tab_issues" => {
+                self.active_tab = AppTab::Issues;
+                if self.issues_view.issues.is_empty() {
+                    self.load_issues(false);
+                }
             }
             "tab_prs" => self.active_tab = AppTab::Prs,
             "tab_actions" => self.active_tab = AppTab::Actions,
@@ -3695,6 +3937,7 @@ impl App {
             let icon_str = match tab {
                 AppTab::Changes => self.icons.branch(),
                 AppTab::History => self.icons.commit(),
+                AppTab::Issues => self.icons.get(crate::ui::IconId::IssueOpen),
                 AppTab::Prs => self.icons.pr_open(),
                 AppTab::Actions => self.icons.check_success(),
                 AppTab::Alerts => self.icons.get(crate::ui::IconId::Alert),
@@ -3738,6 +3981,44 @@ impl App {
             tab_spans.push(Span::raw(" "));
             cur_x += pill_w + 1;
         }
+
+        // Issues reload / load switch button right next to the tabs
+        let switch_icon = self.icons.get(crate::ui::IconId::IssueOpen);
+        let switch_text = self.i18n.t("btn.load_issues");
+        let switch_sample = pill(
+            Some(switch_icon),
+            &switch_text,
+            self.theme.bg,
+            self.theme.accent,
+            self.theme.bg,
+            self.icons.use_nerd_font,
+        );
+        let switch_w = crate::ui::capsule::spans_width(&switch_sample) as u16;
+
+        let switch_rect = Rect {
+            x: self.layout_areas.right_tabs.x + cur_x + 1,
+            y: self.layout_areas.right_tabs.y,
+            width: switch_w,
+            height: 1,
+        };
+        self.issues_switch_rect = switch_rect;
+        let is_switch_hovered = self.is_hovered(switch_rect);
+
+        let (switch_fg, switch_bg) = if is_switch_hovered {
+            (self.theme.bg, self.theme.accent)
+        } else {
+            (self.theme.accent, self.theme.selection_bg)
+        };
+
+        tab_spans.push(Span::raw(" "));
+        tab_spans.extend(pill(
+            Some(switch_icon),
+            &switch_text,
+            switch_fg,
+            switch_bg,
+            self.theme.bg,
+            self.icons.use_nerd_font,
+        ));
 
         frame.render_widget(
             Paragraph::new(Line::from(tab_spans)),
@@ -3792,6 +4073,12 @@ impl App {
                 let theme = self.theme.clone();
                 let icons = self.icons.clone();
                 self.history_view.render(frame, &theme, &icons, inner);
+            }
+            AppTab::Issues => {
+                let theme = self.theme.clone();
+                let icons = self.icons.clone();
+                self.issues_view
+                    .render(frame, is_focused, &theme, &icons, inner);
             }
             AppTab::Prs => {
                 let theme = self.theme.clone();

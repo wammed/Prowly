@@ -138,10 +138,11 @@ prowly /path/to/repo
 |:---|:---|
 | `1` | Switch to **Changes** View |
 | `2` | Switch to **Commit History & Git Graph** View (`h`) |
-| `3` | Switch to **Pull Requests** View |
-| `4` | Switch to **Actions & CI** View |
-| `5` | Switch to **Alerts** View |
-| `6` | Switch to **Worktrees** View |
+| `3` | Switch to **Issues** View (`i`) |
+| `4` | Switch to **Pull Requests** View |
+| `5` | Switch to **Actions & CI** View |
+| `6` | Switch to **Alerts** View |
+| `7` | Switch to **Worktrees** View |
 | `Tab` | Cycle focus between panes |
 | `:` or `F1` | Open **Command Palette** (Fuzzy search & NL-to-Git) |
 | `Ctrl+A` | Open **Omnipresent AI Assistant** |
@@ -179,6 +180,15 @@ prowly /path/to/repo
 | `t` | **Time Machine**: Reset repository to this commit (invalidating subsequent commits, with auto-backup) |
 | `y` | Copy commit SHA hash to clipboard |
 
+### Issues View (`3` / `i`)
+| Shortcut | Action |
+|:---|:---|
+| `j` / `k` or `↓` / `↑` | Navigate issues / scroll preview |
+| `PageDown` / `PageUp` | Fast scroll issue description preview |
+| `o` | Open selected issue in web browser |
+| `r` | Reload issues from GitHub |
+| `m` | Open context menu |
+
 ### Conflict Resolver & Worktrees
 | Shortcut | Action |
 |:---|:---|
@@ -198,6 +208,17 @@ prowly /path/to/repo
 | `g` / `G` or `Home` / `End` | Jump to top / bottom of document |
 | `y` | Copy raw Markdown text to clipboard |
 | `q` / `Esc` | Close preview modal |
+
+### Open Repository / Directory Switcher Modal (Header click or `o`)
+| Operation | Action |
+|:---|:---|
+| `Tab` (in path input) | **TAB Path Autocompletion** (common prefix completion and candidate cycling) |
+| `Enter` (in path input) | Open repository at the typed path |
+| `↓` / `↑` | Move focus between path input, subdirectories, and recent repositories |
+| `Enter` (in subdirectories) | Enter selected subdirectory (`..` to go up) |
+| `Enter` (in recent repos) | Open selected recent repository |
+| `d` / `x` / `Delete` | Remove selected recent repository from history |
+| Mouse Click | Navigate directories, select recent repos, click `[  Open ]` to open, `[ ✕ ]` to delete |
 
 ### Mouse Operations & Terminal Compatibility (Right-Click Interception)
 

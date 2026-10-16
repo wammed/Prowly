@@ -212,10 +212,12 @@ pub static EN_DICTIONARY: LazyLock<HashMap<&'static str, TranslationEntry>> = La
         // Tabs
         "tabs.changes" => TranslationEntry::plain("Changes"),
         "tabs.history" => TranslationEntry::plain("History"),
+        "tabs.issues" => TranslationEntry::plain("Issues"),
         "tabs.prs" => TranslationEntry::plain("Pull Requests"),
         "tabs.actions" => TranslationEntry::plain("Actions"),
         "tabs.alerts" => TranslationEntry::plain("Alerts"),
         "tabs.worktrees" => TranslationEntry::plain("Worktrees"),
+        "btn.load_issues" => TranslationEntry::plain("Load Issues"),
 
         // Directory Map
         "dir_map.title" => TranslationEntry::plain("DIRECTORY MAP"),
@@ -325,10 +327,12 @@ pub static JA_DICTIONARY: LazyLock<HashMap<&'static str, TranslationEntry>> = La
         // Tabs
         "tabs.changes" => TranslationEntry::plain("変更"),
         "tabs.history" => TranslationEntry::plain("コミット履歴"),
+        "tabs.issues" => TranslationEntry::plain("Issues"),
         "tabs.prs" => TranslationEntry::plain("プルリクエスト"),
         "tabs.actions" => TranslationEntry::plain("アクション (CI)"),
         "tabs.alerts" => TranslationEntry::plain("通知"),
         "tabs.worktrees" => TranslationEntry::plain("ワークツリー"),
+        "btn.load_issues" => TranslationEntry::plain("Issues読み込み"),
 
         // Directory Map
         "dir_map.title" => TranslationEntry::plain("ディレクトリマップ"),

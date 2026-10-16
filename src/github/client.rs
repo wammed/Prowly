@@ -60,6 +60,20 @@ pub struct PullRequestItem {
     pub updated_at: String,
 }
 
+/// GitHub Issue item.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IssueItem {
+    pub number: u64,
+    pub title: String,
+    pub author: String,
+    pub state: String, // "open", "closed"
+    pub body: Option<String>,
+    pub comments_count: u32,
+    pub labels: Vec<String>,
+    pub html_url: String,
+    pub updated_at: String,
+}
+
 /// GitHub Actions workflow run item.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorkflowRunItem {
@@ -116,6 +130,7 @@ impl Default for GitHubRateLimit {
 struct CachedData {
     repo_meta: Option<(Instant, RepoMetadata)>,
     prs: Option<(Instant, Vec<PullRequestItem>)>,
+    issues: Option<(Instant, Vec<IssueItem>)>,
     runs: Option<(Instant, Vec<WorkflowRunItem>)>,
     alerts: Option<(Instant, Vec<AlertItem>)>,
     rate_limit: GitHubRateLimit,
@@ -211,6 +226,12 @@ impl GitHubService {
         guard.prs = Some((now, prs));
         guard.runs = Some((now, runs));
         guard.alerts = Some((now, alerts));
+    }
+
+    /// Set mock issues dataset.
+    pub async fn set_mock_issues(&self, issues: Vec<IssueItem>) {
+        let mut guard = self.cache.lock().await;
+        guard.issues = Some((Instant::now(), issues));
     }
 
     /// Set mock repository metadata.
@@ -390,6 +411,90 @@ impl GitHubService {
                 Ok(items)
             }
             Err(e) => Err(format!("GitHub API error: {}", e)),
+        }
+    }
+
+    /// List repository issues (excluding pull requests) with caching.
+    pub async fn list_issues(
+        &self,
+        target: &GitHubRepoTarget,
+        force_refresh: bool,
+    ) -> Result<Vec<IssueItem>, String> {
+        let mut guard = self.cache.lock().await;
+        if !force_refresh {
+            if let Some((ts, ref issues)) = guard.issues {
+                if ts.elapsed() < self.cache_ttl {
+                    return Ok(issues.clone());
+                }
+            }
+        }
+
+        if self.mock_mode {
+            return Ok(guard
+                .issues
+                .as_ref()
+                .map(|(_, p)| p.clone())
+                .unwrap_or_default());
+        }
+
+        let octo = match self.get_octocrab().await {
+            Some(o) => o,
+            None => {
+                return Ok(guard
+                    .issues
+                    .as_ref()
+                    .map(|(_, p)| p.clone())
+                    .unwrap_or_default());
+            }
+        };
+
+        // Query issues via octocrab
+        match octo
+            .issues(&target.owner, &target.repo)
+            .list()
+            .state(octocrab::params::State::All)
+            .per_page(50)
+            .send()
+            .await
+        {
+            Ok(page) => {
+                let items: Vec<IssueItem> = page
+                    .into_iter()
+                    .filter(|issue| issue.pull_request.is_none())
+                    .map(|issue| {
+                        let state_str = match issue.state {
+                            octocrab::models::IssueState::Open => "open".to_string(),
+                            octocrab::models::IssueState::Closed => "closed".to_string(),
+                            _ => "open".to_string(),
+                        };
+                        let labels = issue.labels.into_iter().map(|l| l.name).collect();
+                        IssueItem {
+                            number: issue.number,
+                            title: issue.title,
+                            author: issue.user.login,
+                            state: state_str,
+                            body: issue.body,
+                            comments_count: issue.comments,
+                            labels,
+                            html_url: issue.html_url.to_string(),
+                            updated_at: issue.updated_at.to_rfc3339(),
+                        }
+                    })
+                    .collect();
+
+                guard.issues = Some((Instant::now(), items.clone()));
+                if guard.rate_limit.remaining > 0 {
+                    guard.rate_limit.remaining -= 1;
+                }
+                Ok(items)
+            }
+            Err(e) => {
+                if let Some((_, ref issues)) = guard.issues {
+                    Ok(issues.clone())
+                } else {
+                    Err(format!("GitHub API error listing issues: {}", e))
+                }
+            }
         }
     }
 

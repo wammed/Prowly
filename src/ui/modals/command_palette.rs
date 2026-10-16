@@ -133,24 +133,29 @@ impl PaletteAction {
             shortcut: Some("2"),
         },
         PaletteAction {
+            id: "tab_issues",
+            title: "View: Switch to GitHub Issues",
+            shortcut: Some("3"),
+        },
+        PaletteAction {
             id: "tab_prs",
             title: "View: Switch to Pull Requests",
-            shortcut: Some("3"),
+            shortcut: Some("4"),
         },
         PaletteAction {
             id: "tab_actions",
             title: "View: Switch to Actions & CI",
-            shortcut: Some("4"),
+            shortcut: Some("5"),
         },
         PaletteAction {
             id: "tab_alerts",
             title: "View: Switch to Alerts",
-            shortcut: Some("5"),
+            shortcut: Some("6"),
         },
         PaletteAction {
             id: "tab_worktrees",
             title: "View: Switch to Worktrees",
-            shortcut: Some("6"),
+            shortcut: Some("7"),
         },
         PaletteAction {
             id: "toggle_all_files",

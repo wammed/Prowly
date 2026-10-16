@@ -19,7 +19,9 @@ pub use command_palette::{CommandPaletteModal, PaletteAction, PaletteEnterResult
 pub use conflict_resolver::ConflictResolverModal;
 pub use context_menu::{ContextMenu, ContextMenuAction};
 pub use git_subcommands::GitSubcommandDef;
-pub use history_actions::{HistoryActionState, HistoryActionsModal, HistoryMenuAction};
+pub use history_actions::{
+    HistoryActionState, HistoryActionsModal, HistoryMenuAction, HistoryModalClickResult,
+};
 pub use markdown_preview::MarkdownPreviewModal;
 pub use open_repo::{OpenRepoAction, OpenRepoModal};
 pub use rebase_modal::RebaseModal;

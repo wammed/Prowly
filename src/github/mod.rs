@@ -3,6 +3,6 @@
 pub mod client;
 
 pub use client::{
-    AlertItem, GitHubRateLimit, GitHubRepoTarget, GitHubService, PullRequestItem, RepoMetadata,
-    WorkflowRunItem,
+    AlertItem, GitHubRateLimit, GitHubRepoTarget, GitHubService, IssueItem, PullRequestItem,
+    RepoMetadata, WorkflowRunItem,
 };

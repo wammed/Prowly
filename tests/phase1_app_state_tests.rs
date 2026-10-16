@@ -23,21 +23,29 @@ fn test_tab_navigation_keys() {
     app.handle_key(KeyEvent::new(KeyCode::Char('2'), KeyModifiers::NONE));
     assert_eq!(app.active_tab, AppTab::History);
 
-    // Press '3' -> PRs
+    // Press '3' -> Issues
     app.handle_key(KeyEvent::new(KeyCode::Char('3'), KeyModifiers::NONE));
+    assert_eq!(app.active_tab, AppTab::Issues);
+
+    // Press '4' -> PRs
+    app.handle_key(KeyEvent::new(KeyCode::Char('4'), KeyModifiers::NONE));
     assert_eq!(app.active_tab, AppTab::Prs);
 
-    // Press '4' -> Actions
-    app.handle_key(KeyEvent::new(KeyCode::Char('4'), KeyModifiers::NONE));
+    // Press '5' -> Actions
+    app.handle_key(KeyEvent::new(KeyCode::Char('5'), KeyModifiers::NONE));
     assert_eq!(app.active_tab, AppTab::Actions);
 
-    // Press '5' -> Alerts
-    app.handle_key(KeyEvent::new(KeyCode::Char('5'), KeyModifiers::NONE));
+    // Press '6' -> Alerts
+    app.handle_key(KeyEvent::new(KeyCode::Char('6'), KeyModifiers::NONE));
     assert_eq!(app.active_tab, AppTab::Alerts);
 
-    // Press '6' -> Worktrees
-    app.handle_key(KeyEvent::new(KeyCode::Char('6'), KeyModifiers::NONE));
+    // Press '7' -> Worktrees
+    app.handle_key(KeyEvent::new(KeyCode::Char('7'), KeyModifiers::NONE));
     assert_eq!(app.active_tab, AppTab::Worktrees);
+
+    // Press 'i' -> Issues
+    app.handle_key(KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE));
+    assert_eq!(app.active_tab, AppTab::Issues);
 
     // Press '1' -> Changes
     app.handle_key(KeyEvent::new(KeyCode::Char('1'), KeyModifiers::NONE));

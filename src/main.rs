@@ -62,6 +62,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Positional directory path argument: prowly [path]
     let mut skip_next = false;
+    let mut has_explicit_path = false;
     for arg in args.iter().skip(1) {
         if skip_next {
             skip_next = false;
@@ -74,8 +75,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if !arg.starts_with('-') {
             let p = std::path::PathBuf::from(arg);
             if p.is_dir() {
+                has_explicit_path = true;
                 let _ = std::env::set_current_dir(&p);
                 break;
+            }
+        }
+    }
+
+    // If no path argument was passed and restore_last_repository is true, restore last_repository
+    if !has_explicit_path && config.git.restore_last_repository {
+        if let Some(ref last) = config.last_repository {
+            let last_p = std::path::Path::new(last);
+            if last_p.is_dir() {
+                let home = dirs::home_dir();
+                let cwd = std::env::current_dir().ok();
+                if cwd == home || prowly::GitService::discover().is_err() {
+                    let _ = std::env::set_current_dir(last_p);
+                }
             }
         }
     }
@@ -116,6 +132,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
+
+    // Save last repository and configuration on exit
+    if let Some(ref git) = app.git_service {
+        let p_str = git.workdir().display().to_string();
+        app.config.add_recent_repository(p_str.clone());
+        app.config.last_repository = Some(p_str);
+    }
+    let _ = app.config.save();
 
     // Restore terminal
     disable_raw_mode()?;

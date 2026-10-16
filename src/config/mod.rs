@@ -31,6 +31,13 @@ pub struct GitConfig {
     pub soft_discard_backup: bool,
     /// Background auto-fetch interval in seconds (0 = disabled)
     pub auto_fetch_interval_secs: u64,
+    /// Restore last opened repository on startup when launched without arguments
+    #[serde(default = "default_true")]
+    pub restore_last_repository: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl Default for GitConfig {
@@ -38,6 +45,7 @@ impl Default for GitConfig {
         Self {
             soft_discard_backup: true,
             auto_fetch_interval_secs: 60,
+            restore_last_repository: true,
         }
     }
 }
@@ -216,12 +224,37 @@ auto_fetch_interval_secs = 60
 
     /// Add a path to recent repositories (up to 10 most recent).
     pub fn add_recent_repository(&mut self, path: String) {
-        self.recent_repositories.retain(|p| p != &path);
-        self.recent_repositories.insert(0, path.clone());
+        let normalized = if path.len() > 1 && path.ends_with('/') {
+            path.trim_end_matches('/').to_string()
+        } else {
+            path
+        };
+        self.recent_repositories
+            .retain(|p| p.trim_end_matches('/') != normalized);
+        self.recent_repositories.insert(0, normalized.clone());
         if self.recent_repositories.len() > 10 {
             self.recent_repositories.truncate(10);
         }
-        self.last_repository = Some(path);
+        self.last_repository = Some(normalized);
+    }
+
+    /// Remove a path from recent repositories.
+    pub fn remove_recent_repository(&mut self, path: &str) {
+        let normalized = if path.len() > 1 && path.ends_with('/') {
+            path.trim_end_matches('/')
+        } else {
+            path
+        };
+        self.recent_repositories
+            .retain(|p| p.trim_end_matches('/') != normalized);
+        if self
+            .last_repository
+            .as_deref()
+            .map(|p| p.trim_end_matches('/'))
+            == Some(normalized)
+        {
+            self.last_repository = self.recent_repositories.first().cloned();
+        }
     }
 
     /// Automatically read standard environment variables if API keys are not specified.

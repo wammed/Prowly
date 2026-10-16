@@ -1,5 +1,6 @@
 //! Right-click context popup menu component.
 
+use crate::git::HistoryCommitItem;
 use crate::ui::icons::Icons;
 use crate::ui::theme::Theme;
 use ratatui::{
@@ -13,6 +14,7 @@ use ratatui::{
 /// Actions available in the right-click context menu.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ContextMenuAction {
+    // File actions (Changes tab)
     ToggleStage,
     OpenEditor,
     RevealFileManager,
@@ -22,10 +24,20 @@ pub enum ContextMenuAction {
     CopyDiff,
     AskAi,
     PreviewMarkdown,
+
+    // Commit actions (History tab)
+    CheckoutCommit,
+    CreateBranch,
+    CherryPick,
+    RevertCommit,
+    TimeMachine,
+    CopyCommitSha,
+    CopyCommitMessage,
+    AskAiCommit,
 }
 
 impl ContextMenuAction {
-    pub const ALL: &'static [ContextMenuAction] = &[
+    pub const FILE_ACTIONS: &'static [ContextMenuAction] = &[
         ContextMenuAction::ToggleStage,
         ContextMenuAction::SafeDiscard,
         ContextMenuAction::CopyPath,
@@ -36,6 +48,19 @@ impl ContextMenuAction {
         ContextMenuAction::RevealFileManager,
         ContextMenuAction::StashFile,
     ];
+
+    pub const COMMIT_ACTIONS: &'static [ContextMenuAction] = &[
+        ContextMenuAction::CheckoutCommit,
+        ContextMenuAction::CreateBranch,
+        ContextMenuAction::CherryPick,
+        ContextMenuAction::RevertCommit,
+        ContextMenuAction::TimeMachine,
+        ContextMenuAction::CopyCommitSha,
+        ContextMenuAction::CopyCommitMessage,
+        ContextMenuAction::AskAiCommit,
+    ];
+
+    pub const ALL: &'static [ContextMenuAction] = Self::FILE_ACTIONS;
 
     pub fn label(&self) -> &'static str {
         match self {
@@ -48,6 +73,15 @@ impl ContextMenuAction {
             Self::CopyDiff => "Copy Diff Snippet",
             Self::AskAi => "Ask AI about this file (?)",
             Self::PreviewMarkdown => "Preview Markdown (m)",
+
+            Self::CheckoutCommit => "Checkout Commit (c)",
+            Self::CreateBranch => "Create Branch here... (b)",
+            Self::CherryPick => "Cherry-pick into HEAD (p)",
+            Self::RevertCommit => "Revert Commit (r)",
+            Self::TimeMachine => "Time Machine: Reset here (t)",
+            Self::CopyCommitSha => "Copy Commit SHA (y)",
+            Self::CopyCommitMessage => "Copy Commit Message (m)",
+            Self::AskAiCommit => "Ask AI about this commit (?)",
         }
     }
 }
@@ -58,6 +92,7 @@ pub struct ContextMenu {
     pub is_open: bool,
     pub selected_index: usize,
     pub target_file: Option<String>,
+    pub target_commit: Option<HistoryCommitItem>,
     pub anchor_x: u16,
     pub anchor_y: u16,
 }
@@ -72,6 +107,17 @@ impl ContextMenu {
         self.is_open = true;
         self.selected_index = 0;
         self.target_file = file;
+        self.target_commit = None;
+        self.anchor_x = x;
+        self.anchor_y = y;
+    }
+
+    /// Open context menu for a specific commit item at anchor coordinates.
+    pub fn open_for_commit(&mut self, commit: HistoryCommitItem, x: u16, y: u16) {
+        self.is_open = true;
+        self.selected_index = 0;
+        self.target_file = None;
+        self.target_commit = Some(commit);
         self.anchor_x = x;
         self.anchor_y = y;
     }
@@ -81,9 +127,19 @@ impl ContextMenu {
         self.is_open = false;
     }
 
+    /// Determine active list of actions based on target type.
+    pub fn current_actions(&self) -> &'static [ContextMenuAction] {
+        if self.target_commit.is_some() {
+            ContextMenuAction::COMMIT_ACTIONS
+        } else {
+            ContextMenuAction::FILE_ACTIONS
+        }
+    }
+
     /// Move selection down.
     pub fn next(&mut self) {
-        if self.selected_index + 1 < ContextMenuAction::ALL.len() {
+        let actions = self.current_actions();
+        if self.selected_index + 1 < actions.len() {
             self.selected_index += 1;
         }
     }
@@ -97,13 +153,19 @@ impl ContextMenu {
 
     /// Retrieve selected action.
     pub fn selected_action(&self) -> ContextMenuAction {
-        ContextMenuAction::ALL[self.selected_index]
+        let actions = self.current_actions();
+        actions[self.selected_index.min(actions.len().saturating_sub(1))]
     }
 
     /// Calculate bounding rectangle of popup menu.
     pub fn menu_rect(&self, viewport: Rect) -> Rect {
-        let width = 32.min(viewport.width);
-        let height = (ContextMenuAction::ALL.len() as u16 + 2).min(viewport.height);
+        let actions = self.current_actions();
+        let width = if self.target_commit.is_some() {
+            38.min(viewport.width)
+        } else {
+            32.min(viewport.width)
+        };
+        let height = (actions.len() as u16 + 2).min(viewport.height);
         let x = self.anchor_x.min(viewport.width.saturating_sub(width));
         let y = self.anchor_y.min(viewport.height.saturating_sub(height));
         Rect {
@@ -119,6 +181,7 @@ impl ContextMenu {
         if !self.is_open {
             return None;
         }
+        let actions = self.current_actions();
         let rect = self.menu_rect(viewport);
         if x > rect.x
             && x < rect.x + rect.width.saturating_sub(1)
@@ -126,8 +189,8 @@ impl ContextMenu {
             && y < rect.y + rect.height.saturating_sub(1)
         {
             let row = (y.saturating_sub(rect.y + 1)) as usize;
-            if row < ContextMenuAction::ALL.len() {
-                return Some(ContextMenuAction::ALL[row]);
+            if row < actions.len() {
+                return Some(actions[row]);
             }
         }
         None
@@ -139,15 +202,19 @@ impl ContextMenu {
             return;
         }
 
+        let actions = self.current_actions();
         let rect = self.menu_rect(viewport);
 
         frame.render_widget(Clear, rect);
 
-        let title = self
-            .target_file
-            .as_deref()
-            .map(|f| format!(" {} ", f))
-            .unwrap_or_else(|| " Context Menu ".to_string());
+        let title = if let Some(ref commit) = self.target_commit {
+            let short_sha = &commit.hash[..7.min(commit.hash.len())];
+            format!(" {} Commit {} ", icons.commit(), short_sha)
+        } else if let Some(ref f) = self.target_file {
+            format!(" {} ", f)
+        } else {
+            " Context Menu ".to_string()
+        };
 
         let block = Block::default()
             .borders(Borders::ALL)
@@ -164,7 +231,7 @@ impl ContextMenu {
         let inner = block.inner(rect);
         frame.render_widget(block, rect);
 
-        let lines: Vec<Line> = ContextMenuAction::ALL
+        let lines: Vec<Line> = actions
             .iter()
             .enumerate()
             .map(|(idx, action)| {
@@ -179,6 +246,15 @@ impl ContextMenu {
                     ContextMenuAction::CopyDiff => icons.get(crate::ui::IconId::Copy),
                     ContextMenuAction::AskAi => icons.ai_sparkle(),
                     ContextMenuAction::PreviewMarkdown => icons.file(),
+
+                    ContextMenuAction::CheckoutCommit => icons.commit(),
+                    ContextMenuAction::CreateBranch => icons.branch(),
+                    ContextMenuAction::CherryPick => "󰐱",
+                    ContextMenuAction::RevertCommit => "󰁯",
+                    ContextMenuAction::TimeMachine => "⏳",
+                    ContextMenuAction::CopyCommitSha => icons.get(crate::ui::IconId::Copy),
+                    ContextMenuAction::CopyCommitMessage => icons.get(crate::ui::IconId::Copy),
+                    ContextMenuAction::AskAiCommit => icons.ai_sparkle(),
                 };
 
                 let style = if is_sel {
@@ -186,6 +262,8 @@ impl ContextMenu {
                         .bg(theme.selection_bg)
                         .fg(theme.selection_fg)
                         .add_modifier(Modifier::BOLD)
+                } else if *action == ContextMenuAction::TimeMachine {
+                    Style::default().fg(theme.warning)
                 } else {
                     Style::default().fg(theme.fg)
                 };
