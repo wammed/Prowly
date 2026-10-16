@@ -121,7 +121,7 @@ impl HistoryView {
     }
 
     /// Ensure selected commit hash matches current cursor.
-    fn update_selected_commit_hash(&mut self) {
+    pub fn update_selected_commit_hash(&mut self) {
         let hash = self.selected_commit().map(|c| c.hash.clone());
         if hash != self.selected_commit_hash {
             self.selected_commit_hash = hash;
@@ -129,6 +129,48 @@ impl HistoryView {
             self.active_detail = None;
             self.diff_scroll_offset = 0;
         }
+    }
+
+    /// Check if the commit list content area (excluding border) was clicked, returning relative visual row index (0-indexed).
+    pub fn hit_test_list(&self, x: u16, y: u16) -> Option<usize> {
+        let r = self.list_area;
+        if r.width < 2 || r.height < 2 {
+            return None;
+        }
+        let inner_x = r.x + 1;
+        let inner_y = r.y + 1;
+        let inner_w = r.width - 2;
+        let inner_h = r.height - 2;
+
+        if x >= inner_x && x < inner_x + inner_w && y >= inner_y && y < inner_y + inner_h {
+            Some((y - inner_y) as usize)
+        } else {
+            None
+        }
+    }
+
+    /// Check if coordinates fall inside the list pane area (including border).
+    pub fn hits_list_pane(&self, x: u16, y: u16) -> bool {
+        let r = self.list_area;
+        x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height
+    }
+
+    /// Check if coordinates fall inside the diff preview pane (including border).
+    pub fn hits_diff_pane(&self, x: u16, y: u16) -> bool {
+        let r = self.diff_area;
+        x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height
+    }
+
+    /// Handle click within the commit list, updating selected index and active commit hash.
+    pub fn handle_list_click(&mut self, x: u16, y: u16) -> bool {
+        if let Some(visual_row) = self.hit_test_list(x, y) {
+            self.focus = HistoryFocus::CommitList;
+            if self.scroll.handle_click_row(visual_row).is_some() {
+                self.update_selected_commit_hash();
+                return true;
+            }
+        }
+        false
     }
 
     /// Render History view split into left Graph list and right Detail/Diff preview.

@@ -1892,9 +1892,7 @@ impl App {
         // 3. Right-Click: Open Context Menu
         if mouse.kind == MouseEventKind::Down(MouseButton::Right) {
             if self.active_tab == AppTab::History {
-                if self.layout_areas.hits_right_content(x, y) {
-                    let rel_y = y.saturating_sub(self.layout_areas.right_content.y + 1) as usize;
-                    self.history_view.scroll.handle_click_row(rel_y);
+                if self.history_view.handle_list_click(x, y) {
                     self.update_active_history_diff();
                 }
                 if let Some(commit) = self.history_view.selected_commit().cloned() {
@@ -2128,8 +2126,12 @@ impl App {
                     let rel_y = y.saturating_sub(self.layout_areas.right_content.y + 1) as usize;
                     match self.active_tab {
                         AppTab::History => {
-                            self.history_view.scroll.handle_click_row(rel_y);
-                            self.update_active_history_diff();
+                            if self.history_view.handle_list_click(x, y) {
+                                self.update_active_history_diff();
+                            } else if self.history_view.hits_diff_pane(x, y) {
+                                self.history_view.focus =
+                                    crate::ui::views::history::HistoryFocus::DiffPreview;
+                            }
                         }
                         AppTab::Worktrees => {
                             self.worktrees_view.scroll.handle_click_row(rel_y);
@@ -2197,8 +2199,12 @@ impl App {
                 }
                 MouseEventKind::ScrollDown => match self.active_tab {
                     AppTab::History => {
-                        self.history_view.scroll.scroll_down(3);
-                        self.update_active_history_diff();
+                        if self.history_view.hits_diff_pane(x, y) {
+                            self.history_view.scroll_diff_down(3);
+                        } else {
+                            self.history_view.scroll.scroll_down(3);
+                            self.update_active_history_diff();
+                        }
                     }
                     AppTab::Worktrees => self.worktrees_view.scroll.scroll_down(3),
                     AppTab::Prs => self.prs_view.list_scroll.scroll_down(3),
@@ -2212,8 +2218,12 @@ impl App {
                 },
                 MouseEventKind::ScrollUp => match self.active_tab {
                     AppTab::History => {
-                        self.history_view.scroll.scroll_up(3);
-                        self.update_active_history_diff();
+                        if self.history_view.hits_diff_pane(x, y) {
+                            self.history_view.scroll_diff_up(3);
+                        } else {
+                            self.history_view.scroll.scroll_up(3);
+                            self.update_active_history_diff();
+                        }
                     }
                     AppTab::Worktrees => self.worktrees_view.scroll.scroll_up(3),
                     AppTab::Prs => self.prs_view.list_scroll.scroll_up(3),

@@ -300,3 +300,67 @@ fn test_history_actions_modal_state() {
     modal.close();
     assert!(!modal.is_open);
 }
+
+#[test]
+fn test_history_view_click_hit_test() {
+    use ratatui::layout::Rect;
+
+    let mut view = HistoryView::new();
+    view.list_area = Rect::new(10, 5, 40, 20);
+    view.diff_area = Rect::new(50, 5, 40, 20);
+
+    let create_commit = |hash: &str, summary: &str| {
+        HistoryRow::Commit(HistoryCommitItem {
+            graph: "* ".to_string(),
+            hash: hash.to_string(),
+            full_hash: format!("{}000000000000000000000000000000000", hash),
+            refs: "".to_string(),
+            author: "Tester".to_string(),
+            date: "now".to_string(),
+            summary: summary.to_string(),
+        })
+    };
+
+    let a1 = create_commit("a111111", "A1");
+    let a2 = create_commit("a222222", "A2");
+    let b1 = create_commit("b111111", "B1");
+    let b2 = create_commit("b222222", "B2");
+
+    view.set_rows(vec![a1, a2, b1, b2]);
+
+    // Border checks (x: 10..50, y: 5..25)
+    // Top border (y = 5) should return None
+    assert_eq!(view.hit_test_list(15, 5), None);
+    // Left border (x = 10) should return None
+    assert_eq!(view.hit_test_list(10, 6), None);
+    // Right border (x = 49) should return None
+    assert_eq!(view.hit_test_list(49, 6), None);
+    // Bottom border (y = 24) should return None
+    assert_eq!(view.hit_test_list(15, 24), None);
+
+    // Row visual indices inside inner area (inner y starts at list_area.y + 1 = 6)
+    assert_eq!(view.hit_test_list(15, 6), Some(0)); // A1
+    assert_eq!(view.hit_test_list(15, 7), Some(1)); // A2
+    assert_eq!(view.hit_test_list(15, 8), Some(2)); // B1
+    assert_eq!(view.hit_test_list(15, 9), Some(3)); // B2
+
+    // Click on A2 (y = 7)
+    assert!(view.handle_list_click(15, 7));
+    assert_eq!(view.selected_commit().unwrap().summary, "A2");
+    assert_eq!(view.selected_commit_hash.as_deref(), Some("a222222"));
+
+    // Click on B1 (y = 8)
+    assert!(view.handle_list_click(15, 8));
+    assert_eq!(view.selected_commit().unwrap().summary, "B1");
+    assert_eq!(view.selected_commit_hash.as_deref(), Some("b111111"));
+
+    // Click on A1 (y = 6)
+    assert!(view.handle_list_click(15, 6));
+    assert_eq!(view.selected_commit().unwrap().summary, "A1");
+    assert_eq!(view.selected_commit_hash.as_deref(), Some("a111111"));
+
+    // Diff pane hit test
+    assert!(view.hits_diff_pane(50, 5));
+    assert!(view.hits_diff_pane(60, 10));
+    assert!(!view.hits_diff_pane(15, 7));
+}
