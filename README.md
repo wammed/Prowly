@@ -40,16 +40,22 @@ Whether you prefer keyboard shortcuts or intuitive mouse interactions (clicking,
 - 📂 **Directory Map & Stash Filtering**: Visual tree map of repository modifications, allowing instant bulk staging per folder.
 - 📜 **Git Graph, Commit History & Time Machine (`2` / `h`)**:
   - Interactive visual Git Graph map (`git log --graph` based) with automatic junction-line skipping during navigation.
-  - Split view showing real-time commit metadata (author, relative time, SHA) and instant diff preview (~20 lines).
-  - Full commit manipulation suite: Checkout (`c`), Create Branch (`b`), Cherry-Pick (`p`), and Revert (`r`).
+  - Pixel-precise mouse click hit-testing ensuring exact commit selection under pointer & diff preview mouse wheel scrolling.
+  - Split view showing real-time commit metadata (author, relative time, SHA) and instant diff preview.
+  - Full commit manipulation suite & right-click context menu: Checkout (`c`), Create Branch (`b`), Cherry-Pick (`p`), Revert (`r`), and Ask AI.
   - **Time Machine Reset (`t`)**: Select any past commit to hard-reset the repository (invalidating subsequent commits) with zero risk via automatic backup branches (`backup/timemachine-...`).
   - One-key clipboard copy of commit SHA (`y`).
 - 🌲 **Native Git Worktree Management**: Create, switch, and prune isolated worktree directories with independent branches.
 - 🐙 **First-Class GitHub Integration**:
+  - **GitHub Issues View (`3` / `i`)**: Live Issues list with open/closed state badges, labels, comment counters, Markdown description preview, web browser launch (`o`), and on-demand load switch.
   - Live Pull Requests list with checkout and diff review.
   - GitHub Actions workflow inspection with log streaming.
   - Security, Dependabot, and Code Scanning alert notifications.
   - Rate-limit aware with intelligent in-memory TTL caching.
+-  **Repository & Directory Switcher Modal (`[  Open Repo ]` / `o`)**:
+  - Path input with **TAB key autocompletion** (tilde expansion, common prefix completion, cyclic traversal, and real-time subdirectories synchronization).
+  - Recent Repositories click-to-select, instant open (`[  Open ]`), and deletion (`[ ✕ ]` / `d`).
+  - **Automatic restoration of last-opened repository** on clean launch (toggleable in Settings modal).
 - ⚔️ **Visual Merge Conflict Resolver**: Side-by-side comparison of `Current` vs `Incoming` branches with interactive hunk resolution and AI smart merge.
 - 🔀 **Quick Interactive Rebase**: Fast squash, reword, and fixup without fighting interactive Vim buffers.
 - 🧭 **3-Layer Hierarchical Command Palette (`:` / `F1` / `Ctrl+P`)**:
