@@ -513,6 +513,39 @@ impl GitService {
         }
     }
 
+    /// Clone a remote repository into `target_dir`.
+    /// Derives the directory name from the remote URL and returns the cloned repository PathBuf.
+    pub fn clone_repo(
+        url: &str,
+        target_dir: &std::path::Path,
+    ) -> Result<std::path::PathBuf, GitError> {
+        let trimmed = url.trim();
+        if trimmed.is_empty() {
+            return Err(GitError::Cli("Remote URL cannot be empty".to_string()));
+        }
+
+        let name = trimmed
+            .trim_end_matches('/')
+            .trim_end_matches(".git")
+            .rsplit(|c| c == '/' || c == ':')
+            .next()
+            .unwrap_or("repo");
+
+        let dest = target_dir.join(name);
+
+        let output = Command::new("git")
+            .current_dir(target_dir)
+            .args(["clone", trimmed, name])
+            .output()?;
+
+        if output.status.success() {
+            Ok(dest)
+        } else {
+            let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            Err(GitError::Cli(err))
+        }
+    }
+
     /// Invoke Git CLI for push (ensuring SSH agent / Credential Helper / GPG compatibility).
     pub fn cli_push(&self) -> Result<String, GitError> {
         match self.run_git_cli(&["push"]) {

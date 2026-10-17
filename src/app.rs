@@ -492,7 +492,10 @@ impl App {
                 self.last_status = Some(format!("Switched repository to {}", p_str));
             }
             Err(e) => {
-                self.last_status = Some(format!("Failed to open repository: {}", e));
+                self.last_status = Some(format!(
+                    "Not a Git repository: {}. (Press 'o' -> 'i' to init or 'c' to clone)",
+                    e
+                ));
             }
         }
     }
@@ -886,6 +889,37 @@ impl App {
                         }
                         self.last_status =
                             Some(format!("Removed {} from recent repositories", path));
+                    }
+                    OpenRepoAction::InitRepo(path) => {
+                        self.open_repo_modal.close();
+                        match GitService::init_repo(&path) {
+                            Ok(()) => {
+                                self.last_status = Some(format!(
+                                    "Initialized empty Git repository in {}",
+                                    path.display()
+                                ));
+                                self.switch_repository(&path);
+                            }
+                            Err(e) => {
+                                self.last_status =
+                                    Some(format!("Failed to initialize repository: {}", e));
+                            }
+                        }
+                    }
+                    OpenRepoAction::CloneRepo { url, target_dir } => {
+                        self.open_repo_modal.close();
+                        self.last_status = Some(format!("Cloning {} ...", url));
+                        match GitService::clone_repo(&url, &target_dir) {
+                            Ok(dest) => {
+                                self.last_status =
+                                    Some(format!("Successfully cloned into {}", dest.display()));
+                                self.switch_repository(&dest);
+                            }
+                            Err(e) => {
+                                self.last_status =
+                                    Some(format!("Failed to clone repository: {}", e));
+                            }
+                        }
                     }
                 }
             }
@@ -1833,39 +1867,82 @@ impl App {
             return;
         }
 
-        // 2. Open Repo Modal clicks
+        // 2. Open Repo Modal clicks & wheel
         if self.open_repo_modal.is_open {
-            if mouse.kind == MouseEventKind::Down(MouseButton::Left) {
-                if let Some(action) =
-                    self.open_repo_modal
-                        .handle_click(x, y, self.layout_areas.root)
-                {
-                    match action {
-                        OpenRepoAction::Open(path) => {
-                            self.open_repo_modal.close();
-                            self.switch_repository(&path);
-                        }
-                        OpenRepoAction::Close => self.open_repo_modal.close(),
-                        OpenRepoAction::RemoveRecent(path) => {
-                            self.config.remove_recent_repository(&path);
-                            let _ = self.config.save();
-                            self.open_repo_modal
-                                .recent_repos
-                                .retain(|p| p.trim_end_matches('/') != path.trim_end_matches('/'));
-                            self.open_repo_modal
-                                .recent_scroll
-                                .set_total_items(self.open_repo_modal.recent_repos.len());
-                            if self.open_repo_modal.recent_scroll.selected_index
-                                >= self.open_repo_modal.recent_repos.len()
-                            {
-                                self.open_repo_modal.recent_scroll.selected_index =
-                                    self.open_repo_modal.recent_repos.len().saturating_sub(1);
+            match mouse.kind {
+                MouseEventKind::Down(MouseButton::Left) => {
+                    if let Some(action) =
+                        self.open_repo_modal
+                            .handle_click(x, y, self.layout_areas.root)
+                    {
+                        match action {
+                            OpenRepoAction::Open(path) => {
+                                self.open_repo_modal.close();
+                                self.switch_repository(&path);
                             }
-                            self.last_status =
-                                Some(format!("Removed {} from recent repositories", path));
+                            OpenRepoAction::Close => self.open_repo_modal.close(),
+                            OpenRepoAction::RemoveRecent(path) => {
+                                self.config.remove_recent_repository(&path);
+                                let _ = self.config.save();
+                                self.open_repo_modal.recent_repos.retain(|p| {
+                                    p.trim_end_matches('/') != path.trim_end_matches('/')
+                                });
+                                self.open_repo_modal
+                                    .recent_scroll
+                                    .set_total_items(self.open_repo_modal.recent_repos.len());
+                                if self.open_repo_modal.recent_scroll.selected_index
+                                    >= self.open_repo_modal.recent_repos.len()
+                                {
+                                    self.open_repo_modal.recent_scroll.selected_index =
+                                        self.open_repo_modal.recent_repos.len().saturating_sub(1);
+                                }
+                                self.last_status =
+                                    Some(format!("Removed {} from recent repositories", path));
+                            }
+                            OpenRepoAction::InitRepo(path) => {
+                                self.open_repo_modal.close();
+                                match GitService::init_repo(&path) {
+                                    Ok(()) => {
+                                        self.last_status = Some(format!(
+                                            "Initialized empty Git repository in {}",
+                                            path.display()
+                                        ));
+                                        self.switch_repository(&path);
+                                    }
+                                    Err(e) => {
+                                        self.last_status =
+                                            Some(format!("Failed to initialize repository: {}", e));
+                                    }
+                                }
+                            }
+                            OpenRepoAction::CloneRepo { url, target_dir } => {
+                                self.open_repo_modal.close();
+                                self.last_status = Some(format!("Cloning {} ...", url));
+                                match GitService::clone_repo(&url, &target_dir) {
+                                    Ok(dest) => {
+                                        self.last_status = Some(format!(
+                                            "Successfully cloned into {}",
+                                            dest.display()
+                                        ));
+                                        self.switch_repository(&dest);
+                                    }
+                                    Err(e) => {
+                                        self.last_status =
+                                            Some(format!("Failed to clone repository: {}", e));
+                                    }
+                                }
+                            }
                         }
                     }
                 }
+                MouseEventKind::ScrollUp => {
+                    self.open_repo_modal.scroll_up(x, y, self.layout_areas.root);
+                }
+                MouseEventKind::ScrollDown => {
+                    self.open_repo_modal
+                        .scroll_down(x, y, self.layout_areas.root);
+                }
+                _ => {}
             }
             return;
         }

@@ -216,15 +216,24 @@ prowly /path/to/repo
 | `q` / `Esc` | Close preview modal |
 
 ### Open Repository / Directory Switcher Modal (Header click or `o`)
+A wide two-pane modal for seamless local repository discovery and remote Git workflows:
+- **Left Pane (Repository Discovery)**: Automatically scans current and subdirectories for `.git` repositories with active branch indicators. Toggle `[a: All Dirs / g: Git Only]`.
+- **Right Pane (Recent & Actions)**: Clean repository name list (no path clutter), direct path input with Tab completion, `[ i ] Init Repo Here`, and `[ c ] Clone Remote Here` with direct URL input prompt.
+
 | Operation | Action |
 |:---|:---|
 | `Tab` (in path input) | **TAB Path Autocompletion** (common prefix completion and candidate cycling) |
 | `Enter` (in path input) | Open repository at the typed path |
-| `↓` / `↑` | Move focus between path input, subdirectories, and recent repositories |
-| `Enter` (in subdirectories) | Enter selected subdirectory (`..` to go up) |
-| `Enter` (in recent repos) | Open selected recent repository |
+| `←` / `→` (Left / Right) | Switch focus between Left Pane (Discovery) and Right Pane (Recent / Path) |
+| `↓` / `↑` | Move item selection in the focused pane |
+| `Enter` (in Discovery) | Open selected repository (`..` to navigate to parent directory) |
+| `Enter` (in Recent) | Open selected recent repository |
+| `c` (outside input) | Open **Clone Remote Repository** prompt (type URL and press Enter to clone) |
+| `i` (outside input) | **git init** in current/selected directory and open immediately |
+| `a` (outside input) | Toggle between Git repositories only and All directories |
 | `d` / `x` / `Delete` | Remove selected recent repository from history |
-| Mouse Click | Navigate directories, select recent repos, click `[  Open ]` to open, `[ ✕ ]` to delete |
+| Mouse Scroll Wheel | Independently scrolls Left Pane (Discovery) or Right Pane (Recent) |
+| Mouse Click | Select and open repositories, click `[ i ] Init`, `[ c ] Clone`, or `[ ✕ ]` to delete |
 
 ### Mouse Operations & Terminal Compatibility (Right-Click Interception)
 
