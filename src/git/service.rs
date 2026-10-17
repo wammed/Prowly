@@ -315,13 +315,68 @@ impl GitService {
     ) -> Result<BackupRecord, GitError> {
         let full_path = self.workdir.join(path);
         let record = backup_service.backup_file(&full_path)?;
+        self.apply_discard_to_worktree_and_index(path)?;
+        Ok(record)
+    }
 
-        // Restore file to HEAD / index version
+    /// Discard modifications for a file directly without creating a backup.
+    pub fn hard_discard(&self, path: &str) -> Result<(), GitError> {
+        self.apply_discard_to_worktree_and_index(path)
+    }
+
+    /// Internal helper that cleanly discards changes based on Git status (untracked, staged, unstaged, deleted).
+    /// Internal helper that cleanly discards changes based on Git status (untracked, staged, unstaged, deleted).
+    fn apply_discard_to_worktree_and_index(&self, path: &str) -> Result<(), GitError> {
+        let full_path = self.workdir.join(path);
+        let status = self
+            .repo
+            .status_file(Path::new(path))
+            .unwrap_or(git2::Status::empty());
+
+        let in_head = self
+            .repo
+            .head()
+            .ok()
+            .and_then(|h| h.peel_to_tree().ok())
+            .map(|t| t.get_path(Path::new(path)).is_ok())
+            .unwrap_or(false);
+
+        if !in_head {
+            // File is not in HEAD (it is newly added or untracked)
+            if status.intersects(
+                git2::Status::INDEX_NEW
+                    | git2::Status::INDEX_MODIFIED
+                    | git2::Status::INDEX_DELETED
+                    | git2::Status::INDEX_RENAMED
+                    | git2::Status::INDEX_TYPECHANGE,
+            ) {
+                let _ = self.unstage_file(path);
+            }
+
+            if full_path.is_file() {
+                let _ = std::fs::remove_file(&full_path);
+            } else if full_path.is_dir() {
+                let _ = std::fs::remove_dir_all(&full_path);
+            }
+            return Ok(());
+        }
+
+        // File is in HEAD: unstage any index changes and restore HEAD version to worktree
+        if status.intersects(
+            git2::Status::INDEX_NEW
+                | git2::Status::INDEX_MODIFIED
+                | git2::Status::INDEX_DELETED
+                | git2::Status::INDEX_RENAMED
+                | git2::Status::INDEX_TYPECHANGE,
+        ) {
+            let _ = self.unstage_file(path);
+        }
+
         let mut opts = git2::build::CheckoutBuilder::new();
         opts.force().path(path);
         self.repo.checkout_head(Some(&mut opts))?;
 
-        Ok(record)
+        Ok(())
     }
 
     /// Compute structured diff for a file (or whole repo if path is None).

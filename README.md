@@ -111,11 +111,11 @@ To uninstall:
 ./scripts/uninstall.sh
 ```
 
-### Windows Installation
+### macOS Installation (Apple Silicon M1+ / Intel)
 
-Run via PowerShell:
-```powershell
-.\scripts\install.ps1
+```bash
+chmod +x ./scripts/install.sh
+./scripts/install.sh
 ```
 
 ### Building Manually via Cargo

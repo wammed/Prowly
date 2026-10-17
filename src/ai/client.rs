@@ -186,6 +186,25 @@ pub fn create_ai_client(config: &AiConfig) -> Box<dyn AiClient + Send + Sync> {
     }
 }
 
+/// Create a configured reqwest HTTP client with robust connection and request timeouts.
+fn default_http_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(60))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new())
+}
+
+/// Sanitize and truncate HTTP error body to prevent log flooding and credential leakage.
+fn sanitize_error_body(body: String) -> String {
+    let trimmed = body.trim();
+    if trimmed.len() > 500 {
+        format!("{}... [truncated]", &trimmed[..500])
+    } else {
+        trimmed.to_string()
+    }
+}
+
 // ---------------------------------------------------------------------------
 // 1. OpenAI / OpenAI-compatible client
 // ---------------------------------------------------------------------------
@@ -198,7 +217,7 @@ impl OpenAiClient {
     pub fn new(config: AiConfig) -> Self {
         Self {
             config,
-            client: reqwest::Client::new(),
+            client: default_http_client(),
         }
     }
 }
@@ -243,7 +262,8 @@ impl AiClient for OpenAiClient {
 
         if !res.status().is_success() {
             let status = res.status().as_u16();
-            let message = res.text().await.unwrap_or_default();
+            let raw_msg = res.text().await.unwrap_or_default();
+            let message = sanitize_error_body(raw_msg);
             return Err(AiError::ApiFailure { status, message });
         }
 
@@ -284,7 +304,7 @@ impl AnthropicClient {
     pub fn new(config: AiConfig) -> Self {
         Self {
             config,
-            client: reqwest::Client::new(),
+            client: default_http_client(),
         }
     }
 }
@@ -359,7 +379,8 @@ impl AiClient for AnthropicClient {
 
         if !res.status().is_success() {
             let status = res.status().as_u16();
-            let message = res.text().await.unwrap_or_default();
+            let raw_msg = res.text().await.unwrap_or_default();
+            let message = sanitize_error_body(raw_msg);
             return Err(AiError::ApiFailure { status, message });
         }
 
@@ -400,7 +421,7 @@ impl GeminiClient {
     pub fn new(config: AiConfig) -> Self {
         Self {
             config,
-            client: reqwest::Client::new(),
+            client: default_http_client(),
         }
     }
 }
@@ -450,7 +471,8 @@ impl AiClient for GeminiClient {
 
         if !res.status().is_success() {
             let status = res.status().as_u16();
-            let message = res.text().await.unwrap_or_default();
+            let raw_msg = res.text().await.unwrap_or_default();
+            let message = sanitize_error_body(raw_msg);
             return Err(AiError::ApiFailure { status, message });
         }
 
@@ -495,7 +517,7 @@ impl OllamaClient {
     pub fn new(config: AiConfig) -> Self {
         Self {
             config,
-            client: reqwest::Client::new(),
+            client: default_http_client(),
         }
     }
 
@@ -552,7 +574,8 @@ impl AiClient for OllamaClient {
 
         if !res.status().is_success() {
             let status = res.status().as_u16();
-            let message = res.text().await.unwrap_or_default();
+            let raw_msg = res.text().await.unwrap_or_default();
+            let message = sanitize_error_body(raw_msg);
             return Err(AiError::ApiFailure { status, message });
         }
 

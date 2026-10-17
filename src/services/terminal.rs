@@ -36,12 +36,12 @@ pub fn open_external_editor_with_preference(
             }
         });
 
-    let parts: Vec<&str> = editor.split_whitespace().collect();
-    if parts.is_empty() {
+    let tokens = crate::services::SafeGitRunner::tokenize_args(&editor);
+    if tokens.is_empty() {
         return Err(io::Error::other("Editor command is empty"));
     }
-    let cmd = parts[0];
-    let mut args: Vec<&str> = parts[1..].to_vec();
+    let cmd = &tokens[0];
+    let mut args: Vec<&str> = tokens[1..].iter().map(|s| s.as_str()).collect();
     let file_str = file_path.to_string_lossy();
     args.push(file_str.as_ref());
 

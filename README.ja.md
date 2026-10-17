@@ -111,11 +111,11 @@ cd Prowly
 ./scripts/uninstall.sh
 ```
 
-### Windows 環境
+### macOS 環境 (Apple Silicon M1+ / Intel)
 
-PowerShell でスクリプトを実行します:
-```powershell
-.\scripts\install.ps1
+```bash
+chmod +x ./scripts/install.sh
+./scripts/install.sh
 ```
 
 ### Cargo による手動ビルド

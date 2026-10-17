@@ -261,27 +261,37 @@ pub fn is_dangerous_git_args(subcommand: &str, args: &str) -> Option<&'static st
     if subcommand == "push"
         && (words.contains(&"--force")
             || words.contains(&"-f")
+            || words.contains(&"--force-with-lease")
             || words.iter().any(|w| w.starts_with('+')))
     {
         return Some("Force push will overwrite remote commit history!");
     }
-    if subcommand == "reset" && words.contains(&"--hard") {
-        return Some("Hard reset will permanently discard all uncommitted changes!");
+    if subcommand == "reset"
+        && (words.contains(&"--hard") || words.contains(&"--merge") || words.contains(&"--keep"))
+    {
+        return Some("Hard or merging reset will permanently discard uncommitted changes!");
     }
     if subcommand == "clean"
-        && (words.contains(&"-f")
-            || words.contains(&"--force")
-            || words.contains(&"-fd")
-            || words.contains(&"-fdx"))
         && !words.contains(&"-n")
         && !words.contains(&"--dry-run")
+        && (words.contains(&"--force")
+            || words.iter().any(|w| w.starts_with('-') && !w.starts_with("--") && w.contains('f')))
     {
         return Some("Force clean will permanently delete untracked files!");
     }
     if subcommand == "branch"
-        && (words.contains(&"-D") || (words.contains(&"-d") && words.contains(&"--force")))
+        && (words.contains(&"-D")
+            || (words.contains(&"-d") && (words.contains(&"--force") || words.contains(&"-f"))))
     {
         return Some("Force branch delete will remove branch even if unmerged!");
+    }
+    if (subcommand == "checkout" || subcommand == "switch")
+        && (words.contains(&"-f")
+            || words.contains(&"--force")
+            || words.contains(&"-B")
+            || words.contains(&"-C"))
+    {
+        return Some("Force checkout or switch will overwrite local changes or branches!");
     }
     None
 }
@@ -296,6 +306,7 @@ pub struct CommandPaletteModal {
     pub scroll_offset: usize,
     pub ai_suggestion: Option<SuggestedGitCommand>,
     pub confirmed_danger: bool,
+    pub confirmed_danger_target: Option<String>,
     pub danger_message: Option<String>,
     pub flag_candidate_index: usize,
 }
@@ -310,6 +321,7 @@ impl Default for CommandPaletteModal {
             scroll_offset: 0,
             ai_suggestion: None,
             confirmed_danger: false,
+            confirmed_danger_target: None,
             danger_message: None,
             flag_candidate_index: 0,
         }
@@ -471,6 +483,7 @@ impl CommandPaletteModal {
         self.scroll_offset = 0;
         self.ai_suggestion = None;
         self.confirmed_danger = false;
+        self.confirmed_danger_target = None;
         self.danger_message = None;
     }
 
@@ -481,6 +494,7 @@ impl CommandPaletteModal {
             self.selected_index = 0;
             self.scroll_offset = 0;
             self.confirmed_danger = false;
+            self.confirmed_danger_target = None;
             self.danger_message = None;
         } else {
             // When query is empty, navigate back up the hierarchy
@@ -491,6 +505,7 @@ impl CommandPaletteModal {
                     self.selected_index = 0;
                     self.scroll_offset = 0;
                     self.confirmed_danger = false;
+                    self.confirmed_danger_target = None;
                     self.danger_message = None;
                 }
                 PaletteLayer::GitSubcommand => {
@@ -499,6 +514,7 @@ impl CommandPaletteModal {
                     self.selected_index = 0;
                     self.scroll_offset = 0;
                     self.confirmed_danger = false;
+                    self.confirmed_danger_target = None;
                     self.danger_message = None;
                 }
                 PaletteLayer::Root => {}
@@ -515,6 +531,7 @@ impl CommandPaletteModal {
                 self.selected_index = 0;
                 self.scroll_offset = 0;
                 self.confirmed_danger = false;
+                self.confirmed_danger_target = None;
                 self.danger_message = None;
                 true
             }
@@ -524,6 +541,7 @@ impl CommandPaletteModal {
                 self.selected_index = 0;
                 self.scroll_offset = 0;
                 self.confirmed_danger = false;
+                self.confirmed_danger_target = None;
                 self.danger_message = None;
                 true
             }
@@ -599,9 +617,11 @@ impl CommandPaletteModal {
                         return PaletteEnterResult::LayerChanged;
                     } else {
                         // Check dangerous flags before direct execution
+                        let target_str = format!("{} {}", sub_def.name, remaining_args);
                         if let Some(warn) = is_dangerous_git_args(sub_def.name, &remaining_args) {
-                            if !self.confirmed_danger {
+                            if self.confirmed_danger_target.as_deref() != Some(&target_str) {
                                 self.confirmed_danger = true;
+                                self.confirmed_danger_target = Some(target_str);
                                 self.danger_message = Some(warn.to_string());
                                 self.layer = PaletteLayer::ArgsInput {
                                     subcommand: sub_def.name.to_string(),
@@ -616,6 +636,8 @@ impl CommandPaletteModal {
                                 return PaletteEnterResult::DangerWarning(warn.to_string());
                             }
                         }
+                        self.confirmed_danger = false;
+                        self.confirmed_danger_target = None;
                         return PaletteEnterResult::ExecuteGitCommand {
                             subcommand: sub_def.name.to_string(),
                             args: remaining_args,
@@ -664,16 +686,20 @@ impl CommandPaletteModal {
             PaletteLayer::ArgsInput { subcommand, .. } => {
                 let sub = subcommand.clone();
                 let args = self.query.trim().to_string();
+                let target_str = format!("{} {}", sub, args);
 
                 // Check safety guard
                 if let Some(warn) = is_dangerous_git_args(&sub, &args) {
-                    if !self.confirmed_danger {
+                    if self.confirmed_danger_target.as_deref() != Some(&target_str) {
                         self.confirmed_danger = true;
+                        self.confirmed_danger_target = Some(target_str);
                         self.danger_message = Some(warn.to_string());
                         return PaletteEnterResult::DangerWarning(warn.to_string());
                     }
                 }
 
+                self.confirmed_danger = false;
+                self.confirmed_danger_target = None;
                 PaletteEnterResult::ExecuteGitCommand {
                     subcommand: sub,
                     args,

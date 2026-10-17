@@ -21,7 +21,7 @@ impl GitHubRepoTarget {
     }
 
     /// Parse owner and repo name from Git remote URL.
-    /// Handles SSH (`git@github.com:owner/repo.git`) and HTTPS (`https://github.com/owner/repo.git`).
+    /// Handles SSH (`git@github.com:owner/repo.git`, `ssh://git@github.com/owner/repo.git`) and HTTPS (`https://github.com/owner/repo.git`).
     pub fn from_remote_url(url: &str) -> Option<Self> {
         let trimmed = url.trim().trim_end_matches(".git");
         if let Some(rest) = trimmed.strip_prefix("git@github.com:") {
@@ -31,8 +31,11 @@ impl GitHubRepoTarget {
             if !owner.is_empty() && !repo.is_empty() {
                 return Some(Self::new(owner, repo));
             }
-        } else if let Some(idx) = trimmed.find("github.com/") {
-            let rest = &trimmed[idx + "github.com/".len()..];
+        } else if let Some(rest) = trimmed
+            .strip_prefix("https://github.com/")
+            .or_else(|| trimmed.strip_prefix("http://github.com/"))
+            .or_else(|| trimmed.strip_prefix("ssh://git@github.com/"))
+        {
             let mut parts = rest.split('/');
             let owner = parts.next()?;
             let repo = parts.next()?;
@@ -724,24 +727,44 @@ impl GitHubService {
 
         // Fallback to git fetch and checkout
         let fetch_ref = format!("pull/{}/head:pr-{}", pr_number, pr_number);
-        let _ = Command::new("git")
+        let fetch_res = Command::new("git")
             .current_dir(workdir)
             .args(["fetch", "origin", &fetch_ref])
             .output();
 
-        let branch_name = format!("pr-{}", pr_number);
-        let co = Command::new("git")
-            .current_dir(workdir)
-            .args(["checkout", &branch_name])
-            .output();
+        match fetch_res {
+            Ok(fetch_out) if fetch_out.status.success() => {
+                let branch_name = format!("pr-{}", pr_number);
+                let co = Command::new("git")
+                    .current_dir(workdir)
+                    .args(["checkout", &branch_name])
+                    .output();
 
-        match co {
-            Ok(out) if out.status.success() => Ok(format!(
-                "Checked out PR #{} as branch '{}'",
-                pr_number, branch_name
+                match co {
+                    Ok(out) if out.status.success() => Ok(format!(
+                        "Checked out PR #{} as branch '{}'",
+                        pr_number, branch_name
+                    )),
+                    Ok(out) => Err(String::from_utf8_lossy(&out.stderr).trim().to_string()),
+                    Err(e) => Err(e.to_string()),
+                }
+            }
+            Ok(fetch_out) => {
+                let err = String::from_utf8_lossy(&fetch_out.stderr).trim().to_string();
+                Err(format!(
+                    "Failed to fetch PR #{} from origin: {}",
+                    pr_number,
+                    if err.is_empty() {
+                        "remote reference not found or network error".to_string()
+                    } else {
+                        err
+                    }
+                ))
+            }
+            Err(e) => Err(format!(
+                "Failed to execute git fetch for PR #{}: {}",
+                pr_number, e
             )),
-            Ok(out) => Err(String::from_utf8_lossy(&out.stderr).trim().to_string()),
-            Err(e) => Err(e.to_string()),
         }
     }
 }

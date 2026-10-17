@@ -2378,8 +2378,39 @@ impl App {
             }
             PaletteEnterResult::ExecuteAiCommand(cmd) => {
                 self.command_palette.close();
-                let _ = std::process::Command::new("sh").args(["-c", &cmd]).output();
-                self.last_status = Some(format!("Executed: {}", cmd));
+                match crate::services::SafeGitRunner::parse_ai_command(&cmd) {
+                    Ok((sub, args)) => {
+                        let workdir = if let Some(git) = &self.git_service {
+                            git.workdir().to_path_buf()
+                        } else {
+                            std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+                        };
+                        match crate::services::SafeGitRunner::execute_git(&workdir, &sub, &args) {
+                            Ok(output) => {
+                                if output.status.success() {
+                                    self.last_status = Some(format!(
+                                        "Executed AI command: git {} {}",
+                                        sub,
+                                        args.join(" ")
+                                    ));
+                                } else {
+                                    let err = String::from_utf8_lossy(&output.stderr);
+                                    self.last_status = Some(format!(
+                                        "AI command failed: {}",
+                                        err.lines().next().unwrap_or("unknown error")
+                                    ));
+                                }
+                            }
+                            Err(e) => {
+                                self.last_status = Some(format!("Failed to run AI command: {}", e));
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        self.last_status =
+                            Some(format!("⚠️ AI command rejected by safety guard: {}", err));
+                    }
+                }
                 self.refresh_git_status();
                 self.needs_clear = true;
             }
@@ -2537,7 +2568,7 @@ impl App {
         }
     }
 
-    /// Execute an arbitrary Git CLI command in the repository workspace.
+    /// Execute an arbitrary Git CLI command in the repository workspace safely without a shell.
     pub fn execute_git_cli(&mut self, subcommand: &str, args: &str) {
         let workdir = if let Some(git) = &self.git_service {
             git.workdir().to_path_buf()
@@ -2552,10 +2583,13 @@ impl App {
             format!("git {} {}", subcommand, trimmed_args)
         };
 
-        let output = std::process::Command::new("sh")
-            .current_dir(&workdir)
-            .args(["-c", &full_cmd_str])
-            .output();
+        if !crate::services::SafeGitRunner::is_safe_subcommand(subcommand) {
+            self.last_status = Some(format!("Invalid Git subcommand: '{}'", subcommand));
+            return;
+        }
+
+        let parsed_args = crate::services::SafeGitRunner::tokenize_args(trimmed_args);
+        let output = crate::services::SafeGitRunner::execute_git(&workdir, subcommand, &parsed_args);
 
         match output {
             Ok(output) => {
@@ -2632,23 +2666,36 @@ impl App {
         }
     }
 
-    /// Safe discard with automated backup for selected file.
+    /// Safe discard with automated backup for selected file (or direct discard if backup disabled in config).
     pub fn safe_discard_selected(&mut self) {
         let filtered = self.filtered_files();
         let idx = self.changes_view.file_scroll.selected_index;
         if let Some(item) = filtered.get(idx) {
             let path = item.path.clone();
             if let Some(git) = &self.git_service {
-                match git.soft_discard(&path, &self.backup_service) {
-                    Ok(backup) => {
-                        self.refresh_git_status();
-                        self.last_status = Some(format!(
-                            "Safe discard: backup saved to {}",
-                            backup.backup_path.display()
-                        ));
+                if !self.config.git.soft_discard_backup {
+                    match git.hard_discard(&path) {
+                        Ok(()) => {
+                            self.refresh_git_status();
+                            self.last_status =
+                                Some(format!("Discarded {} (backup disabled)", path));
+                        }
+                        Err(e) => {
+                            self.last_status = Some(format!("Discard failed: {}", e));
+                        }
                     }
-                    Err(e) => {
-                        self.last_status = Some(format!("Discard failed: {}", e));
+                } else {
+                    match git.soft_discard(&path, &self.backup_service) {
+                        Ok(backup) => {
+                            self.refresh_git_status();
+                            self.last_status = Some(format!(
+                                "Safe discard: backup saved to {}",
+                                backup.backup_path.display()
+                            ));
+                        }
+                        Err(e) => {
+                            self.last_status = Some(format!("Discard failed: {}", e));
+                        }
                     }
                 }
             }

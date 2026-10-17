@@ -61,16 +61,22 @@ pub struct EditorConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     /// Selected UI theme
+    #[serde(default)]
     pub theme: ThemeId,
     /// Active UI and prompt language
+    #[serde(default)]
     pub language: Language,
     /// Whether to render high-definition Nerd Font glyphs
+    #[serde(default = "default_true")]
     pub use_nerd_font: bool,
     /// AI service settings
+    #[serde(default)]
     pub ai: AiConfig,
     /// Git engine preferences
+    #[serde(default)]
     pub git: GitConfig,
     /// External editor integration
+    #[serde(default)]
     pub editor: EditorConfig,
     /// Last opened repository path
     #[serde(default)]
@@ -159,43 +165,70 @@ auto_fetch_interval_secs = 60
         Ok(base.join("prowly").join("config.toml"))
     }
 
-    /// Ensure ~/.config/prowly/config.toml template exists, creating it if absent.
+    /// Ensure ~/.config/prowly/config.toml template exists, creating it if absent with restricted permissions.
     pub fn ensure_template_exists() -> Result<PathBuf, ConfigError> {
         let std_path = Self::standard_config_path()?;
         if !std_path.is_file() {
             if let Some(parent) = std_path.parent() {
                 fs::create_dir_all(parent)?;
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    let _ = fs::set_permissions(parent, fs::Permissions::from_mode(0o700));
+                }
             }
             fs::write(&std_path, Self::template_content())?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = fs::set_permissions(&std_path, fs::Permissions::from_mode(0o600));
+            }
         }
         Ok(std_path)
     }
 
-    /// Load configuration following precedence:
-    /// 1. Local `./prowly.toml` in current directory if present
-    /// 2. User config in `~/.config/prowly/config.toml`
-    /// 3. Built-in defaults
-    /// Automatically writes template config to ~/.config/prowly/config.toml if not present.
+    /// Load configuration following trust boundaries:
+    /// 1. Authoritative user config in `~/.config/prowly/config.toml` (or OS equivalent)
+    /// 2. Environment variables for API keys
+    /// 3. Workspace preferences in `./prowly.toml` (safe UI options only, NEVER api_key or api_base)
     pub fn load() -> Self {
+        // Step 1: Load trusted user config
+        let mut config = if let Ok(std_path) = Self::ensure_template_exists() {
+            if std_path.is_file() {
+                Self::load_from_path(&std_path).unwrap_or_default()
+            } else {
+                Self::default()
+            }
+        } else {
+            Self::default()
+        };
+
+        // Step 2: Populate environment API keys into user config
+        config.populate_api_keys_from_env();
+
+        // Step 3: Check local repository `./prowly.toml` for safe workspace overrides
         let local_path = Path::new("prowly.toml");
         if local_path.is_file() {
-            if let Ok(cfg) = Self::load_from_path(local_path) {
-                return cfg;
-            }
-        }
-
-        // Try standard config path and auto-generate template if missing
-        if let Ok(std_path) = Self::ensure_template_exists() {
-            if std_path.is_file() {
-                if let Ok(cfg) = Self::load_from_path(&std_path) {
-                    return cfg;
+            if let Ok(content) = fs::read_to_string(local_path) {
+                if let Ok(local_cfg) = toml::from_str::<Config>(&content) {
+                    if local_cfg.ai.api_base.is_some() || local_cfg.ai.api_key.is_some() {
+                        eprintln!(
+                            "⚠️ Security Guard: Local prowly.toml cannot override AI API keys or endpoints. Ignored."
+                        );
+                    }
+                    config.theme = local_cfg.theme;
+                    config.language = local_cfg.language;
+                    config.use_nerd_font = local_cfg.use_nerd_font;
+                    config.git.soft_discard_backup = local_cfg.git.soft_discard_backup;
+                    config.git.auto_fetch_interval_secs = local_cfg.git.auto_fetch_interval_secs;
+                    if local_cfg.editor.command.is_some() {
+                        config.editor.command = local_cfg.editor.command;
+                    }
                 }
             }
         }
 
-        let mut default_cfg = Self::default();
-        default_cfg.populate_api_keys_from_env();
-        default_cfg
+        config
     }
 
     /// Load configuration from an explicit file path.
@@ -212,13 +245,23 @@ auto_fetch_interval_secs = 60
         self.save_to_path(&path)
     }
 
-    /// Save configuration to an explicit file path, creating parent directories if needed.
+    /// Save configuration to an explicit file path, creating parent directories if needed and setting 0600 on Unix.
     pub fn save_to_path(&self, path: &Path) -> Result<(), ConfigError> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = fs::set_permissions(parent, fs::Permissions::from_mode(0o700));
+            }
         }
         let content = toml::to_string_pretty(self)?;
         fs::write(path, content)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o600));
+        }
         Ok(())
     }
 

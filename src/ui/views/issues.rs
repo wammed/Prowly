@@ -28,6 +28,12 @@ pub struct IssuesView {
     pub status_message: Option<String>,
 }
 
+impl Default for IssuesView {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl IssuesView {
     pub fn new() -> Self {
         Self {

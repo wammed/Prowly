@@ -208,6 +208,7 @@ fn test_app_commit_staged_auto_stages_and_prevents_empty() {
     repo.commit(Some("HEAD"), &sig, &sig, "init", &tree, &[])
         .unwrap();
 
+    let orig_dir = std::env::current_dir().ok();
     let mut app = App::new(Config::default());
     app.switch_repository(repo_path);
 
@@ -238,10 +239,20 @@ fn test_app_commit_staged_auto_stages_and_prevents_empty() {
 
     // After commit, working directory and files should be clean
     assert!(app.repo_status.files.is_empty());
+    if let Some(orig) = orig_dir {
+        let _ = std::env::set_current_dir(orig);
+    }
 }
 
 #[test]
 fn test_repo_badge_visibility_rendering() {
+    let orig_dir = std::env::current_dir().ok();
+    let tmp = tempfile::tempdir().unwrap();
+    let repo_path = tmp.path();
+    let repo = git2::Repository::init(repo_path).unwrap();
+    repo.remote("origin", "https://github.com/example/test-repo.git")
+        .unwrap();
+
     let render_content = |app: &mut App| -> String {
         let backend = ratatui::backend::TestBackend::new(120, 30);
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
@@ -256,6 +267,7 @@ fn test_repo_badge_visibility_rendering() {
     };
 
     let mut app = App::new(Config::default());
+    app.switch_repository(repo_path);
 
     // 1. When is_repo_private is Some(false) (Public)
     app.set_repo_visibility(false);
@@ -295,6 +307,9 @@ fn test_repo_badge_visibility_rendering() {
         content4.contains("非") && content4.contains("開"),
         "Expected 非公開 badge in Japanese mode when is_repo_private=true"
     );
+    if let Some(orig) = orig_dir {
+        let _ = std::env::set_current_dir(orig);
+    }
 }
 
 #[test]

@@ -15,7 +15,45 @@ use std::time::Duration;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
+
+    // 1. Resolve positional directory argument first: prowly [path]
+    let mut skip_next = false;
+    let mut has_explicit_path = false;
+    for arg in args.iter().skip(1) {
+        if skip_next {
+            skip_next = false;
+            continue;
+        }
+        if arg == "--lang" || arg == "--theme" {
+            skip_next = true;
+            continue;
+        }
+        if !arg.starts_with('-') {
+            let p = std::path::PathBuf::from(arg);
+            if p.is_dir() {
+                has_explicit_path = true;
+                let _ = std::env::set_current_dir(&p);
+                break;
+            }
+        }
+    }
+
+    // 2. Load configuration (reads user config first, then target dir's safe prowly.toml overrides)
     let mut config = Config::load();
+
+    // 3. If no explicit path was passed and restore_last_repository is true, restore last_repository
+    if !has_explicit_path && config.git.restore_last_repository {
+        if let Some(ref last) = config.last_repository {
+            let last_p = std::path::Path::new(last);
+            if last_p.is_dir() {
+                let home = dirs::home_dir();
+                let cwd = std::env::current_dir().ok();
+                if cwd == home || prowly::GitService::discover().is_err() {
+                    let _ = std::env::set_current_dir(last_p);
+                }
+            }
+        }
+    }
 
     // CLI overrides
     if args.iter().any(|arg| arg == "--no-nerd-font") {
@@ -58,42 +96,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Nerd Font: {}", config.use_nerd_font);
         println!("AI Provider: {:?}", config.ai.provider);
         return Ok(());
-    }
-
-    // Positional directory path argument: prowly [path]
-    let mut skip_next = false;
-    let mut has_explicit_path = false;
-    for arg in args.iter().skip(1) {
-        if skip_next {
-            skip_next = false;
-            continue;
-        }
-        if arg == "--lang" || arg == "--theme" {
-            skip_next = true;
-            continue;
-        }
-        if !arg.starts_with('-') {
-            let p = std::path::PathBuf::from(arg);
-            if p.is_dir() {
-                has_explicit_path = true;
-                let _ = std::env::set_current_dir(&p);
-                break;
-            }
-        }
-    }
-
-    // If no path argument was passed and restore_last_repository is true, restore last_repository
-    if !has_explicit_path && config.git.restore_last_repository {
-        if let Some(ref last) = config.last_repository {
-            let last_p = std::path::Path::new(last);
-            if last_p.is_dir() {
-                let home = dirs::home_dir();
-                let cwd = std::env::current_dir().ok();
-                if cwd == home || prowly::GitService::discover().is_err() {
-                    let _ = std::env::set_current_dir(last_p);
-                }
-            }
-        }
     }
 
     // Set panic hook to restore terminal gracefully
