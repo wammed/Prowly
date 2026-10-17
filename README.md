@@ -47,15 +47,21 @@ Whether you prefer keyboard shortcuts or intuitive mouse interactions (clicking,
   - One-key clipboard copy of commit SHA (`y`).
 - 🌲 **Native Git Worktree Management**: Create, switch, and prune isolated worktree directories with independent branches.
 - 🐙 **First-Class GitHub Integration**:
-  - **GitHub Issues View (`3` / `i`)**: Live Issues list with open/closed state badges, labels, comment counters, Markdown description preview, web browser launch (`o`), and on-demand load switch.
+  - **GitHub Issues View (`3` / `i`)**: Live Issues list with open/closed state badges, labels, comment counters, Markdown description preview, web browser launch (`o`), automatic loading on tab switch, and explicit reload (`r`).
   - Live Pull Requests list with checkout and diff review.
   - GitHub Actions workflow inspection with log streaming.
   - Security, Dependabot, and Code Scanning alert notifications.
   - Rate-limit aware with intelligent in-memory TTL caching.
--  **Repository & Directory Switcher Modal (`[  Open Repo ]` / `o`)**:
-  - Path input with **TAB key autocompletion** (tilde expansion, common prefix completion, cyclic traversal, and real-time subdirectories synchronization).
-  - Recent Repositories click-to-select, instant open (`[  Open ]`), and deletion (`[ ✕ ]` / `d`).
+-  **Two-Pane Repository & Directory Switcher Modal (`[  Open Repo ]` / `o`)**:
+  - **Left Pane (Discovery)**: Automatically discovers Git repositories in subdirectories with active branch indicators (toggle all directories with `a`).
+  - **Right Pane (Recent & Actions)**: Clean repository names without path clutter, Tab key autocompletion for direct path input, remote clone prompt (`c`), and instant `git init` initialization (`i`).
+  - Mouse scroll wheel independently scrolls Left or Right pane depending on pointer location.
   - **Automatic restoration of last-opened repository** on clean launch (toggleable in Settings modal).
+- 🚀 **Performance & UI Enhancements**:
+  - `MouseMove` event filtering to eliminate unnecessary terminal rerenders and CPU load during mouse navigation.
+  - Non-recursive untracked directory scanning in Git status / diff for near-instant rendering even in large workspaces.
+  - Top bar path truncation for narrow terminals and hover highlighting on header pills.
+  - `[ Stage All ]` / `[ Unstage All ]` action buttons in Changes view with full mouse click support.
 - ⚔️ **Visual Merge Conflict Resolver**: Side-by-side comparison of `Current` vs `Incoming` branches with interactive hunk resolution and AI smart merge.
 - 🔀 **Quick Interactive Rebase**: Fast squash, reword, and fixup without fighting interactive Vim buffers.
 - 🧭 **3-Layer Hierarchical Command Palette (`:` / `F1` / `Ctrl+P`)**:
