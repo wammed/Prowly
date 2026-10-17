@@ -67,8 +67,88 @@ if [ ! -f "${CONFIG_DIR}/config.toml" ]; then
 fi
 
 # 5. Create FreeDesktop .desktop entry
-echo -e "\n${BOLD}${YELLOW}[4/4] Creating desktop launcher at ${APPS_DIR}/prowly.desktop...${RESET}"
+echo -e "\n${BOLD}${YELLOW}[4/4] Configuring desktop launcher at ${APPS_DIR}/prowly.desktop...${RESET}"
 mkdir -p "${APPS_DIR}"
+
+EXEC_CMD="${BIN_DIR}/prowly"
+TERMINAL_SETTING="true"
+LAUNCHER_DESC="System default terminal (Terminal=true)"
+
+# Interactive terminal & size selection when connected to a terminal (TTY)
+if [ -t 0 ]; then
+    CANDIDATES=()
+    for term in alacritty kitty gnome-terminal konsole xfce4-terminal foot xterm wezterm; do
+        if command -v "$term" &> /dev/null; then
+            CANDIDATES+=("$term")
+        fi
+    done
+
+    echo -e "Choose launcher launch method:"
+    idx=1
+    for term in "${CANDIDATES[@]}"; do
+        echo -e "  [${idx}] ${term}"
+        ((idx++))
+    done
+    echo -e "  [${idx}] System default terminal (Terminal=true, standard size)"
+
+    DEFAULT_OPT="${idx}"
+    read -rp "Select option [1-${idx}] (Default: ${DEFAULT_OPT}): " term_choice
+    term_choice="${term_choice:-$DEFAULT_OPT}"
+
+    if [[ "$term_choice" =~ ^[0-9]+$ ]] && [ "$term_choice" -ge 1 ] && [ "$term_choice" -lt "$DEFAULT_OPT" ]; then
+        SELECTED_TERM="${CANDIDATES[$((term_choice - 1))]}"
+        echo -e "${CYAN}Selected terminal: ${SELECTED_TERM}${RESET}"
+
+        echo -e "\nWindow size configuration (Prowly recommends at least 120 cols x 35 rows):"
+        read -rp "  Enter width  (columns) [Default: 140]: " cols_input
+        read -rp "  Enter height (rows)    [Default: 40]: " rows_input
+
+        COLS=140
+        ROWS=40
+        if [[ "$cols_input" =~ ^[0-9]+$ ]] && [ "$cols_input" -gt 0 ]; then
+            COLS="$cols_input"
+        fi
+        if [[ "$rows_input" =~ ^[0-9]+$ ]] && [ "$rows_input" -gt 0 ]; then
+            ROWS="$rows_input"
+        fi
+
+        TERMINAL_SETTING="false"
+        case "$SELECTED_TERM" in
+            alacritty)
+                EXEC_CMD="alacritty --dimensions ${COLS} ${ROWS} -e ${BIN_DIR}/prowly"
+                ;;
+            kitty)
+                EXEC_CMD="kitty -o initial_window_width=${COLS}c -o initial_window_height=${ROWS}c ${BIN_DIR}/prowly"
+                ;;
+            gnome-terminal)
+                EXEC_CMD="gnome-terminal --geometry=${COLS}x${ROWS} -- ${BIN_DIR}/prowly"
+                ;;
+            konsole)
+                EXEC_CMD="konsole --geometry ${COLS}x${ROWS} -e ${BIN_DIR}/prowly"
+                ;;
+            xfce4-terminal)
+                EXEC_CMD="xfce4-terminal --geometry=${COLS}x${ROWS} -e ${BIN_DIR}/prowly"
+                ;;
+            foot)
+                EXEC_CMD="foot -w ${COLS}x${ROWS} ${BIN_DIR}/prowly"
+                ;;
+            xterm)
+                EXEC_CMD="xterm -geometry ${COLS}x${ROWS} -e ${BIN_DIR}/prowly"
+                ;;
+            wezterm)
+                EXEC_CMD="wezterm start -- ${BIN_DIR}/prowly"
+                ;;
+            *)
+                TERMINAL_SETTING="true"
+                EXEC_CMD="${BIN_DIR}/prowly"
+                ;;
+        esac
+        LAUNCHER_DESC="${SELECTED_TERM} (${COLS} cols x ${ROWS} rows)"
+        echo -e "${GREEN}Launcher configured: ${LAUNCHER_DESC}${RESET}"
+    else
+        echo -e "${CYAN}Using system default terminal configuration.${RESET}"
+    fi
+fi
 
 cat <<EOF > "${APPS_DIR}/prowly.desktop"
 [Desktop Entry]
@@ -77,9 +157,9 @@ Type=Application
 Name=Prowly
 GenericName=Git TUI & AI Co-pilot
 Comment=Omnipresent AI & High-Performance Git TUI Client
-Exec=${BIN_DIR}/prowly
+Exec=${EXEC_CMD}
 Icon=prowly
-Terminal=true
+Terminal=${TERMINAL_SETTING}
 Categories=Development;RevisionControl;ConsoleOnly;
 Keywords=git;tui;terminal;github;ai;copilot;
 StartupNotify=false
@@ -99,7 +179,8 @@ fi
 echo -e "\n${BOLD}${GREEN}✨ Prowly installed successfully!${RESET}"
 echo -e "--------------------------------------------------"
 echo -e "• Executable:      ${BOLD}${BIN_DIR}/prowly${RESET}"
-echo -e "• App Launcher:    ${BOLD}${APPS_DIR}/prowly.desktop${RESET} (Terminal=true)"
+echo -e "• App Launcher:    ${BOLD}${APPS_DIR}/prowly.desktop${RESET}"
+echo -e "• Configuration:   ${LAUNCHER_DESC}"
 echo -e "• Scalable Icon:   ${BOLD}${ICON_DIR}/prowly.svg${RESET}"
 echo -e "\nYou can now launch Prowly directly from your system application menu / launcher,"
 echo -e "or run '${BOLD}prowly${RESET}' in any terminal!"
