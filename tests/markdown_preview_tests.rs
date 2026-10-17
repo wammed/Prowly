@@ -73,3 +73,42 @@ fn test_markdown_preview_modal_lifecycle_and_scrolling() {
     modal.close();
     assert!(!modal.is_open);
 }
+
+#[test]
+fn test_markdown_preview_modal_click_interaction() {
+    use prowly::ui::modals::MarkdownPreviewClickResult;
+    use ratatui::layout::Rect;
+
+    let theme = Theme::get(ThemeId::TokyoNight);
+    let mut modal = MarkdownPreviewModal::new();
+    let viewport = Rect::new(0, 0, 100, 30);
+
+    assert_eq!(modal.handle_click(10, 10, viewport), None);
+
+    modal.open("test.md".to_string(), "# Hello".to_string(), &theme);
+    assert!(modal.is_open);
+
+    let rect = modal.modal_rect(viewport);
+
+    // Click outside -> Close
+    assert_eq!(
+        modal.handle_click(0, 0, viewport),
+        Some(MarkdownPreviewClickResult::Close)
+    );
+
+    // Click inside body -> Handled
+    assert_eq!(
+        modal.handle_click(rect.x + 5, rect.y + 5, viewport),
+        Some(MarkdownPreviewClickResult::Handled)
+    );
+
+    // Click footer close area
+    let inner_y = rect.y + 1;
+    let inner_h = rect.height.saturating_sub(2);
+    let footer_y = inner_y + inner_h.saturating_sub(1);
+    let inner_x = rect.x + 1;
+    assert_eq!(
+        modal.handle_click(inner_x + 65, footer_y, viewport),
+        Some(MarkdownPreviewClickResult::Close)
+    );
+}

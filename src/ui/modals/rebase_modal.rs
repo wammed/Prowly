@@ -12,6 +12,23 @@ use ratatui::{
     Frame,
 };
 
+/// Result of handling a mouse click on the interactive rebase modal.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RebaseClickResult {
+    /// Clicked outside modal or cancel -> close modal.
+    Close,
+    /// Select commit item at index.
+    SelectCommit(usize),
+    /// Quick squash action.
+    Squash,
+    /// Quick fixup action.
+    Fixup,
+    /// Reword action.
+    Reword,
+    /// Clicked inside modal -> consumed.
+    Handled,
+}
+
 /// Rebase modal state.
 #[derive(Debug, Clone, Default)]
 pub struct RebaseModal {
@@ -63,16 +80,60 @@ impl RebaseModal {
         }
     }
 
+    /// Calculate modal bounding box.
+    pub fn modal_rect(&self, viewport: Rect) -> Rect {
+        let width = 76.min(viewport.width.saturating_sub(4));
+        let height = 22.min(viewport.height.saturating_sub(4));
+        let x = (viewport.width.saturating_sub(width)) / 2;
+        let y = (viewport.height.saturating_sub(height)) / 2;
+        Rect::new(x, y, width, height)
+    }
+
+    /// Handle mouse click inside or outside modal.
+    pub fn handle_click(&mut self, x: u16, y: u16, viewport: Rect) -> Option<RebaseClickResult> {
+        if !self.is_open {
+            return None;
+        }
+
+        let rect = self.modal_rect(viewport);
+        if x < rect.x || x >= rect.x + rect.width || y < rect.y || y >= rect.y + rect.height {
+            return Some(RebaseClickResult::Close);
+        }
+
+        let inner_x = rect.x + 1;
+        let inner_y = rect.y + 1;
+        let inner_h = rect.height.saturating_sub(2);
+
+        let commit_start_y = inner_y + 2;
+        let commit_count = self.commits.len().min(inner_h.saturating_sub(5) as usize);
+        if y >= commit_start_y && (y as usize) < (commit_start_y as usize) + commit_count {
+            let idx = (y - commit_start_y) as usize;
+            self.selected_index = idx;
+            return Some(RebaseClickResult::SelectCommit(idx));
+        }
+
+        if !self.is_editing_reword && y == inner_y + inner_h.saturating_sub(1) {
+            let rel_x = x.saturating_sub(inner_x);
+            if rel_x < 23 {
+                return Some(RebaseClickResult::Squash);
+            } else if rel_x < 43 {
+                return Some(RebaseClickResult::Fixup);
+            } else if rel_x < 64 {
+                return Some(RebaseClickResult::Reword);
+            } else {
+                return Some(RebaseClickResult::Close);
+            }
+        }
+
+        Some(RebaseClickResult::Handled)
+    }
+
     pub fn render(&self, frame: &mut Frame, theme: &Theme, icons: &Icons, viewport: Rect) {
         if !self.is_open {
             return;
         }
 
-        let width = 76.min(viewport.width.saturating_sub(4));
-        let height = 22.min(viewport.height.saturating_sub(4));
-        let x = (viewport.width.saturating_sub(width)) / 2;
-        let y = (viewport.height.saturating_sub(height)) / 2;
-        let rect = Rect::new(x, y, width, height);
+        let rect = self.modal_rect(viewport);
 
         frame.render_widget(Clear, rect);
 

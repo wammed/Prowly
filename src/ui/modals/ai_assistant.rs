@@ -10,6 +10,17 @@ use ratatui::{
     Frame,
 };
 
+/// Result of handling a mouse click on the AI assistant modal.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AiAssistantClickResult {
+    /// Clicked outside the modal or discard/cancel -> close modal.
+    Close,
+    /// Apply patch or submit query.
+    ApplyOrSubmit,
+    /// Clicked inside modal area -> consumed.
+    Handled,
+}
+
 /// State of the interactive AI Assistant modal overlay.
 #[derive(Debug, Clone, Default)]
 pub struct AiAssistantModal {
@@ -73,22 +84,76 @@ impl AiAssistantModal {
         self.proposed_patch = patch;
     }
 
+    /// Calculate modal bounding box.
+    pub fn modal_rect(&self, area: Rect) -> Rect {
+        let popup_width = (area.width * 75 / 100).max(50).min(area.width);
+        let popup_height = (area.height * 75 / 100).max(18).min(area.height);
+
+        Rect {
+            x: area.x + (area.width.saturating_sub(popup_width)) / 2,
+            y: area.y + (area.height.saturating_sub(popup_height)) / 2,
+            width: popup_width,
+            height: popup_height,
+        }
+    }
+
+    /// Handle mouse click inside or outside modal.
+    pub fn handle_click(
+        &mut self,
+        x: u16,
+        y: u16,
+        viewport: Rect,
+    ) -> Option<AiAssistantClickResult> {
+        if !self.is_open {
+            return None;
+        }
+
+        let popup_rect = self.modal_rect(viewport);
+        if x < popup_rect.x
+            || x >= popup_rect.x + popup_rect.width
+            || y < popup_rect.y
+            || y >= popup_rect.y + popup_rect.height
+        {
+            return Some(AiAssistantClickResult::Close);
+        }
+
+        let inner = Rect {
+            x: popup_rect.x + 1,
+            y: popup_rect.y + 1,
+            width: popup_rect.width.saturating_sub(2),
+            height: popup_rect.height.saturating_sub(2),
+        };
+
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(1),
+                Constraint::Min(6),
+                Constraint::Length(3),
+                Constraint::Length(1),
+            ])
+            .split(inner);
+
+        // Action buttons chunk[3]
+        if y == chunks[3].y {
+            let rel_x = x.saturating_sub(chunks[3].x);
+            if rel_x < 17 {
+                return Some(AiAssistantClickResult::ApplyOrSubmit);
+            } else if rel_x >= 20 && rel_x < 37 {
+                return Some(AiAssistantClickResult::Close);
+            }
+        }
+
+        Some(AiAssistantClickResult::Handled)
+    }
+
     /// Render modal onto frame if open.
     pub fn render(&self, frame: &mut Frame, theme: &Theme, area: Rect) {
         if !self.is_open {
             return;
         }
 
-        // Center a 75% x 75% popup box
-        let popup_width = (area.width * 75 / 100).max(50).min(area.width);
-        let popup_height = (area.height * 75 / 100).max(18).min(area.height);
-
-        let popup_rect = Rect {
-            x: area.x + (area.width.saturating_sub(popup_width)) / 2,
-            y: area.y + (area.height.saturating_sub(popup_height)) / 2,
-            width: popup_width,
-            height: popup_height,
-        };
+        let popup_rect = self.modal_rect(area);
 
         // Drop shadow behind AI Assistant modal
         if area.width > popup_rect.width + 1 && area.height > popup_rect.height + 1 {

@@ -10,6 +10,17 @@ use ratatui::{
     Frame,
 };
 
+/// Result of handling a mouse click on the branch switcher modal.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BranchSwitcherClickResult {
+    /// Clicked outside the modal area -> close modal.
+    Close,
+    /// Clicked on a branch entry in the list -> switch to this branch.
+    Select(String),
+    /// Clicked inside modal (input area, borders, etc.) -> consumed, no action.
+    Handled,
+}
+
 /// Modal for fast branch searching, switching, and returning to the previous branch.
 #[derive(Debug, Clone, Default)]
 pub struct BranchSwitcherModal {
@@ -81,16 +92,62 @@ impl BranchSwitcherModal {
         self.filtered_branches().get(self.selected_index).cloned()
     }
 
+    /// Calculate modal bounding box.
+    pub fn modal_rect(&self, viewport: Rect) -> Rect {
+        let width = 60.min(viewport.width.saturating_sub(4));
+        let height = 18.min(viewport.height.saturating_sub(4));
+        let x = (viewport.width.saturating_sub(width)) / 2;
+        let y = (viewport.height.saturating_sub(height)) / 2;
+        Rect::new(x, y, width, height)
+    }
+
+    /// Handle mouse click inside or outside modal.
+    pub fn handle_click(
+        &mut self,
+        x: u16,
+        y: u16,
+        viewport: Rect,
+    ) -> Option<BranchSwitcherClickResult> {
+        if !self.is_open {
+            return None;
+        }
+
+        let rect = self.modal_rect(viewport);
+        if x < rect.x || x >= rect.x + rect.width || y < rect.y || y >= rect.y + rect.height {
+            return Some(BranchSwitcherClickResult::Close);
+        }
+
+        let inner_x = rect.x + 1;
+        let inner_y = rect.y + 1;
+        let inner_w = rect.width.saturating_sub(2);
+        let inner_h = rect.height.saturating_sub(2);
+
+        // Branch list lines start at inner_y + 2
+        if x >= inner_x && x < inner_x + inner_w && y >= inner_y + 2 && y < inner_y + inner_h {
+            let visible_height = (inner_h as usize).saturating_sub(3);
+            let scroll_top = if visible_height > 0 && self.selected_index >= visible_height {
+                self.selected_index + 1 - visible_height
+            } else {
+                0
+            };
+            let line_offset = (y - (inner_y + 2)) as usize;
+            let clicked_idx = scroll_top + line_offset;
+            let filtered = self.filtered_branches();
+            if clicked_idx < filtered.len() {
+                self.selected_index = clicked_idx;
+                return Some(BranchSwitcherClickResult::Select(filtered[clicked_idx].clone()));
+            }
+        }
+
+        Some(BranchSwitcherClickResult::Handled)
+    }
+
     pub fn render(&self, frame: &mut Frame, theme: &Theme, icons: &Icons, viewport: Rect) {
         if !self.is_open {
             return;
         }
 
-        let width = 60.min(viewport.width.saturating_sub(4));
-        let height = 18.min(viewport.height.saturating_sub(4));
-        let x = (viewport.width.saturating_sub(width)) / 2;
-        let y = (viewport.height.saturating_sub(height)) / 2;
-        let rect = Rect::new(x, y, width, height);
+        let rect = self.modal_rect(viewport);
 
         frame.render_widget(Clear, rect);
 

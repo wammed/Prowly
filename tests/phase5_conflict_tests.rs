@@ -78,3 +78,43 @@ Second
     let resolved_custom = apply_resolutions(conflicted, &hunks);
     assert_eq!(resolved_custom, "Merged Custom Line");
 }
+
+#[test]
+fn test_conflict_resolver_modal_click_and_penetration_prevention() {
+    use prowly::ui::modals::{ConflictResolverClickResult, ConflictResolverModal};
+    use ratatui::layout::Rect;
+
+    let mut modal = ConflictResolverModal::new();
+    let viewport = Rect::new(0, 0, 100, 30);
+
+    // Closed returns None
+    assert_eq!(modal.handle_click(10, 10, viewport), None);
+
+    let conflicted = r#"fn main() {
+<<<<<<< HEAD
+    println!("A");
+=======
+    println!("B");
+>>>>>>> incoming
+}
+"#;
+    modal.open("test.rs".to_string(), conflicted.to_string());
+    assert!(modal.is_open);
+
+    let area = modal.modal_rect(viewport);
+
+    // Click outside -> Close
+    assert_eq!(
+        modal.handle_click(0, 0, viewport),
+        Some(ConflictResolverClickResult::Close)
+    );
+
+    // Click toolbar: Current
+    let inner_x = area.x + 1;
+    let toolbar_y = area.y + 1 + 3 + (area.height.saturating_sub(2) * 50 / 100) + (area.height.saturating_sub(2) * 35 / 100);
+    let click_res = modal.handle_click(inner_x + 5, toolbar_y, viewport);
+    assert_eq!(
+        click_res,
+        Some(ConflictResolverClickResult::Resolve(ConflictChoice::Current))
+    );
+}

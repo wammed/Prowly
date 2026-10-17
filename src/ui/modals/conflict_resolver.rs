@@ -11,6 +11,21 @@ use ratatui::{
     Frame,
 };
 
+/// Result of handling a mouse click on the conflict resolver modal.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConflictResolverClickResult {
+    /// Clicked outside the modal area or cancel -> close modal.
+    Close,
+    /// Resolve current hunk with specified choice.
+    Resolve(ConflictChoice),
+    /// Request AI smart merge for current hunk.
+    RequestAi,
+    /// Save resolved content and stage.
+    Save,
+    /// Clicked inside modal area -> consumed.
+    Handled,
+}
+
 /// Conflict resolver modal state.
 #[derive(Debug, Clone, Default)]
 pub struct ConflictResolverModal {
@@ -81,16 +96,93 @@ impl ConflictResolverModal {
         crate::git::conflict::apply_resolutions(&self.original_content, &self.hunks)
     }
 
+    /// Calculate modal bounding rectangle.
+    pub fn modal_rect(&self, viewport: Rect) -> Rect {
+        let width = 90.min(viewport.width.saturating_sub(4));
+        let height = 30.min(viewport.height.saturating_sub(4));
+        let x = (viewport.width.saturating_sub(width)) / 2;
+        let y = (viewport.height.saturating_sub(height)) / 2;
+        Rect::new(x, y, width, height)
+    }
+
+    /// Handle mouse click inside or outside modal.
+    pub fn handle_click(
+        &mut self,
+        x: u16,
+        y: u16,
+        viewport: Rect,
+    ) -> Option<ConflictResolverClickResult> {
+        if !self.is_open {
+            return None;
+        }
+
+        let area = self.modal_rect(viewport);
+        if x < area.x || x >= area.x + area.width || y < area.y || y >= area.y + area.height {
+            return Some(ConflictResolverClickResult::Close);
+        }
+
+        let inner = Rect {
+            x: area.x + 1,
+            y: area.y + 1,
+            width: area.width.saturating_sub(2),
+            height: area.height.saturating_sub(2),
+        };
+
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3),
+                Constraint::Percentage(50),
+                Constraint::Percentage(35),
+                Constraint::Length(2),
+            ])
+            .split(inner);
+
+        // Comparison chunk[1] (Current vs Incoming)
+        if y >= chunks[1].y && y < chunks[1].y + chunks[1].height {
+            let comp_chunks = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+                .split(chunks[1]);
+            if x >= comp_chunks[0].x && x < comp_chunks[0].x + comp_chunks[0].width {
+                self.resolve_current(ConflictChoice::Current);
+                return Some(ConflictResolverClickResult::Resolve(ConflictChoice::Current));
+            } else if x >= comp_chunks[1].x && x < comp_chunks[1].x + comp_chunks[1].width {
+                self.resolve_current(ConflictChoice::Incoming);
+                return Some(ConflictResolverClickResult::Resolve(ConflictChoice::Incoming));
+            }
+        }
+
+        // Action toolbar chunk[3] (Length 2)
+        if y >= chunks[3].y && y < chunks[3].y + chunks[3].height {
+            let rel_x = x.saturating_sub(chunks[3].x);
+            if rel_x < 16 {
+                self.resolve_current(ConflictChoice::Current);
+                return Some(ConflictResolverClickResult::Resolve(ConflictChoice::Current));
+            } else if rel_x < 33 {
+                self.resolve_current(ConflictChoice::Incoming);
+                return Some(ConflictResolverClickResult::Resolve(ConflictChoice::Incoming));
+            } else if rel_x < 46 {
+                self.resolve_current(ConflictChoice::Both);
+                return Some(ConflictResolverClickResult::Resolve(ConflictChoice::Both));
+            } else if rel_x < 76 {
+                return Some(ConflictResolverClickResult::RequestAi);
+            } else if rel_x < 93 {
+                return Some(ConflictResolverClickResult::Save);
+            } else {
+                return Some(ConflictResolverClickResult::Close);
+            }
+        }
+
+        Some(ConflictResolverClickResult::Handled)
+    }
+
     pub fn render(&self, frame: &mut Frame, theme: &Theme, icons: &Icons, viewport: Rect) {
         if !self.is_open {
             return;
         }
 
-        let width = 90.min(viewport.width.saturating_sub(4));
-        let height = 30.min(viewport.height.saturating_sub(4));
-        let x = (viewport.width.saturating_sub(width)) / 2;
-        let y = (viewport.height.saturating_sub(height)) / 2;
-        let area = Rect::new(x, y, width, height);
+        let area = self.modal_rect(viewport);
 
         frame.render_widget(Clear, area);
 

@@ -19,11 +19,12 @@ use crate::services::{
 use crate::ui::capsule::{key_badge, pill, split_pill};
 use crate::ui::layout::LayoutAreas;
 use crate::ui::modals::{
-    AiAssistantModal, BranchSwitcherModal, CommandPaletteModal, ConflictResolverModal, ContextMenu,
+    AiAssistantClickResult, AiAssistantModal, BranchSwitcherClickResult, BranchSwitcherModal,
+    CommandPaletteModal, ConflictResolverClickResult, ConflictResolverModal, ContextMenu,
     ContextMenuAction, HistoryActionState, HistoryActionsModal, HistoryMenuAction,
-    HistoryModalClickResult, MarkdownPreviewModal, OpenRepoAction, OpenRepoModal,
-    PaletteClickResult, PaletteEnterResult, RebaseModal, RemoteDiffPreviewModal, SettingsAction,
-    SettingsModal,
+    HistoryModalClickResult, MarkdownPreviewClickResult, MarkdownPreviewModal, OpenRepoAction,
+    OpenRepoModal, PaletteClickResult, PaletteEnterResult, RebaseClickResult, RebaseModal,
+    RemoteDiffClickResult, RemoteDiffPreviewModal, SettingsAction, SettingsModal,
 };
 use crate::ui::theme::{Theme, ThemeId};
 use crate::ui::views::{
@@ -1009,21 +1010,7 @@ impl App {
                 KeyCode::Backspace => self.branch_switcher.pop_char(),
                 KeyCode::Enter => {
                     if let Some(target_b) = self.branch_switcher.selected_branch() {
-                        let prev = self.repo_status.branch.clone();
-                        if let Some(git) = &self.git_service {
-                            match git.checkout_branch(&target_b) {
-                                Ok(_) => {
-                                    self.previous_branch = Some(prev);
-                                    self.last_status =
-                                        Some(format!("Switched branch to {}", target_b));
-                                    self.refresh_git_status();
-                                    self.branch_switcher.close();
-                                }
-                                Err(e) => {
-                                    self.last_status = Some(format!("Checkout failed: {}", e));
-                                }
-                            }
-                        }
+                        self.checkout_selected_branch(&target_b);
                     }
                 }
                 KeyCode::Char(c) => self.branch_switcher.push_char(c),
@@ -1103,26 +1090,8 @@ impl App {
                 KeyCode::Esc => self.rebase_modal.close(),
                 KeyCode::Up | KeyCode::Char('k') => self.rebase_modal.previous(),
                 KeyCode::Down | KeyCode::Char('j') => self.rebase_modal.next(),
-                KeyCode::Char('s') => {
-                    if let Some(git) = &self.git_service {
-                        let combined_msg = "squash: combined recent commits".to_string();
-                        if crate::git::rebase::quick_squash(git.workdir(), 2, &combined_msg).is_ok()
-                        {
-                            self.last_status = Some("Squashed top 2 commits".to_string());
-                            self.refresh_git_status();
-                            self.open_rebase_modal();
-                        }
-                    }
-                }
-                KeyCode::Char('f') => {
-                    if let Some(git) = &self.git_service {
-                        if crate::git::rebase::fixup_head_commit(git.workdir()).is_ok() {
-                            self.last_status = Some("Fixup merged into HEAD commit".to_string());
-                            self.refresh_git_status();
-                            self.open_rebase_modal();
-                        }
-                    }
-                }
+                KeyCode::Char('s') => self.rebase_quick_squash(),
+                KeyCode::Char('f') => self.rebase_fixup_head(),
                 KeyCode::Char('r') => {
                     self.rebase_modal.is_editing_reword = true;
                     if let Some(c) = self.rebase_modal.selected_commit() {
@@ -1200,41 +1169,10 @@ impl App {
                     if key.modifiers.contains(KeyModifiers::CONTROL)
                         || key.code == KeyCode::Char('4') =>
                 {
-                    if let Some(hunk) = self.conflict_resolver.current_hunk().cloned() {
-                        let client = crate::ai::create_ai_client(&self.config.ai);
-                        let path = self.conflict_resolver.file_path.clone();
-                        let lang = self.config.language;
-                        if let Some(sender) = self.event_sender.clone() {
-                            tokio::spawn(async move {
-                                let res = smart_merge_conflict(&path, &hunk, client.as_ref(), lang)
-                                    .await
-                                    .map_err(|e| e.to_string());
-                                let _ = sender.send(AppEvent::AiMergeResolved(res));
-                            });
-                        } else if tokio::runtime::Handle::try_current().is_err() {
-                            if let Ok(resolved) = block_on_safe(smart_merge_conflict(
-                                &path,
-                                &hunk,
-                                client.as_ref(),
-                                lang,
-                            )) {
-                                self.conflict_resolver.set_ai_resolution(resolved);
-                            }
-                        }
-                    }
+                    self.trigger_ai_merge_conflict();
                 }
                 KeyCode::Enter => {
-                    let path = self.conflict_resolver.file_path.clone();
-                    let content = self.conflict_resolver.build_resolved_content();
-                    if std::fs::write(&path, content).is_ok() {
-                        if let Some(git) = &self.git_service {
-                            let _ = git.stage_file(&path);
-                        }
-                        self.refresh_git_status();
-                        self.last_status =
-                            Some(format!("Resolved and staged conflicts in {}", path));
-                    }
-                    self.conflict_resolver.close();
+                    self.save_and_stage_resolved_conflict();
                 }
                 _ => {}
             }
@@ -1796,7 +1734,37 @@ impl App {
             return;
         }
 
-        // 1. Settings Modal clicks & wheel
+        // 1. Branch Switcher Modal clicks & wheel
+        if self.branch_switcher.is_open {
+            match mouse.kind {
+                MouseEventKind::ScrollUp => {
+                    self.branch_switcher.previous();
+                }
+                MouseEventKind::ScrollDown => {
+                    self.branch_switcher.next();
+                }
+                MouseEventKind::Down(MouseButton::Left) => {
+                    if let Some(action) =
+                        self.branch_switcher
+                            .handle_click(x, y, self.layout_areas.root)
+                    {
+                        match action {
+                            BranchSwitcherClickResult::Close => {
+                                self.branch_switcher.close();
+                            }
+                            BranchSwitcherClickResult::Select(target_b) => {
+                                self.checkout_selected_branch(&target_b);
+                            }
+                            BranchSwitcherClickResult::Handled => {}
+                        }
+                    }
+                }
+                _ => {}
+            }
+            return;
+        }
+
+        // 2. Settings Modal clicks & wheel
         if self.settings_modal.is_open {
             match mouse.kind {
                 MouseEventKind::Down(MouseButton::Left) => {
@@ -1835,7 +1803,7 @@ impl App {
             return;
         }
 
-        // 2. Open Repo Modal clicks & wheel
+        // 3. Open Repo Modal clicks & wheel
         if self.open_repo_modal.is_open {
             match mouse.kind {
                 MouseEventKind::Down(MouseButton::Left) => {
@@ -1915,38 +1883,223 @@ impl App {
             return;
         }
 
-        // 2.5. History Actions Modal clicks
+        // 4. History Actions Modal clicks & wheel
         if self.history_modal.is_open {
-            if mouse.kind == MouseEventKind::Down(MouseButton::Left) {
-                if let Some(result) = self
-                    .history_modal
-                    .handle_click(x, y, self.layout_areas.root)
-                {
-                    match result {
-                        HistoryModalClickResult::ExecuteAction(action) => {
-                            self.execute_history_menu_action(action);
-                        }
-                        HistoryModalClickResult::ConfirmBranch => {
-                            let branch_name = self.history_modal.new_branch_name.trim().to_string();
-                            self.history_modal.close();
-                            if !branch_name.is_empty() {
-                                self.create_branch_at_selected_commit(&branch_name);
+            match mouse.kind {
+                MouseEventKind::ScrollUp => {
+                    self.history_modal.previous();
+                }
+                MouseEventKind::ScrollDown => {
+                    self.history_modal.next();
+                }
+                MouseEventKind::Down(MouseButton::Left) => {
+                    if let Some(result) = self
+                        .history_modal
+                        .handle_click(x, y, self.layout_areas.root)
+                    {
+                        match result {
+                            HistoryModalClickResult::ExecuteAction(action) => {
+                                self.execute_history_menu_action(action);
+                            }
+                            HistoryModalClickResult::ConfirmBranch => {
+                                let branch_name = self.history_modal.new_branch_name.trim().to_string();
+                                self.history_modal.close();
+                                if !branch_name.is_empty() {
+                                    self.create_branch_at_selected_commit(&branch_name);
+                                }
+                            }
+                            HistoryModalClickResult::ConfirmTimeMachine => {
+                                self.history_modal.close();
+                                self.time_machine_reset_to_selected_commit();
+                            }
+                            HistoryModalClickResult::Close => {
+                                self.history_modal.close();
                             }
                         }
-                        HistoryModalClickResult::ConfirmTimeMachine => {
-                            self.history_modal.close();
-                            self.time_machine_reset_to_selected_commit();
+                    }
+                }
+                _ => {}
+            }
+            return;
+        }
+
+        // 5. Conflict Resolver Modal clicks & wheel
+        if self.conflict_resolver.is_open {
+            match mouse.kind {
+                MouseEventKind::ScrollUp => {
+                    self.conflict_resolver.previous_hunk();
+                }
+                MouseEventKind::ScrollDown => {
+                    self.conflict_resolver.next_hunk();
+                }
+                MouseEventKind::Down(MouseButton::Left) => {
+                    if let Some(action) =
+                        self.conflict_resolver
+                            .handle_click(x, y, self.layout_areas.root)
+                    {
+                        match action {
+                            ConflictResolverClickResult::Close => {
+                                self.conflict_resolver.close();
+                            }
+                            ConflictResolverClickResult::Resolve(_) => {}
+                            ConflictResolverClickResult::RequestAi => {
+                                self.trigger_ai_merge_conflict();
+                            }
+                            ConflictResolverClickResult::Save => {
+                                self.save_and_stage_resolved_conflict();
+                            }
+                            ConflictResolverClickResult::Handled => {}
                         }
-                        HistoryModalClickResult::Close => {
-                            self.history_modal.close();
+                    }
+                }
+                _ => {}
+            }
+            return;
+        }
+
+        // 6. AI Assistant Modal clicks & wheel
+        if self.ai_modal.is_open {
+            if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
+                if let Some(action) =
+                    self.ai_modal
+                        .handle_click(x, y, self.layout_areas.root)
+                {
+                    match action {
+                        AiAssistantClickResult::Close => {
+                            self.ai_modal.close();
                         }
+                        AiAssistantClickResult::ApplyOrSubmit => {
+                            if self.ai_modal.proposed_patch.is_some() && !self.ai_modal.is_loading {
+                                self.apply_ai_suggestion();
+                            } else if !self.ai_modal.input_query.trim().is_empty() {
+                                self.trigger_ai_assistant_query();
+                            }
+                        }
+                        AiAssistantClickResult::Handled => {}
                     }
                 }
             }
             return;
         }
 
-        // 3. Right-Click: Open Context Menu
+        // 7. Remote Diff Preview Modal clicks & wheel
+        if self.remote_diff_preview.is_open {
+            if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
+                if let Some(action) =
+                    self.remote_diff_preview
+                        .handle_click(x, y, self.layout_areas.root)
+                {
+                    match action {
+                        RemoteDiffClickResult::Close => {
+                            self.remote_diff_preview.close();
+                        }
+                        RemoteDiffClickResult::Handled => {}
+                    }
+                }
+            }
+            return;
+        }
+
+        // 8. Quick Interactive Rebase Modal clicks & wheel
+        if self.rebase_modal.is_open {
+            match mouse.kind {
+                MouseEventKind::ScrollUp => {
+                    self.rebase_modal.previous();
+                }
+                MouseEventKind::ScrollDown => {
+                    self.rebase_modal.next();
+                }
+                MouseEventKind::Down(MouseButton::Left) => {
+                    if let Some(action) =
+                        self.rebase_modal
+                            .handle_click(x, y, self.layout_areas.root)
+                    {
+                        match action {
+                            RebaseClickResult::Close => {
+                                self.rebase_modal.close();
+                            }
+                            RebaseClickResult::SelectCommit(_) => {}
+                            RebaseClickResult::Squash => {
+                                self.rebase_quick_squash();
+                            }
+                            RebaseClickResult::Fixup => {
+                                self.rebase_fixup_head();
+                            }
+                            RebaseClickResult::Reword => {
+                                self.rebase_modal.is_editing_reword = true;
+                                if let Some(c) = self.rebase_modal.selected_commit() {
+                                    self.rebase_modal.reword_input = c.summary.clone();
+                                }
+                            }
+                            RebaseClickResult::Handled => {}
+                        }
+                    }
+                }
+                _ => {}
+            }
+            return;
+        }
+
+        // 9. Markdown Preview Modal clicks & wheel
+        if self.markdown_preview_modal.is_open {
+            match mouse.kind {
+                MouseEventKind::ScrollUp => {
+                    self.markdown_preview_modal.scroll_up(3);
+                }
+                MouseEventKind::ScrollDown => {
+                    self.markdown_preview_modal.scroll_down(3);
+                }
+                MouseEventKind::Down(MouseButton::Left) => {
+                    if let Some(action) =
+                        self.markdown_preview_modal
+                            .handle_click(x, y, self.layout_areas.root)
+                    {
+                        match action {
+                            MarkdownPreviewClickResult::Close => {
+                                self.markdown_preview_modal.close();
+                            }
+                            MarkdownPreviewClickResult::Copy => {
+                                let _ = self
+                                    .clipboard
+                                    .copy_text(&self.markdown_preview_modal.raw_content);
+                                self.last_status =
+                                    Some("Copied Markdown content to clipboard".to_string());
+                            }
+                            MarkdownPreviewClickResult::Handled => {}
+                        }
+                    }
+                }
+                _ => {}
+            }
+            return;
+        }
+
+        // 10. Context Menu clicks & wheel
+        if self.context_menu.is_open {
+            match mouse.kind {
+                MouseEventKind::ScrollUp => {
+                    self.context_menu.previous();
+                }
+                MouseEventKind::ScrollDown => {
+                    self.context_menu.next();
+                }
+                MouseEventKind::Down(MouseButton::Left) => {
+                    if let Some(action) = self.context_menu.hit_test(x, y, self.layout_areas.root) {
+                        self.context_menu.close();
+                        self.execute_context_action(action);
+                    } else {
+                        self.context_menu.close();
+                    }
+                }
+                MouseEventKind::Down(MouseButton::Right) => {
+                    self.context_menu.close();
+                }
+                _ => {}
+            }
+            return;
+        }
+
+        // 11. Right-Click: Open Context Menu
         if mouse.kind == MouseEventKind::Down(MouseButton::Right) {
             if self.active_tab == AppTab::History {
                 if self.history_view.handle_list_click(x, y) {
@@ -1962,19 +2115,6 @@ impl App {
                 .get(self.changes_view.file_scroll.selected_index)
                 .map(|f| f.path.clone());
             self.context_menu.open_at(sel_file, x, y);
-            return;
-        }
-
-        // 4. Click when Context Menu is open: hit-test items
-        if self.context_menu.is_open {
-            if mouse.kind == MouseEventKind::Down(MouseButton::Left) {
-                if let Some(action) = self.context_menu.hit_test(x, y, self.layout_areas.root) {
-                    self.context_menu.close();
-                    self.execute_context_action(action);
-                } else {
-                    self.context_menu.close();
-                }
-            }
             return;
         }
 
@@ -3046,6 +3186,28 @@ impl App {
         }
     }
 
+    /// Checkout selected branch by name.
+    pub fn checkout_selected_branch(&mut self, target_b: &str) {
+        if target_b != self.branch_switcher.current_branch {
+            let prev = self.repo_status.branch.clone();
+            if let Some(git) = &self.git_service {
+                match git.checkout_branch(target_b) {
+                    Ok(_) => {
+                        self.previous_branch = Some(prev);
+                        self.last_status = Some(format!("Switched branch to {}", target_b));
+                        self.refresh_git_status();
+                        self.branch_switcher.close();
+                    }
+                    Err(e) => {
+                        self.last_status = Some(format!("Checkout failed: {}", e));
+                    }
+                }
+            }
+        } else {
+            self.branch_switcher.close();
+        }
+    }
+
     /// Open Remote Diff Preview dropdown.
     pub fn open_remote_diff_preview(&mut self) {
         self.trigger_background_fetch();
@@ -3064,6 +3226,83 @@ impl App {
                 self.rebase_modal.open(commits);
             }
         }
+    }
+
+    /// Perform quick squash of top 2 commits in rebase modal.
+    pub fn rebase_quick_squash(&mut self) {
+        if let Some(git) = &self.git_service {
+            let combined_msg = "squash: combined recent commits".to_string();
+            if crate::git::rebase::quick_squash(git.workdir(), 2, &combined_msg).is_ok() {
+                self.last_status = Some("Squashed top 2 commits".to_string());
+                self.refresh_git_status();
+                self.open_rebase_modal();
+            }
+        }
+    }
+
+    /// Perform fixup into HEAD commit in rebase modal.
+    pub fn rebase_fixup_head(&mut self) {
+        if let Some(git) = &self.git_service {
+            if crate::git::rebase::fixup_head_commit(git.workdir()).is_ok() {
+                self.last_status = Some("Fixup merged into HEAD commit".to_string());
+                self.refresh_git_status();
+                self.open_rebase_modal();
+            }
+        }
+    }
+
+    /// Trigger AI smart merge for current conflict hunk.
+    pub fn trigger_ai_merge_conflict(&mut self) {
+        if let Some(hunk) = self.conflict_resolver.current_hunk().cloned() {
+            let client = crate::ai::create_ai_client(&self.config.ai);
+            let path = self.conflict_resolver.file_path.clone();
+            let lang = self.config.language;
+            if let Some(sender) = self.event_sender.clone() {
+                tokio::spawn(async move {
+                    let res = smart_merge_conflict(&path, &hunk, client.as_ref(), lang)
+                        .await
+                        .map_err(|e| e.to_string());
+                    let _ = sender.send(AppEvent::AiMergeResolved(res));
+                });
+            } else if tokio::runtime::Handle::try_current().is_err() {
+                if let Ok(resolved) =
+                    block_on_safe(smart_merge_conflict(&path, &hunk, client.as_ref(), lang))
+                {
+                    self.conflict_resolver.set_ai_resolution(resolved);
+                }
+            }
+        }
+    }
+
+    /// Save and stage resolved conflict content.
+    pub fn save_and_stage_resolved_conflict(&mut self) {
+        let path = self.conflict_resolver.file_path.clone();
+        let content = self.conflict_resolver.build_resolved_content();
+        if std::fs::write(&path, content).is_ok() {
+            if let Some(git) = &self.git_service {
+                let _ = git.stage_file(&path);
+            }
+            self.refresh_git_status();
+            self.last_status = Some(format!("Resolved and staged conflicts in {}", path));
+        } else {
+            self.last_status = Some(format!("Failed to save resolved file {}", path));
+        }
+        self.conflict_resolver.close();
+    }
+
+    /// Check whether any modal or overlay dialog is currently open.
+    pub fn is_any_modal_open(&self) -> bool {
+        self.command_palette.is_open
+            || self.branch_switcher.is_open
+            || self.settings_modal.is_open
+            || self.open_repo_modal.is_open
+            || self.history_modal.is_open
+            || self.conflict_resolver.is_open
+            || self.ai_modal.is_open
+            || self.remote_diff_preview.is_open
+            || self.rebase_modal.is_open
+            || self.markdown_preview_modal.is_open
+            || self.context_menu.is_open
     }
 
     /// Checkout currently selected PR in PRs tab.

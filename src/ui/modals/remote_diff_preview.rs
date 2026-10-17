@@ -10,6 +10,15 @@ use ratatui::{
     Frame,
 };
 
+/// Result of handling a mouse click on the remote diff preview modal.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RemoteDiffClickResult {
+    /// Clicked outside modal or on close hint -> close modal.
+    Close,
+    /// Clicked inside modal -> consumed.
+    Handled,
+}
+
 /// Modal displaying incoming (unpulled) and outgoing (unpushed) commit summaries.
 #[derive(Debug, Clone, Default)]
 pub struct RemoteDiffPreviewModal {
@@ -35,16 +44,40 @@ impl RemoteDiffPreviewModal {
         self.is_open = false;
     }
 
+    /// Calculate modal bounding rectangle.
+    pub fn modal_rect(&self, viewport: Rect) -> Rect {
+        let width = 64.min(viewport.width.saturating_sub(4));
+        let height = 20.min(viewport.height.saturating_sub(4));
+        let x = (viewport.width.saturating_sub(width)) / 2;
+        let y = 3.min(viewport.height.saturating_sub(height));
+        Rect::new(x, y, width, height)
+    }
+
+    /// Handle mouse click inside or outside modal.
+    pub fn handle_click(&mut self, x: u16, y: u16, viewport: Rect) -> Option<RemoteDiffClickResult> {
+        if !self.is_open {
+            return None;
+        }
+
+        let rect = self.modal_rect(viewport);
+        if x < rect.x || x >= rect.x + rect.width || y < rect.y || y >= rect.y + rect.height {
+            return Some(RemoteDiffClickResult::Close);
+        }
+
+        // Close on clicking bottom instruction line
+        if y == rect.y + rect.height.saturating_sub(2) {
+            return Some(RemoteDiffClickResult::Close);
+        }
+
+        Some(RemoteDiffClickResult::Handled)
+    }
+
     pub fn render(&self, frame: &mut Frame, theme: &Theme, icons: &Icons, viewport: Rect) {
         if !self.is_open {
             return;
         }
 
-        let width = 64.min(viewport.width.saturating_sub(4));
-        let height = 20.min(viewport.height.saturating_sub(4));
-        let x = (viewport.width.saturating_sub(width)) / 2;
-        let y = 3.min(viewport.height.saturating_sub(height));
-        let rect = Rect::new(x, y, width, height);
+        let rect = self.modal_rect(viewport);
 
         frame.render_widget(Clear, rect);
 

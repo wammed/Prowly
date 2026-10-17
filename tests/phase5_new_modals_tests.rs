@@ -111,3 +111,152 @@ fn test_rebase_modal_actions() {
     modal.close();
     assert!(!modal.is_open);
 }
+
+#[test]
+fn test_branch_switcher_modal_click_and_mouse_interaction() {
+    use prowly::ui::modals::BranchSwitcherClickResult;
+    use ratatui::layout::Rect;
+
+    let mut switcher = BranchSwitcherModal::new();
+    let viewport = Rect::new(0, 0, 100, 30);
+
+    // Closed switcher returns None
+    assert_eq!(switcher.handle_click(10, 10, viewport), None);
+
+    let branches = vec![
+        "main".to_string(),
+        "feat/chat".to_string(),
+        "fix/bug".to_string(),
+    ];
+    switcher.open("main".to_string(), branches, None);
+    assert!(switcher.is_open);
+
+    let rect = switcher.modal_rect(viewport);
+    assert!(rect.width > 0 && rect.height > 0);
+
+    // Click outside -> Close
+    assert_eq!(
+        switcher.handle_click(0, 0, viewport),
+        Some(BranchSwitcherClickResult::Close)
+    );
+
+    // Click on filter input line inside modal -> Handled
+    let inner_x = rect.x + 1;
+    let inner_y = rect.y + 1;
+    assert_eq!(
+        switcher.handle_click(inner_x + 5, inner_y, viewport),
+        Some(BranchSwitcherClickResult::Handled)
+    );
+
+    // Click on first branch item (inner_y + 2) -> Select("main")
+    assert_eq!(
+        switcher.handle_click(inner_x + 5, inner_y + 2, viewport),
+        Some(BranchSwitcherClickResult::Select("main".to_string()))
+    );
+    assert_eq!(switcher.selected_index, 0);
+
+    // Click on second branch item (inner_y + 3) -> Select("feat/chat")
+    assert_eq!(
+        switcher.handle_click(inner_x + 5, inner_y + 3, viewport),
+        Some(BranchSwitcherClickResult::Select("feat/chat".to_string()))
+    );
+    assert_eq!(switcher.selected_index, 1);
+}
+
+#[test]
+fn test_remote_diff_preview_click_interaction() {
+    use prowly::ui::modals::RemoteDiffClickResult;
+    use ratatui::layout::Rect;
+
+    let mut modal = RemoteDiffPreviewModal::new();
+    let viewport = Rect::new(0, 0, 100, 30);
+
+    assert_eq!(modal.handle_click(10, 10, viewport), None);
+
+    modal.open(vec!["unpushed".to_string()], vec![], None);
+    assert!(modal.is_open);
+
+    let rect = modal.modal_rect(viewport);
+
+    // Click outside -> Close
+    assert_eq!(
+        modal.handle_click(0, 0, viewport),
+        Some(RemoteDiffClickResult::Close)
+    );
+
+    // Click inside body -> Handled
+    assert_eq!(
+        modal.handle_click(rect.x + 5, rect.y + 5, viewport),
+        Some(RemoteDiffClickResult::Handled)
+    );
+
+    // Click on bottom hint -> Close
+    let bottom_y = rect.y + rect.height.saturating_sub(2);
+    assert_eq!(
+        modal.handle_click(rect.x + 5, bottom_y, viewport),
+        Some(RemoteDiffClickResult::Close)
+    );
+}
+
+#[test]
+fn test_rebase_modal_click_interaction() {
+    use prowly::ui::modals::RebaseClickResult;
+    use ratatui::layout::Rect;
+
+    let mut modal = RebaseModal::new();
+    let viewport = Rect::new(0, 0, 100, 30);
+
+    assert_eq!(modal.handle_click(10, 10, viewport), None);
+
+    let commits = vec![
+        RebaseCommitItem {
+            action: RebaseAction::Pick,
+            hash: "abc1234".to_string(),
+            author: "Author 1".to_string(),
+            summary: "first".to_string(),
+            is_verified: true,
+        },
+        RebaseCommitItem {
+            action: RebaseAction::Pick,
+            hash: "def5678".to_string(),
+            author: "Author 2".to_string(),
+            summary: "second".to_string(),
+            is_verified: false,
+        },
+    ];
+
+    modal.open(commits);
+    assert!(modal.is_open);
+
+    let rect = modal.modal_rect(viewport);
+
+    // Click outside -> Close
+    assert_eq!(
+        modal.handle_click(0, 0, viewport),
+        Some(RebaseClickResult::Close)
+    );
+
+    let inner_x = rect.x + 1;
+    let inner_y = rect.y + 1;
+
+    // Click on first commit (inner_y + 2) -> SelectCommit(0)
+    assert_eq!(
+        modal.handle_click(inner_x + 5, inner_y + 2, viewport),
+        Some(RebaseClickResult::SelectCommit(0))
+    );
+    assert_eq!(modal.selected_index, 0);
+
+    // Click on second commit (inner_y + 3) -> SelectCommit(1)
+    assert_eq!(
+        modal.handle_click(inner_x + 5, inner_y + 3, viewport),
+        Some(RebaseClickResult::SelectCommit(1))
+    );
+    assert_eq!(modal.selected_index, 1);
+
+    // Click on bottom action buttons: Squash top 2
+    let action_y = inner_y + rect.height.saturating_sub(2).saturating_sub(1);
+    assert_eq!(
+        modal.handle_click(inner_x + 5, action_y, viewport),
+        Some(RebaseClickResult::Squash)
+    );
+}

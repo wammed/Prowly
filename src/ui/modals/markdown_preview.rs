@@ -12,6 +12,17 @@ use ratatui::{
     Frame,
 };
 
+/// Result of handling a mouse click on the markdown preview modal.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MarkdownPreviewClickResult {
+    /// Clicked outside modal or close button -> close modal.
+    Close,
+    /// Clicked copy button -> copy content to clipboard.
+    Copy,
+    /// Clicked inside modal area -> consumed.
+    Handled,
+}
+
 /// Floating full/large popup modal for rich Markdown preview.
 #[derive(Debug, Clone, Default)]
 pub struct MarkdownPreviewModal {
@@ -86,6 +97,39 @@ impl MarkdownPreviewModal {
             width,
             height,
         }
+    }
+
+    /// Handle mouse click inside or outside modal.
+    pub fn handle_click(
+        &mut self,
+        x: u16,
+        y: u16,
+        viewport: Rect,
+    ) -> Option<MarkdownPreviewClickResult> {
+        if !self.is_open {
+            return None;
+        }
+
+        let rect = self.modal_rect(viewport);
+        if x < rect.x || x >= rect.x + rect.width || y < rect.y || y >= rect.y + rect.height {
+            return Some(MarkdownPreviewClickResult::Close);
+        }
+
+        let inner_y = rect.y + 1;
+        let inner_h = rect.height.saturating_sub(2);
+        let footer_y = inner_y + inner_h.saturating_sub(1);
+
+        if y == footer_y {
+            let inner_x = rect.x + 1;
+            let rel_x = x.saturating_sub(inner_x);
+            if rel_x >= 51 && rel_x < 63 {
+                return Some(MarkdownPreviewClickResult::Copy);
+            } else if rel_x >= 63 {
+                return Some(MarkdownPreviewClickResult::Close);
+            }
+        }
+
+        Some(MarkdownPreviewClickResult::Handled)
     }
 
     /// Render modal into the terminal frame.
