@@ -115,7 +115,7 @@ impl IssuesView {
             let msg = if let Some(ref m) = self.status_message {
                 m.as_str()
             } else {
-                "No issues loaded. Click [  Load Issues ] on the tab bar or press 'r' to fetch from GitHub."
+                "No issues loaded. Click the Issues tab or press 'r' to fetch from GitHub."
             };
             let p = Paragraph::new(format!("\n  {}", msg)).style(Style::default().fg(theme.dim_fg));
             frame.render_widget(p, inner);

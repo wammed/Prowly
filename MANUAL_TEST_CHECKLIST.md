@@ -341,13 +341,12 @@
   - [ ] ヘッダーの `[ 󰍜 Menu ▾ ]` ボタンクリックまたは <kbd>m</kbd> キーでも、選択中コミットに対するコンテキストメニューが開くこと
   - [ ] メニュー項目（Checkout, Create Branch, Cherry-Pick, Revert, Time Machine, Copy Commit SHA, Copy Commit Message, Ask AI）がマウスクリックおよび上下キーで選択・実行できること
   - [ ] コミットアクションモーダル（HistoryActionsModal）内の各操作ボタンがマウスクリックで正常に選択・実行できること
-- [ ] **17.2 Issues ビューと「Load Issues」スイッチ**
+- [ ] **17.2 Issues ビューとリロード**
   - [ ] ナビゲーションタブバーに `Issues` タブが表示され、<kbd>3</kbd> または <kbd>i</kbd> キー、あるいはタブクリックで切り替えられること
-  - [ ] タブバーの右横に `[  Load Issues ]` スイッチボタンが配置されていること
-  - [ ] `[  Load Issues ]` スイッチをクリックすると、GitHub Issues が非同期取得・ロードされること
+  - [ ] `Issues` タブを選択（クリックまたはキー入力）した際に、GitHub Issues が自動的に再取得・リロードされること
   - [ ] Issues ビューの左ペイン（Issue一覧、ステータスバッジ、ラベル、コメント数）と右ペイン（タイトル、Markdown本文プレビュー、メタデータ）が正しく表示されること
   - [ ] <kbd>o</kbd> キーで選択中の Issue を直接 Web ブラウザで開けること
-  - [ ] <kbd>r</kbd> キーで GitHub から最新の Issue 一覧を再取得・更新できること
+  - [ ] <kbd>r</kbd> キーで GitHub から最新の Issue 一覧を明示的に再取得・更新できること
 
 ---
 

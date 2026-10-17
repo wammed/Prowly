@@ -162,7 +162,6 @@ pub struct App {
     pub issues_view: IssuesView,
     pub actions_view: ActionsView,
     pub alerts_view: AlertsView,
-    pub issues_switch_rect: Rect,
 
     // GitHub Integration
     pub github_service: GitHubService,
@@ -256,7 +255,6 @@ impl App {
             issues_view: IssuesView::new(),
             actions_view: ActionsView::new(),
             alerts_view: AlertsView::new(),
-            issues_switch_rect: Rect::default(),
             github_service,
             is_repo_private: None,
             ai_modal: AiAssistantModal::new(),
@@ -1487,9 +1485,8 @@ impl App {
             }
             KeyCode::Char('3') => {
                 self.active_tab = AppTab::Issues;
-                if self.issues_view.issues.is_empty() {
-                    self.load_issues(false);
-                }
+                self.load_issues(true);
+                self.last_status = Some("Reloading GitHub issues...".to_string());
             }
             KeyCode::Char('4') => self.active_tab = AppTab::Prs,
             KeyCode::Char('5') => self.active_tab = AppTab::Actions,
@@ -1500,9 +1497,8 @@ impl App {
             }
             KeyCode::Char('i') => {
                 self.active_tab = AppTab::Issues;
-                if self.issues_view.issues.is_empty() {
-                    self.load_issues(false);
-                }
+                self.load_issues(true);
+                self.last_status = Some("Reloading GitHub issues...".to_string());
             }
 
             // Time Machine in History tab / Cycle Theme (t)
@@ -2108,15 +2104,6 @@ impl App {
             return;
         }
 
-        // Issues reload / load switch button click
-        if crate::ui::layout::contains_point(self.issues_switch_rect, x, y)
-            && mouse.kind == MouseEventKind::Down(MouseButton::Left)
-        {
-            self.load_issues(true);
-            self.last_status = Some("Reloading GitHub issues...".to_string());
-            return;
-        }
-
         // Tabs bar click
         if self.layout_areas.hits_tabs(x, y)
             && mouse.kind == MouseEventKind::Down(MouseButton::Left)
@@ -2151,9 +2138,8 @@ impl App {
                     } else if self.active_tab == AppTab::History {
                         self.refresh_history();
                     } else if self.active_tab == AppTab::Issues {
-                        if self.issues_view.issues.is_empty() {
-                            self.load_issues(false);
-                        }
+                        self.load_issues(true);
+                        self.last_status = Some("Reloading GitHub issues...".to_string());
                     }
                     return;
                 }
@@ -2482,9 +2468,8 @@ impl App {
             }
             "tab_issues" => {
                 self.active_tab = AppTab::Issues;
-                if self.issues_view.issues.is_empty() {
-                    self.load_issues(false);
-                }
+                self.load_issues(true);
+                self.last_status = Some("Reloading GitHub issues...".to_string());
             }
             "tab_prs" => self.active_tab = AppTab::Prs,
             "tab_actions" => self.active_tab = AppTab::Actions,
@@ -4080,44 +4065,6 @@ impl App {
             tab_spans.push(Span::raw(" "));
             cur_x += pill_w + 1;
         }
-
-        // Issues reload / load switch button right next to the tabs
-        let switch_icon = self.icons.get(crate::ui::IconId::IssueOpen);
-        let switch_text = self.i18n.t("btn.load_issues");
-        let switch_sample = pill(
-            Some(switch_icon),
-            &switch_text,
-            self.theme.bg,
-            self.theme.accent,
-            self.theme.bg,
-            self.icons.use_nerd_font,
-        );
-        let switch_w = crate::ui::capsule::spans_width(&switch_sample) as u16;
-
-        let switch_rect = Rect {
-            x: self.layout_areas.right_tabs.x + cur_x + 1,
-            y: self.layout_areas.right_tabs.y,
-            width: switch_w,
-            height: 1,
-        };
-        self.issues_switch_rect = switch_rect;
-        let is_switch_hovered = self.is_hovered(switch_rect);
-
-        let (switch_fg, switch_bg) = if is_switch_hovered {
-            (self.theme.bg, self.theme.accent)
-        } else {
-            (self.theme.accent, self.theme.selection_bg)
-        };
-
-        tab_spans.push(Span::raw(" "));
-        tab_spans.extend(pill(
-            Some(switch_icon),
-            &switch_text,
-            switch_fg,
-            switch_bg,
-            self.theme.bg,
-            self.icons.use_nerd_font,
-        ));
 
         frame.render_widget(
             Paragraph::new(Line::from(tab_spans)),

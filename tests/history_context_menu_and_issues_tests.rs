@@ -233,27 +233,71 @@ fn test_issues_view_navigation_and_tab_switch() {
     assert_eq!(app.active_tab, AppTab::Changes);
     app.handle_key(KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE));
     assert_eq!(app.active_tab, AppTab::Issues);
+    assert_eq!(
+        app.last_status,
+        Some("Reloading GitHub issues...".to_string())
+    );
 }
 
 #[test]
-fn test_issues_switch_button_click() {
+fn test_issues_tab_selection_and_click_reloads() {
     let mut app = App::new(Config::default());
-    // Simulate issues switch rect at (60, 3, w: 16, h: 1)
-    app.issues_switch_rect = Rect {
-        x: 60,
-        y: 3,
-        width: 16,
-        height: 1,
+    // 1. Keyboard '3' selection
+    app.active_tab = AppTab::Changes;
+    app.last_status = None;
+    app.handle_key(KeyEvent::new(KeyCode::Char('3'), KeyModifiers::NONE));
+    assert_eq!(app.active_tab, AppTab::Issues);
+    assert_eq!(
+        app.last_status,
+        Some("Reloading GitHub issues...".to_string())
+    );
+
+    // 2. Tab bar mouse click on Issues tab
+    app.active_tab = AppTab::Changes;
+    app.last_status = None;
+    app.layout_areas.right_tabs = Rect {
+        x: 0,
+        y: 2,
+        width: 120,
+        height: 2,
     };
 
-    let click = MouseEvent {
-        kind: MouseEventKind::Down(MouseButton::Left),
-        column: 65,
-        row: 3,
-        modifiers: KeyModifiers::NONE,
-    };
+    let mut cur_x = 1;
+    for tab in AppTab::ALL {
+        let key = tab.title_key();
+        let text = app.i18n.t(key);
+        let icon_str = match tab {
+            AppTab::Changes => app.icons.branch(),
+            AppTab::History => app.icons.commit(),
+            AppTab::Issues => app.icons.get(prowly::ui::IconId::IssueOpen),
+            AppTab::Prs => app.icons.pr_open(),
+            AppTab::Actions => app.icons.check_success(),
+            AppTab::Alerts => app.icons.get(prowly::ui::IconId::Alert),
+            AppTab::Worktrees => app.icons.worktree(),
+        };
+        let pill_spans = prowly::ui::capsule::pill(
+            Some(icon_str),
+            &text,
+            app.theme.bg,
+            app.theme.primary,
+            app.theme.bg,
+            app.icons.use_nerd_font,
+        );
+        let pill_w = prowly::ui::capsule::spans_width(&pill_spans) as u16;
+        if *tab == AppTab::Issues {
+            let click = MouseEvent {
+                kind: MouseEventKind::Down(MouseButton::Left),
+                column: app.layout_areas.right_tabs.x + cur_x + 1,
+                row: app.layout_areas.right_tabs.y,
+                modifiers: KeyModifiers::NONE,
+            };
+            app.handle_mouse(click);
+            break;
+        }
+        cur_x += pill_w + 1;
+    }
 
-    app.handle_mouse(click);
+    assert_eq!(app.active_tab, AppTab::Issues);
     assert_eq!(
         app.last_status,
         Some("Reloading GitHub issues...".to_string())
