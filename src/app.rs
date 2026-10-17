@@ -22,7 +22,8 @@ use crate::ui::modals::{
     AiAssistantModal, BranchSwitcherModal, CommandPaletteModal, ConflictResolverModal, ContextMenu,
     ContextMenuAction, HistoryActionState, HistoryActionsModal, HistoryMenuAction,
     HistoryModalClickResult, MarkdownPreviewModal, OpenRepoAction, OpenRepoModal,
-    PaletteEnterResult, RebaseModal, RemoteDiffPreviewModal, SettingsAction, SettingsModal,
+    PaletteClickResult, PaletteEnterResult, RebaseModal, RemoteDiffPreviewModal, SettingsAction,
+    SettingsModal,
 };
 use crate::ui::theme::{Theme, ThemeId};
 use crate::ui::views::{
@@ -1172,54 +1173,10 @@ impl App {
                 KeyCode::PageUp => self.command_palette.page_up(10),
                 KeyCode::PageDown => self.command_palette.page_down(10),
                 KeyCode::Backspace => self.command_palette.pop_char(),
-                KeyCode::Enter => match self.command_palette.handle_enter() {
-                    PaletteEnterResult::LayerChanged => {}
-                    PaletteEnterResult::ExecuteAction(action_id) => {
-                        self.command_palette.close();
-                        self.execute_palette_action(action_id);
-                    }
-                    PaletteEnterResult::ExecuteGitCommand { subcommand, args } => {
-                        self.command_palette.close();
-                        self.execute_git_cli(&subcommand, &args);
-                    }
-                    PaletteEnterResult::ExecuteAiCommand(cmd) => {
-                        self.command_palette.close();
-                        let _ = std::process::Command::new("sh").args(["-c", &cmd]).output();
-                        self.last_status = Some(format!("Executed: {}", cmd));
-                        self.refresh_git_status();
-                        self.needs_clear = true;
-                    }
-                    PaletteEnterResult::DangerWarning(warn) => {
-                        self.last_status = Some(format!("⚠️ Safety Guard: {}", warn));
-                    }
-                    PaletteEnterResult::RequestAi(req) => {
-                        let branch = self.repo_status.branch.clone();
-                        let client = crate::ai::create_ai_client(&self.config.ai);
-                        let lang = self.config.language;
-                        if let Some(sender) = self.event_sender.clone() {
-                            tokio::spawn(async move {
-                                let res = translate_natural_language_to_git(
-                                    &req,
-                                    &branch,
-                                    client.as_ref(),
-                                    lang,
-                                )
-                                .await
-                                .map_err(|e| e.to_string());
-                                let _ = sender.send(AppEvent::AiCommandSuggested(res));
-                            });
-                        } else if tokio::runtime::Handle::try_current().is_err() {
-                            if let Ok(suggested) = block_on_safe(translate_natural_language_to_git(
-                                &req,
-                                &branch,
-                                client.as_ref(),
-                                lang,
-                            )) {
-                                self.command_palette.ai_suggestion = Some(suggested);
-                            }
-                        }
-                    }
-                },
+                KeyCode::Enter => {
+                    let res = self.command_palette.handle_enter();
+                    self.apply_palette_result(res);
+                }
                 KeyCode::Char(c) => self.command_palette.push_char(c),
                 _ => {}
             }
@@ -1809,19 +1766,34 @@ impl App {
     pub fn handle_mouse(&mut self, mouse: MouseEvent) {
         let (x, y) = (mouse.column, mouse.row);
 
-        // 0. Command Palette wheel
+        // 0. Command Palette clicks & wheel
         if self.command_palette.is_open {
             match mouse.kind {
                 MouseEventKind::ScrollUp => {
                     self.command_palette.previous();
-                    return;
                 }
                 MouseEventKind::ScrollDown => {
                     self.command_palette.next();
-                    return;
+                }
+                MouseEventKind::Down(MouseButton::Left) => {
+                    if let Some(action) =
+                        self.command_palette
+                            .handle_click(x, y, self.layout_areas.root)
+                    {
+                        match action {
+                            PaletteClickResult::Close => {
+                                self.command_palette.close();
+                            }
+                            PaletteClickResult::Enter(enter_res) => {
+                                self.apply_palette_result(enter_res);
+                            }
+                            PaletteClickResult::Handled => {}
+                        }
+                    }
                 }
                 _ => {}
             }
+            return;
         }
 
         // 1. Settings Modal clicks & wheel
@@ -2388,6 +2360,58 @@ impl App {
             ContextMenuAction::AskAiCommit => {
                 let ctx = self.capture_ai_context();
                 self.ai_modal.open_with_context(&ctx);
+            }
+        }
+    }
+
+    /// Apply the result of Command Palette execution.
+    pub fn apply_palette_result(&mut self, result: PaletteEnterResult) {
+        match result {
+            PaletteEnterResult::LayerChanged => {}
+            PaletteEnterResult::ExecuteAction(action_id) => {
+                self.command_palette.close();
+                self.execute_palette_action(action_id);
+            }
+            PaletteEnterResult::ExecuteGitCommand { subcommand, args } => {
+                self.command_palette.close();
+                self.execute_git_cli(&subcommand, &args);
+            }
+            PaletteEnterResult::ExecuteAiCommand(cmd) => {
+                self.command_palette.close();
+                let _ = std::process::Command::new("sh").args(["-c", &cmd]).output();
+                self.last_status = Some(format!("Executed: {}", cmd));
+                self.refresh_git_status();
+                self.needs_clear = true;
+            }
+            PaletteEnterResult::DangerWarning(warn) => {
+                self.last_status = Some(format!("⚠️ Safety Guard: {}", warn));
+            }
+            PaletteEnterResult::RequestAi(req) => {
+                let branch = self.repo_status.branch.clone();
+                let client = crate::ai::create_ai_client(&self.config.ai);
+                let lang = self.config.language;
+                if let Some(sender) = self.event_sender.clone() {
+                    tokio::spawn(async move {
+                        let res = translate_natural_language_to_git(
+                            &req,
+                            &branch,
+                            client.as_ref(),
+                            lang,
+                        )
+                        .await
+                        .map_err(|e| e.to_string());
+                        let _ = sender.send(AppEvent::AiCommandSuggested(res));
+                    });
+                } else if tokio::runtime::Handle::try_current().is_err() {
+                    if let Ok(suggested) = block_on_safe(translate_natural_language_to_git(
+                        &req,
+                        &branch,
+                        client.as_ref(),
+                        lang,
+                    )) {
+                        self.command_palette.ai_suggestion = Some(suggested);
+                    }
+                }
             }
         }
     }

@@ -15,7 +15,9 @@ pub mod settings;
 
 pub use ai_assistant::AiAssistantModal;
 pub use branch_switcher::BranchSwitcherModal;
-pub use command_palette::{CommandPaletteModal, PaletteAction, PaletteEnterResult, PaletteLayer};
+pub use command_palette::{
+    CommandPaletteModal, PaletteAction, PaletteClickResult, PaletteEnterResult, PaletteLayer,
+};
 pub use conflict_resolver::ConflictResolverModal;
 pub use context_menu::{ContextMenu, ContextMenuAction};
 pub use git_subcommands::GitSubcommandDef;

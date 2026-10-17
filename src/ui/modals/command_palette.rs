@@ -242,6 +242,17 @@ pub enum PaletteEnterResult {
     DangerWarning(String),
 }
 
+/// Result of handling a mouse click inside/outside the Command Palette modal.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PaletteClickResult {
+    /// Modal should be closed (clicked outside).
+    Close,
+    /// An action or command was selected and should be executed.
+    Enter(PaletteEnterResult),
+    /// Click was inside modal and handled (prevents event penetration).
+    Handled,
+}
+
 /// Detect potentially dangerous or destructive Git command invocations.
 pub fn is_dangerous_git_args(subcommand: &str, args: &str) -> Option<&'static str> {
     let lower = args.to_lowercase();
@@ -671,17 +682,113 @@ impl CommandPaletteModal {
         }
     }
 
+    /// Calculate modal bounding rectangle in viewport.
+    pub fn modal_rect(&self, viewport: Rect) -> Rect {
+        let width = 78.min(viewport.width.saturating_sub(4));
+        let height = 22.min(viewport.height.saturating_sub(4));
+        let x = (viewport.width.saturating_sub(width)) / 2;
+        let y = (viewport.height.saturating_sub(height)) / 3;
+        Rect::new(x, y, width, height)
+    }
+
+    /// Calculate modal layout chunks (header/input, body list, footer).
+    pub fn content_chunks(&self, viewport: Rect) -> (Rect, std::rc::Rc<[Rect]>) {
+        let area = self.modal_rect(viewport);
+        let block = Block::default().borders(Borders::ALL);
+        let inner = block.inner(area);
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3),
+                Constraint::Min(5),
+                Constraint::Length(2),
+            ])
+            .split(inner);
+        (area, chunks)
+    }
+
+    /// Handle mouse click in the Command Palette modal.
+    pub fn handle_click(&mut self, x: u16, y: u16, viewport: Rect) -> Option<PaletteClickResult> {
+        if !self.is_open {
+            return None;
+        }
+
+        let (area, chunks) = self.content_chunks(viewport);
+
+        // Click outside closes the modal
+        if x < area.x || x >= area.x + area.width || y < area.y || y >= area.y + area.height {
+            return Some(PaletteClickResult::Close);
+        }
+
+        let body_area = chunks[1];
+        if x >= body_area.x
+            && x < body_area.x + body_area.width
+            && y >= body_area.y
+            && y < body_area.y + body_area.height
+        {
+            let rel_y = (y - body_area.y) as usize;
+            match &self.layer {
+                PaletteLayer::Root => {
+                    if self.ai_suggestion.is_some() {
+                        return Some(PaletteClickResult::Enter(self.handle_enter()));
+                    }
+
+                    let filtered = self.filtered_actions();
+                    let clicked_idx = self.scroll_offset + rel_y;
+                    if clicked_idx < filtered.len() {
+                        self.selected_index = clicked_idx;
+                        return Some(PaletteClickResult::Enter(self.handle_enter()));
+                    }
+                }
+                PaletteLayer::GitSubcommand => {
+                    let subs = self.filtered_subcommands();
+                    let clicked_idx = self.scroll_offset + rel_y;
+                    if clicked_idx < subs.len() {
+                        self.selected_index = clicked_idx;
+                        return Some(PaletteClickResult::Enter(self.handle_enter()));
+                    }
+                }
+                PaletteLayer::ArgsInput { common_flags, .. } => {
+                    // Line 0: "", Line 1: Description, Line 2: "", Line 3: "Common Options...", Line 4: pills
+                    if rel_y == 4 && !common_flags.is_empty() {
+                        let rel_x = x.saturating_sub(body_area.x);
+                        let mut cur_x = 3; // Initial indent "   "
+                        for (i, f) in common_flags.iter().enumerate() {
+                            let pill_w = (f.len() + 2) as u16; // " {} "
+                            if rel_x >= cur_x && rel_x < cur_x + pill_w {
+                                self.flag_candidate_index = i;
+                                if self.query.is_empty() {
+                                    self.query = f.clone();
+                                } else if self.query.ends_with(' ') {
+                                    self.query.push_str(f);
+                                } else {
+                                    self.query.push(' ');
+                                    self.query.push_str(f);
+                                }
+                                self.confirmed_danger = false;
+                                self.danger_message = None;
+                                return Some(PaletteClickResult::Handled);
+                            }
+                            cur_x += pill_w + 1; // plus " " separator
+                        }
+                    } else if self.confirmed_danger && rel_y >= 5 {
+                        return Some(PaletteClickResult::Enter(self.handle_enter()));
+                    }
+                }
+            }
+        }
+
+        // Click inside modal (e.g. search query box, footer, or blank space) is handled
+        Some(PaletteClickResult::Handled)
+    }
+
     /// Render command palette modal supporting Layer 1, 2, and 3.
     pub fn render(&mut self, frame: &mut Frame, theme: &Theme, icons: &Icons, viewport: Rect) {
         if !self.is_open {
             return;
         }
 
-        let width = 78.min(viewport.width.saturating_sub(4));
-        let height = 22.min(viewport.height.saturating_sub(4));
-        let x = (viewport.width.saturating_sub(width)) / 2;
-        let y = (viewport.height.saturating_sub(height)) / 3;
-        let area = Rect::new(x, y, width, height);
+        let (area, chunks) = self.content_chunks(viewport);
 
         frame.render_widget(Clear, area);
 
@@ -724,17 +831,7 @@ impl CommandPaletteModal {
             .title(title_line)
             .style(Style::default().bg(theme.bg));
 
-        let inner = block.inner(area);
         frame.render_widget(block, area);
-
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(3),
-                Constraint::Min(5),
-                Constraint::Length(2),
-            ])
-            .split(inner);
 
         // 1. Search Query Input Box
         let input_block = Block::default()

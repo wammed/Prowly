@@ -229,3 +229,65 @@ fn test_safety_guard_destructive_actions() {
         }
     );
 }
+
+#[test]
+fn test_command_palette_click_selection_and_modal_penetration_prevention() {
+    use prowly::ui::modals::command_palette::{PaletteClickResult, PaletteEnterResult, PaletteLayer};
+    use ratatui::layout::Rect;
+
+    let mut palette = CommandPaletteModal::new();
+    let viewport = Rect::new(0, 0, 100, 30);
+
+    // When closed, handle_click returns None
+    assert_eq!(palette.handle_click(10, 10, viewport), None);
+
+    palette.open();
+    assert!(palette.is_open);
+
+    let (area, chunks) = palette.content_chunks(viewport);
+    assert!(area.width > 0 && area.height > 0);
+    assert_eq!(chunks.len(), 3);
+
+    // 1. Click outside modal returns PaletteClickResult::Close
+    let click_outside = palette.handle_click(0, 0, viewport);
+    assert_eq!(click_outside, Some(PaletteClickResult::Close));
+
+    // 2. Click on search input box returns Handled (consumed, does not leak)
+    let input_area = chunks[0];
+    let click_input = palette.handle_click(input_area.x + 2, input_area.y + 1, viewport);
+    assert_eq!(click_input, Some(PaletteClickResult::Handled));
+
+    // 3. Click on the first item in Root layer selects and executes it
+    let body_area = chunks[1];
+    let first_item_y = body_area.y; // rel_y = 0
+    let first_action = palette.filtered_actions()[0];
+    let click_first = palette.handle_click(body_area.x + 5, first_item_y, viewport);
+    assert_eq!(palette.selected_index, 0);
+    match click_first {
+        Some(PaletteClickResult::Enter(PaletteEnterResult::ExecuteAction(id))) => {
+            assert_eq!(id, first_action.id);
+        }
+        Some(PaletteClickResult::Enter(PaletteEnterResult::LayerChanged)) => {
+            assert_eq!(first_action.id, "browse_git_cli");
+        }
+        other => panic!("Unexpected click result on first item: {:?}", other),
+    }
+
+    // 4. Click in GitSubcommand layer transitions to ArgsInput
+    palette.open_git_subcommands();
+    assert_eq!(palette.layer, PaletteLayer::GitSubcommand);
+    let click_sub = palette.handle_click(body_area.x + 5, first_item_y, viewport);
+    assert_eq!(
+        click_sub,
+        Some(PaletteClickResult::Enter(PaletteEnterResult::LayerChanged))
+    );
+    match &palette.layer {
+        PaletteLayer::ArgsInput { .. } => {}
+        _ => panic!("Expected ArgsInput layer after clicking subcommand"),
+    }
+
+    // 5. Click on footer returns Handled (consumed)
+    let footer_area = chunks[2];
+    let click_footer = palette.handle_click(footer_area.x + 2, footer_area.y + 1, viewport);
+    assert_eq!(click_footer, Some(PaletteClickResult::Handled));
+}
