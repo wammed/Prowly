@@ -9,6 +9,7 @@ pub mod context;
 pub mod diagnostic;
 pub mod merge;
 pub mod pr;
+pub mod secret_masker;
 
 pub use ci::{analyze_ci_failure, CiFailureAnalysis};
 pub use client::{
@@ -23,3 +24,4 @@ pub use context::{AiContext, CiContext, ConflictContext, ContextProvider, PrCont
 pub use diagnostic::{diagnose_repository, RepoDiagnosis, RepoHealth};
 pub use merge::smart_merge_conflict;
 pub use pr::{generate_pr_draft, GeneratedPrDraft};
+pub use secret_masker::mask_secrets;

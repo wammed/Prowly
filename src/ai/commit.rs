@@ -84,7 +84,8 @@ Output ONLY the raw commit message text without markdown code blocks."
         }
     };
 
-    let truncated_diff = truncate_diff(diff, DEFAULT_MAX_DIFF_CHARS);
+    let sanitized_diff = crate::ai::mask_secrets(diff);
+    let truncated_diff = truncate_diff(&sanitized_diff, DEFAULT_MAX_DIFF_CHARS);
     let user = format!("Git Diff:\n```diff\n{}\n```", truncated_diff);
     let prompt = AiPrompt::system_and_user(system, user);
     let res = client.complete(&prompt).await?;
@@ -137,7 +138,8 @@ If everything looks good, provide a brief LGTM."
         }
     };
 
-    let truncated_diff = truncate_diff(diff, DEFAULT_MAX_DIFF_CHARS);
+    let sanitized_diff = crate::ai::mask_secrets(diff);
+    let truncated_diff = truncate_diff(&sanitized_diff, DEFAULT_MAX_DIFF_CHARS);
     let user = format!("Git Diff to review:\n```diff\n{}\n```", truncated_diff);
     let prompt = AiPrompt::system_and_user(system, user);
     let res = client.complete(&prompt).await?;

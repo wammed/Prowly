@@ -231,8 +231,43 @@ fn test_safety_guard_destructive_actions() {
 }
 
 #[test]
+fn test_safety_guard_ai_destructive_actions() {
+    use prowly::ai::{CommandRiskLevel, SuggestedGitCommand};
+    use prowly::ui::modals::command_palette::PaletteEnterResult;
+
+    let mut palette = CommandPaletteModal::new();
+    palette.open();
+
+    // AI suggests a dangerous command: git reset --hard HEAD~1
+    palette.ai_suggestion = Some(SuggestedGitCommand {
+        command: "git reset --hard HEAD~1".to_string(),
+        explanation: "Reset hard to previous commit".to_string(),
+        risk_level: CommandRiskLevel::Dangerous,
+    });
+
+    // First Enter triggers safety guard
+    let res1 = palette.handle_enter();
+    match res1 {
+        PaletteEnterResult::DangerWarning(msg) => {
+            assert!(msg.contains("Hard or merging reset") || msg.contains("discard uncommitted"));
+        }
+        _ => panic!("Expected DangerWarning for AI reset --hard, got {:?}", res1),
+    }
+    assert!(palette.is_confirmed_danger());
+
+    // Second Enter proceeds with AI command execution
+    let res2 = palette.handle_enter();
+    assert_eq!(
+        res2,
+        PaletteEnterResult::ExecuteAiCommand("git reset --hard HEAD~1".to_string())
+    );
+}
+
+#[test]
 fn test_command_palette_click_selection_and_modal_penetration_prevention() {
-    use prowly::ui::modals::command_palette::{PaletteClickResult, PaletteEnterResult, PaletteLayer};
+    use prowly::ui::modals::command_palette::{
+        PaletteClickResult, PaletteEnterResult, PaletteLayer,
+    };
     use ratatui::layout::Rect;
 
     let mut palette = CommandPaletteModal::new();

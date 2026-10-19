@@ -225,7 +225,10 @@ fn test_all_click_targets_exact_alignment() {
     fs::create_dir_all(&repo_b).unwrap();
 
     let mut modal = OpenRepoModal::new();
-    modal.open_at(Some(tmp.path()), &[repo_a.display().to_string(), repo_b.display().to_string()]);
+    modal.open_at(
+        Some(tmp.path()),
+        &[repo_a.display().to_string(), repo_b.display().to_string()],
+    );
 
     let viewport = Rect::new(0, 0, 100, 30);
     let modal_rect = modal.modal_rect(viewport);
@@ -266,7 +269,10 @@ fn test_all_click_targets_exact_alignment() {
     let init_x = inner_rect.x + layout.split_x + 1 + 5;
     let actions_y = inner_rect.y + layout.actions_y;
     let act = modal.handle_click(init_x, actions_y, viewport);
-    assert_eq!(act, Some(OpenRepoAction::InitRepo(tmp.path().to_path_buf())));
+    assert_eq!(
+        act,
+        Some(OpenRepoAction::InitRepo(tmp.path().to_path_buf()))
+    );
 
     // 6. Click Right Pane [ c ] Clone Remote Here button
     let clone_x = inner_rect.x + layout.split_x + 1 + 30;

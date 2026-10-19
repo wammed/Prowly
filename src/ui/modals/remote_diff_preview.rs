@@ -54,7 +54,12 @@ impl RemoteDiffPreviewModal {
     }
 
     /// Handle mouse click inside or outside modal.
-    pub fn handle_click(&mut self, x: u16, y: u16, viewport: Rect) -> Option<RemoteDiffClickResult> {
+    pub fn handle_click(
+        &mut self,
+        x: u16,
+        y: u16,
+        viewport: Rect,
+    ) -> Option<RemoteDiffClickResult> {
         if !self.is_open {
             return None;
         }

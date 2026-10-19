@@ -179,7 +179,8 @@ fn test_all_modals_click_penetration_prevention_in_app() {
     // -------------------------------------------------------------
     // 11. Context Menu
     // -------------------------------------------------------------
-    app.context_menu.open_at(Some("test.rs".to_string()), 50, 15);
+    app.context_menu
+        .open_at(Some("test.rs".to_string()), 50, 15);
     assert!(app.context_menu.is_open);
     assert!(app.is_any_modal_open());
 

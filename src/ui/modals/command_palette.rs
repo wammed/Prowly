@@ -255,45 +255,7 @@ pub enum PaletteClickResult {
 
 /// Detect potentially dangerous or destructive Git command invocations.
 pub fn is_dangerous_git_args(subcommand: &str, args: &str) -> Option<&'static str> {
-    let lower = args.to_lowercase();
-    let words: Vec<&str> = lower.split_whitespace().collect();
-
-    if subcommand == "push"
-        && (words.contains(&"--force")
-            || words.contains(&"-f")
-            || words.contains(&"--force-with-lease")
-            || words.iter().any(|w| w.starts_with('+')))
-    {
-        return Some("Force push will overwrite remote commit history!");
-    }
-    if subcommand == "reset"
-        && (words.contains(&"--hard") || words.contains(&"--merge") || words.contains(&"--keep"))
-    {
-        return Some("Hard or merging reset will permanently discard uncommitted changes!");
-    }
-    if subcommand == "clean"
-        && !words.contains(&"-n")
-        && !words.contains(&"--dry-run")
-        && (words.contains(&"--force")
-            || words.iter().any(|w| w.starts_with('-') && !w.starts_with("--") && w.contains('f')))
-    {
-        return Some("Force clean will permanently delete untracked files!");
-    }
-    if subcommand == "branch"
-        && (words.contains(&"-D")
-            || (words.contains(&"-d") && (words.contains(&"--force") || words.contains(&"-f"))))
-    {
-        return Some("Force branch delete will remove branch even if unmerged!");
-    }
-    if (subcommand == "checkout" || subcommand == "switch")
-        && (words.contains(&"-f")
-            || words.contains(&"--force")
-            || words.contains(&"-B")
-            || words.contains(&"-C"))
-    {
-        return Some("Force checkout or switch will overwrite local changes or branches!");
-    }
-    None
+    crate::services::SafeGitRunner::check_dangerous_git_str(subcommand, args)
 }
 
 /// Command palette modal state supporting multi-layer navigation.
@@ -578,6 +540,24 @@ impl CommandPaletteModal {
             PaletteLayer::Root => {
                 // 1. If AI generated command is active
                 if let Some(cmd) = self.ai_suggestion.take() {
+                    if let Ok((sub, args)) =
+                        crate::services::SafeGitRunner::parse_ai_command(&cmd.command)
+                    {
+                        if let Some(warn) =
+                            crate::services::SafeGitRunner::check_dangerous_git_args(&sub, &args)
+                        {
+                            if self.confirmed_danger_target.as_deref() != Some(&cmd.command) {
+                                self.confirmed_danger = true;
+                                self.confirmed_danger_target = Some(cmd.command.clone());
+                                self.danger_message = Some(warn.to_string());
+                                self.ai_suggestion = Some(cmd);
+                                return PaletteEnterResult::DangerWarning(warn.to_string());
+                            }
+                        }
+                    }
+                    self.confirmed_danger = false;
+                    self.confirmed_danger_target = None;
+                    self.danger_message = None;
                     return PaletteEnterResult::ExecuteAiCommand(cmd.command);
                 }
 

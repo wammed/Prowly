@@ -119,15 +119,38 @@ fn test_ai_modal_interaction() {
 
 #[test]
 fn test_stage_checkbox_toggle_space() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let repo_path = temp_dir.path();
+    let repo = git2::Repository::init(repo_path).unwrap();
+
+    let mut config = repo.config().unwrap();
+    config.set_str("user.name", "Tester").unwrap();
+    config.set_str("user.email", "tester@test.local").unwrap();
+
+    let file = repo_path.join("file.txt");
+    std::fs::write(&file, "test content").unwrap();
+
+    let orig_dir = std::env::current_dir().ok();
     let mut app = App::new(Config::default());
+    app.switch_repository(repo_path);
+
     assert_eq!(app.active_tab, AppTab::Changes);
     assert_eq!(app.focused_pane, FocusedPane::MainContent);
 
-    if !app.repo_status.files.is_empty() {
-        let initial_staged = app.repo_status.files[0].staged;
-        // Press Space
-        app.handle_key(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE));
-        assert_eq!(app.repo_status.files[0].staged, !initial_staged);
+    assert_eq!(app.repo_status.files.len(), 1);
+    let initial_staged = app.repo_status.files[0].staged;
+    assert!(!initial_staged);
+
+    // Press Space to toggle staging
+    app.handle_key(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE));
+    assert!(app.repo_status.files[0].staged);
+
+    // Press Space again to toggle back
+    app.handle_key(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE));
+    assert!(!app.repo_status.files[0].staged);
+
+    if let Some(orig) = orig_dir {
+        let _ = std::env::set_current_dir(orig);
     }
 }
 
@@ -187,7 +210,7 @@ fn test_middle_pane_mouse_click_select_file() {
 }
 
 #[test]
-fn test_app_commit_staged_auto_stages_and_prevents_empty() {
+fn test_app_commit_staged_requires_explicit_staging_and_prevents_empty() {
     let temp_dir = tempfile::TempDir::new().unwrap();
     let repo_path = temp_dir.path();
     let repo = git2::Repository::init(repo_path).unwrap();
@@ -225,16 +248,32 @@ fn test_app_commit_staged_auto_stages_and_prevents_empty() {
     assert_eq!(app.repo_status.files.len(), 1);
     assert!(!app.repo_status.files[0].staged);
 
-    // 3. Call commit_staged() with commit summary
+    // 3. Call commit_staged() with commit summary - MUST NOT automatically stage unstaged changes!
     app.changes_view.commit_summary = "feat: auto staged change".to_string();
     app.commit_staged();
 
-    // Status should be committed (even without prior manual staging!)
-    let status_str = app.last_status.unwrap_or_default();
+    let status_str = app.last_status.clone().unwrap_or_default();
     assert!(
-        status_str.starts_with("Committed:"),
-        "Expected Committed: prefix, got: {}",
+        status_str.contains("No staged changes"),
+        "Expected warning about no staged changes, got: {}",
         status_str
+    );
+
+    // File must remain unstaged and uncommitted
+    assert_eq!(app.repo_status.files.len(), 1);
+    assert!(!app.repo_status.files[0].staged);
+
+    // 4. Now explicitly stage the files
+    app.stage_all_files();
+    assert!(app.repo_status.files[0].staged);
+
+    // 5. Now committing staged changes succeeds
+    app.commit_staged();
+    let status_str2 = app.last_status.unwrap_or_default();
+    assert!(
+        status_str2.starts_with("Committed:"),
+        "Expected Committed: prefix, got: {}",
+        status_str2
     );
 
     // After commit, working directory and files should be clean

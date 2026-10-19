@@ -135,7 +135,9 @@ impl BranchSwitcherModal {
             let filtered = self.filtered_branches();
             if clicked_idx < filtered.len() {
                 self.selected_index = clicked_idx;
-                return Some(BranchSwitcherClickResult::Select(filtered[clicked_idx].clone()));
+                return Some(BranchSwitcherClickResult::Select(
+                    filtered[clicked_idx].clone(),
+                ));
             }
         }
 

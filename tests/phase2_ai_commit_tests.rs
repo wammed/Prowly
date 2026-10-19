@@ -70,8 +70,10 @@ fn test_truncate_diff_lockfile_omission() {
 
 #[test]
 fn test_ollama_client_num_ctx_config() {
-    let mut cfg = prowly::ai::AiConfig::default();
-    cfg.provider = prowly::ai::AiProvider::Ollama;
+    let mut cfg = prowly::ai::AiConfig {
+        provider: prowly::ai::AiProvider::Ollama,
+        ..Default::default()
+    };
     assert_eq!(cfg.num_ctx, Some(8192));
 
     cfg.num_ctx = Some(16384);

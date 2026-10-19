@@ -1893,16 +1893,17 @@ impl App {
                     self.history_modal.next();
                 }
                 MouseEventKind::Down(MouseButton::Left) => {
-                    if let Some(result) = self
-                        .history_modal
-                        .handle_click(x, y, self.layout_areas.root)
+                    if let Some(result) =
+                        self.history_modal
+                            .handle_click(x, y, self.layout_areas.root)
                     {
                         match result {
                             HistoryModalClickResult::ExecuteAction(action) => {
                                 self.execute_history_menu_action(action);
                             }
                             HistoryModalClickResult::ConfirmBranch => {
-                                let branch_name = self.history_modal.new_branch_name.trim().to_string();
+                                let branch_name =
+                                    self.history_modal.new_branch_name.trim().to_string();
                                 self.history_modal.close();
                                 if !branch_name.is_empty() {
                                     self.create_branch_at_selected_commit(&branch_name);
@@ -1960,10 +1961,7 @@ impl App {
         // 6. AI Assistant Modal clicks & wheel
         if self.ai_modal.is_open {
             if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
-                if let Some(action) =
-                    self.ai_modal
-                        .handle_click(x, y, self.layout_areas.root)
-                {
+                if let Some(action) = self.ai_modal.handle_click(x, y, self.layout_areas.root) {
                     match action {
                         AiAssistantClickResult::Close => {
                             self.ai_modal.close();
@@ -2011,8 +2009,7 @@ impl App {
                 }
                 MouseEventKind::Down(MouseButton::Left) => {
                     if let Some(action) =
-                        self.rebase_modal
-                            .handle_click(x, y, self.layout_areas.root)
+                        self.rebase_modal.handle_click(x, y, self.layout_areas.root)
                     {
                         match action {
                             RebaseClickResult::Close => {
@@ -2523,7 +2520,8 @@ impl App {
                         let workdir = if let Some(git) = &self.git_service {
                             git.workdir().to_path_buf()
                         } else {
-                            std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+                            std::env::current_dir()
+                                .unwrap_or_else(|_| std::path::PathBuf::from("."))
                         };
                         match crate::services::SafeGitRunner::execute_git(&workdir, &sub, &args) {
                             Ok(output) => {
@@ -2563,14 +2561,10 @@ impl App {
                 let lang = self.config.language;
                 if let Some(sender) = self.event_sender.clone() {
                     tokio::spawn(async move {
-                        let res = translate_natural_language_to_git(
-                            &req,
-                            &branch,
-                            client.as_ref(),
-                            lang,
-                        )
-                        .await
-                        .map_err(|e| e.to_string());
+                        let res =
+                            translate_natural_language_to_git(&req, &branch, client.as_ref(), lang)
+                                .await
+                                .map_err(|e| e.to_string());
                         let _ = sender.send(AppEvent::AiCommandSuggested(res));
                     });
                 } else if tokio::runtime::Handle::try_current().is_err() {
@@ -2729,7 +2723,8 @@ impl App {
         }
 
         let parsed_args = crate::services::SafeGitRunner::tokenize_args(trimmed_args);
-        let output = crate::services::SafeGitRunner::execute_git(&workdir, subcommand, &parsed_args);
+        let output =
+            crate::services::SafeGitRunner::execute_git(&workdir, subcommand, &parsed_args);
 
         match output {
             Ok(output) => {
@@ -3049,10 +3044,6 @@ impl App {
         };
 
         if let Some(git) = &self.git_service {
-            // Check staging status:
-            // If nothing is staged, but unstaged changed files exist,
-            // automatically stage all changes so Commit & Sync works seamlessly
-            // like GitHub Desktop or VS Code.
             let status = git.get_status().ok();
             let staged_count = status
                 .as_ref()
@@ -3065,11 +3056,14 @@ impl App {
 
             if staged_count == 0 {
                 if unstaged_count > 0 {
-                    let _ = git.stage_all();
+                    self.last_status = Some(
+                        "⚠️ No staged changes. Stage specific files or press 'a' to stage all before committing."
+                            .to_string(),
+                    );
                 } else {
                     self.last_status = Some("No changes to commit".to_string());
-                    return;
                 }
+                return;
             }
 
             match git.commit_with_description(&summary, desc) {
@@ -3503,7 +3497,7 @@ impl App {
     /// Trigger AI to generate a Conventional Commit message from staged diff.
     pub fn trigger_ai_generate_commit(&mut self) {
         let client = crate::ai::create_ai_client(&self.config.ai);
-        let diff_text = self.get_staged_or_current_diff_text();
+        let diff_text = crate::ai::mask_secrets(&self.get_staged_or_current_diff_text());
         let lang = self.config.language;
 
         if let Some(sender) = self.event_sender.clone() {
@@ -3533,7 +3527,7 @@ impl App {
     /// Trigger AI pre-commit code review.
     pub fn trigger_ai_review(&mut self) {
         let client = crate::ai::create_ai_client(&self.config.ai);
-        let diff_text = self.get_staged_or_current_diff_text();
+        let diff_text = crate::ai::mask_secrets(&self.get_staged_or_current_diff_text());
         let lang = self.config.language;
 
         let ctx = self.capture_ai_context();

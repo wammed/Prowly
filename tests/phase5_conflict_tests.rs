@@ -111,10 +111,16 @@ fn test_conflict_resolver_modal_click_and_penetration_prevention() {
 
     // Click toolbar: Current
     let inner_x = area.x + 1;
-    let toolbar_y = area.y + 1 + 3 + (area.height.saturating_sub(2) * 50 / 100) + (area.height.saturating_sub(2) * 35 / 100);
+    let toolbar_y = area.y
+        + 1
+        + 3
+        + (area.height.saturating_sub(2) * 50 / 100)
+        + (area.height.saturating_sub(2) * 35 / 100);
     let click_res = modal.handle_click(inner_x + 5, toolbar_y, viewport);
     assert_eq!(
         click_res,
-        Some(ConflictResolverClickResult::Resolve(ConflictChoice::Current))
+        Some(ConflictResolverClickResult::Resolve(
+            ConflictChoice::Current
+        ))
     );
 }

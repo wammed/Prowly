@@ -134,7 +134,7 @@ fn test_git_cli_push_and_ahead_status() {
     // First push via CLI and set upstream
     std::process::Command::new("git")
         .current_dir(repo_path)
-        .args(&["push", "-u", "origin", "main"])
+        .args(["push", "-u", "origin", "main"])
         .output()
         .unwrap();
 

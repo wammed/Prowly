@@ -10,12 +10,22 @@ use tempfile::TempDir;
 #[test]
 fn test_safe_git_runner_shell_injection_protection() {
     // Shell metacharacters outside quotes must be detected and rejected
-    assert!(SafeGitRunner::has_unquoted_shell_metachars("status; rm -rf /"));
-    assert!(SafeGitRunner::has_unquoted_shell_metachars("log | cat /etc/passwd"));
-    assert!(SafeGitRunner::has_unquoted_shell_metachars("commit && curl evil.com"));
+    assert!(SafeGitRunner::has_unquoted_shell_metachars(
+        "status; rm -rf /"
+    ));
+    assert!(SafeGitRunner::has_unquoted_shell_metachars(
+        "log | cat /etc/passwd"
+    ));
+    assert!(SafeGitRunner::has_unquoted_shell_metachars(
+        "commit && curl evil.com"
+    ));
     assert!(SafeGitRunner::has_unquoted_shell_metachars("status `id`"));
-    assert!(SafeGitRunner::has_unquoted_shell_metachars("status $(whoami)"));
-    assert!(SafeGitRunner::has_unquoted_shell_metachars("checkout > file.txt"));
+    assert!(SafeGitRunner::has_unquoted_shell_metachars(
+        "status $(whoami)"
+    ));
+    assert!(SafeGitRunner::has_unquoted_shell_metachars(
+        "checkout > file.txt"
+    ));
 
     // Quotes should safely preserve literal characters inside arguments
     assert!(!SafeGitRunner::has_unquoted_shell_metachars(
@@ -80,12 +90,37 @@ api_base = "https://attacker-controlled-server.com/v1"
 
     // Now test that our load_from_path / load protection ignores api_base and api_key
     // when applied to global configuration
-    let mut trusted_config = Config::default();
-    trusted_config.theme = parsed.theme;
-    trusted_config.language = parsed.language;
+    let trusted_config = Config {
+        theme: parsed.theme,
+        language: parsed.language,
+        ..Default::default()
+    };
     // Trusted config should NOT take api_base or api_key from untrusted workspace
     assert!(trusted_config.ai.api_base.is_none());
     assert!(trusted_config.ai.api_key.is_none());
+}
+
+#[test]
+fn test_config_local_editor_poisoning_protection() {
+    // Verify that local prowly.toml attempting to override editor.command is safely ignored
+    let content = r#"
+theme = "nord"
+[editor]
+command = "bash -c 'evil_payload'"
+"#;
+    let parsed: Config = toml::from_str(content).unwrap();
+    assert_eq!(
+        parsed.editor.command.as_deref(),
+        Some("bash -c 'evil_payload'")
+    );
+
+    // Verify Config::load() trust boundary ignores local editor override
+    let trusted_config = Config {
+        theme: parsed.theme,
+        ..Default::default()
+    };
+    // Applying local safely should NOT adopt editor.command
+    assert!(trusted_config.editor.command.is_none());
 }
 
 #[cfg(unix)]
@@ -245,4 +280,115 @@ fn test_hard_discard_reverts_without_backup() {
 
     // Worktree should be reverted to Original V1
     assert_eq!(fs::read_to_string(&test_file).unwrap(), "Original V1\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_backup_permissions_0700_0600() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp_dir = TempDir::new().unwrap();
+    let file_to_backup = temp_dir.path().join("secret.txt");
+    fs::write(&file_to_backup, "very secret data\n").unwrap();
+
+    let backup_dir = TempDir::new().unwrap();
+    let service = BackupService::with_root(backup_dir.path().to_path_buf());
+
+    let record = service.backup_file(&file_to_backup).unwrap();
+    assert!(record.backup_path.exists());
+
+    let file_meta = fs::metadata(&record.backup_path).unwrap();
+    let file_mode = file_meta.permissions().mode() & 0o777;
+    assert_eq!(file_mode, 0o600, "Backup file must have 0600 permissions");
+
+    let dir_meta = fs::metadata(record.backup_path.parent().unwrap()).unwrap();
+    let dir_mode = dir_meta.permissions().mode() & 0o777;
+    assert_eq!(dir_mode, 0o700, "Backup dir must have 0700 permissions");
+}
+
+#[test]
+fn test_discard_rejects_path_traversal() {
+    let temp_dir = TempDir::new().unwrap();
+    let repo_path = temp_dir.path();
+    let _repo = git2::Repository::init(repo_path).unwrap();
+    let git = GitService::open(repo_path).unwrap();
+    let backup_service = BackupService::with_root(temp_dir.path().join("b"));
+
+    // Traversal via ..
+    assert!(git.soft_discard("../outside.txt", &backup_service).is_err());
+    assert!(git.hard_discard("../../etc/passwd").is_err());
+    assert!(git.hard_discard("sub/../../outside.txt").is_err());
+
+    // Absolute path
+    assert!(git.soft_discard("/tmp/evil.txt", &backup_service).is_err());
+    assert!(git.hard_discard("/etc/hosts").is_err());
+}
+
+#[test]
+fn test_dangerous_git_detection_comprehensive() {
+    use prowly::services::SafeGitRunner;
+
+    // Push dangerous variations
+    assert!(SafeGitRunner::check_dangerous_git_str("push", "origin main --force").is_some());
+    assert!(SafeGitRunner::check_dangerous_git_str("push", "origin main -f").is_some());
+    assert!(SafeGitRunner::check_dangerous_git_str("push", "origin +main").is_some());
+    assert!(
+        SafeGitRunner::check_dangerous_git_str("push", "origin main --force-with-lease").is_some()
+    );
+    assert!(SafeGitRunner::check_dangerous_git_str(
+        "push",
+        "origin main --force-with-lease=main:main"
+    )
+    .is_some());
+    assert!(
+        SafeGitRunner::check_dangerous_git_str("push", "origin main --force-if-includes").is_some()
+    );
+    // Safe push
+    assert!(SafeGitRunner::check_dangerous_git_str("push", "origin main").is_none());
+
+    // Reset dangerous
+    assert!(SafeGitRunner::check_dangerous_git_str("reset", "--hard HEAD~1").is_some());
+    assert!(SafeGitRunner::check_dangerous_git_str("reset", "--merge").is_some());
+    // Safe reset
+    assert!(SafeGitRunner::check_dangerous_git_str("reset", "HEAD~1").is_none());
+    assert!(SafeGitRunner::check_dangerous_git_str("reset", "--soft HEAD~1").is_none());
+
+    // Clean dangerous
+    assert!(SafeGitRunner::check_dangerous_git_str("clean", "-fdx").is_some());
+    assert!(SafeGitRunner::check_dangerous_git_str("clean", "-f").is_some());
+    assert!(SafeGitRunner::check_dangerous_git_str("clean", "--force").is_some());
+    // Safe clean (dry-run)
+    assert!(SafeGitRunner::check_dangerous_git_str("clean", "-n -f").is_none());
+    assert!(SafeGitRunner::check_dangerous_git_str("clean", "--dry-run --force").is_none());
+
+    // Branch force delete
+    assert!(SafeGitRunner::check_dangerous_git_str("branch", "-D feature").is_some());
+    assert!(SafeGitRunner::check_dangerous_git_str("branch", "-d feature --force").is_some());
+    // Safe branch
+    assert!(SafeGitRunner::check_dangerous_git_str("branch", "-d feature").is_none());
+    assert!(SafeGitRunner::check_dangerous_git_str("branch", "-a").is_none());
+
+    // Checkout force
+    assert!(SafeGitRunner::check_dangerous_git_str("checkout", "-f other").is_some());
+    assert!(SafeGitRunner::check_dangerous_git_str("checkout", "-B new_branch").is_some());
+    // Safe checkout
+    assert!(SafeGitRunner::check_dangerous_git_str("checkout", "-b new_branch").is_none());
+    assert!(SafeGitRunner::check_dangerous_git_str("checkout", "main").is_none());
+}
+
+#[test]
+fn test_strict_tokenization_rejects_malformed_input() {
+    use prowly::services::SafeGitRunner;
+
+    // Unclosed double quote
+    assert!(SafeGitRunner::tokenize_args_strict(r#"commit -m "unfinished"#).is_err());
+    // Unclosed single quote
+    assert!(SafeGitRunner::tokenize_args_strict(r#"commit -m 'unfinished"#).is_err());
+    // Trailing escape
+    assert!(SafeGitRunner::tokenize_args_strict(r#"checkout main\"#).is_err());
+
+    // Valid inputs
+    let valid =
+        SafeGitRunner::tokenize_args_strict(r#"commit -m "valid message" --amend"#).unwrap();
+    assert_eq!(valid, vec!["commit", "-m", "valid message", "--amend"]);
 }

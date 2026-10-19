@@ -10,6 +10,14 @@ impl SafeGitRunner {
     /// Tokenize a command argument string in a quote-aware manner.
     /// Handles single quotes (`'...'`), double quotes (`"..."`), and backslash escapes (`\ `).
     pub fn tokenize_args(args: &str) -> Vec<String> {
+        Self::tokenize_args_strict(args).unwrap_or_else(|_| {
+            // Fallback for resilient best-effort tokenization
+            args.split_whitespace().map(|s| s.to_string()).collect()
+        })
+    }
+
+    /// Tokenize a command argument string strictly, rejecting unclosed quotes or dangling escapes.
+    pub fn tokenize_args_strict(args: &str) -> Result<Vec<String>, String> {
         let mut tokens = Vec::new();
         let mut current = String::new();
         let mut in_single = false;
@@ -48,11 +56,21 @@ impl SafeGitRunner {
             }
         }
 
+        if escape {
+            return Err("Incomplete escape sequence at end of arguments".to_string());
+        }
+        if in_single {
+            return Err("Unclosed single quote in arguments".to_string());
+        }
+        if in_double {
+            return Err("Unclosed double quote in arguments".to_string());
+        }
+
         if !current.is_empty() {
             tokens.push(current);
         }
 
-        tokens
+        Ok(tokens)
     }
 
     /// Check whether a subcommand contains only safe alphanumeric/hyphen characters.
@@ -115,7 +133,7 @@ impl SafeGitRunner {
             return Err("Only Git commands can be executed".to_string());
         };
 
-        let tokens = Self::tokenize_args(without_git);
+        let tokens = Self::tokenize_args_strict(without_git)?;
         if tokens.is_empty() {
             return Err("Missing Git subcommand".to_string());
         }
@@ -162,6 +180,110 @@ impl SafeGitRunner {
         Ok((subcommand, args))
     }
 
+    /// Detect dangerous or destructive Git operations based on structured arguments.
+    pub fn check_dangerous_git_args(subcommand: &str, args: &[String]) -> Option<&'static str> {
+        let sub = subcommand.to_lowercase();
+        let lower_args: Vec<String> = args.iter().map(|s| s.to_lowercase()).collect();
+
+        match sub.as_str() {
+            "push" => {
+                let has_force = lower_args.iter().any(|arg| {
+                    arg == "--force"
+                        || arg == "-f"
+                        || arg == "--force-with-lease"
+                        || arg.starts_with("--force-with-lease=")
+                        || arg.starts_with("--force-with-lease:")
+                        || arg == "--force-if-includes"
+                        || (arg.starts_with('+') && !arg.starts_with("++"))
+                });
+                if has_force {
+                    return Some("Force push will overwrite remote commit history!");
+                }
+            }
+            "reset" => {
+                let is_destructive = lower_args.iter().any(|arg| {
+                    arg == "--hard"
+                        || arg == "--merge"
+                        || arg == "--keep"
+                        || arg.starts_with("--hard=")
+                });
+                if is_destructive {
+                    return Some(
+                        "Hard, merging, or keeping reset will permanently discard uncommitted changes!",
+                    );
+                }
+            }
+            "clean" => {
+                let is_dry_run = lower_args
+                    .iter()
+                    .any(|arg| arg == "-n" || arg == "--dry-run");
+                if !is_dry_run {
+                    let has_force = lower_args.iter().any(|arg| {
+                        arg == "--force"
+                            || arg == "-f"
+                            || (arg.starts_with('-') && !arg.starts_with("--") && arg.contains('f'))
+                    });
+                    if has_force {
+                        return Some("Force clean will permanently delete untracked files!");
+                    }
+                }
+            }
+            "branch" => {
+                let has_force_delete = lower_args
+                    .iter()
+                    .any(|arg| arg == "-d" || arg == "--delete")
+                    && lower_args.iter().any(|arg| arg == "-f" || arg == "--force");
+                let has_upper_d = args.iter().any(|arg| {
+                    arg == "-D"
+                        || (arg.starts_with('-') && !arg.starts_with("--") && arg.contains('D'))
+                });
+                if has_force_delete || has_upper_d {
+                    return Some("Force branch delete will remove branch even if unmerged!");
+                }
+            }
+            "checkout" | "switch" => {
+                let has_force = lower_args
+                    .iter()
+                    .any(|arg| arg == "-f" || arg == "--force" || arg == "--discard-changes");
+                let has_force_create = args.iter().any(|arg| {
+                    arg == "-B"
+                        || arg == "-C"
+                        || (arg.starts_with('-')
+                            && !arg.starts_with("--")
+                            && (arg.contains('B') || arg.contains('C')))
+                });
+                if has_force || has_force_create {
+                    return Some(
+                        "Force checkout or switch will overwrite local changes or branches!",
+                    );
+                }
+            }
+            "restore" => {
+                let touches_worktree = lower_args
+                    .iter()
+                    .any(|arg| arg == "-w" || arg == "--worktree");
+                let has_source_or_staged = lower_args.iter().any(|arg| {
+                    arg == "-s"
+                        || arg.starts_with("--source=")
+                        || arg == "--source"
+                        || arg == "--staged"
+                });
+                if touches_worktree && has_source_or_staged {
+                    return Some("Restoring worktree files will overwrite uncommitted changes!");
+                }
+            }
+            _ => {}
+        }
+
+        None
+    }
+
+    /// Check dangerous git arguments from a space-separated arguments string.
+    pub fn check_dangerous_git_str(subcommand: &str, args_str: &str) -> Option<&'static str> {
+        let tokens = Self::tokenize_args(args_str);
+        Self::check_dangerous_git_args(subcommand, &tokens)
+    }
+
     /// Safely execute Git CLI command directly without a shell.
     pub fn execute_git(
         workdir: &Path,
@@ -205,14 +327,28 @@ mod tests {
 
     #[test]
     fn test_detect_shell_metachars() {
-        assert!(SafeGitRunner::has_unquoted_shell_metachars("status; rm -rf /"));
-        assert!(SafeGitRunner::has_unquoted_shell_metachars("commit && echo pwn"));
-        assert!(SafeGitRunner::has_unquoted_shell_metachars("log | grep test"));
-        assert!(SafeGitRunner::has_unquoted_shell_metachars("status $(whoami)"));
-        assert!(SafeGitRunner::has_unquoted_shell_metachars("status `whoami`"));
+        assert!(SafeGitRunner::has_unquoted_shell_metachars(
+            "status; rm -rf /"
+        ));
+        assert!(SafeGitRunner::has_unquoted_shell_metachars(
+            "commit && echo pwn"
+        ));
+        assert!(SafeGitRunner::has_unquoted_shell_metachars(
+            "log | grep test"
+        ));
+        assert!(SafeGitRunner::has_unquoted_shell_metachars(
+            "status $(whoami)"
+        ));
+        assert!(SafeGitRunner::has_unquoted_shell_metachars(
+            "status `whoami`"
+        ));
         // Quotes protect characters:
-        assert!(!SafeGitRunner::has_unquoted_shell_metachars("commit -m 'hello; world'"));
-        assert!(!SafeGitRunner::has_unquoted_shell_metachars(r#"commit -m "foo & bar""#));
+        assert!(!SafeGitRunner::has_unquoted_shell_metachars(
+            "commit -m 'hello; world'"
+        ));
+        assert!(!SafeGitRunner::has_unquoted_shell_metachars(
+            r#"commit -m "foo & bar""#
+        ));
     }
 
     #[test]

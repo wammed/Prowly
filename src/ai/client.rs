@@ -197,7 +197,8 @@ fn default_http_client() -> reqwest::Client {
 
 /// Sanitize and truncate HTTP error body to prevent log flooding and credential leakage.
 fn sanitize_error_body(body: String) -> String {
-    let trimmed = body.trim();
+    let masked = crate::ai::mask_secrets(&body);
+    let trimmed = masked.trim();
     if trimmed.len() > 500 {
         format!("{}... [truncated]", &trimmed[..500])
     } else {
@@ -441,10 +442,9 @@ impl AiClient for GeminiClient {
             .as_deref()
             .unwrap_or_else(|| self.config.provider.default_endpoint());
         let url = format!(
-            "{}/models/{}:generateContent?key={}",
+            "{}/models/{}:generateContent",
             base.trim_end_matches('/'),
-            self.config.model,
-            key
+            self.config.model
         );
 
         let mut contents = Vec::new();
@@ -467,7 +467,13 @@ impl AiClient for GeminiClient {
             }
         });
 
-        let res = self.client.post(&url).json(&body).send().await?;
+        let res = self
+            .client
+            .post(&url)
+            .header("x-goog-api-key", key)
+            .json(&body)
+            .send()
+            .await?;
 
         if !res.status().is_success() {
             let status = res.status().as_u16();

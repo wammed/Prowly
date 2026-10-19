@@ -6,11 +6,13 @@ use prowly::i18n::Language;
 
 #[test]
 fn test_ollama_chat_url_resolution() {
-    let mut cfg = AiConfig::default();
-    cfg.provider = AiProvider::Ollama;
+    let mut cfg = AiConfig {
+        provider: AiProvider::Ollama,
+        api_base: None,
+        ..Default::default()
+    };
 
     // 1. Default (None) -> http://localhost:11434/api/chat
-    cfg.api_base = None;
     let client = OllamaClient::new(cfg.clone());
     assert_eq!(client.chat_url(), "http://localhost:11434/api/chat");
 

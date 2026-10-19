@@ -307,13 +307,66 @@ impl GitService {
         Ok(())
     }
 
+    /// Validate that a path is a safe relative path strictly contained within the repository worktree.
+    /// Rejects parent directory traversal (`..`), absolute paths, and paths resolving outside the workdir.
+    pub fn validate_relative_repo_path(&self, rel_path: &str) -> Result<PathBuf, GitError> {
+        let p = Path::new(rel_path);
+        if rel_path.trim().is_empty() {
+            return Err(GitError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "File path cannot be empty",
+            )));
+        }
+        if p.is_absolute() {
+            return Err(GitError::Io(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "Absolute paths outside repository are not permitted",
+            )));
+        }
+        for component in p.components() {
+            match component {
+                std::path::Component::ParentDir => {
+                    return Err(GitError::Io(std::io::Error::new(
+                        std::io::ErrorKind::PermissionDenied,
+                        "Parent directory traversal ('..') is not permitted",
+                    )));
+                }
+                std::path::Component::RootDir | std::path::Component::Prefix(_) => {
+                    return Err(GitError::Io(std::io::Error::new(
+                        std::io::ErrorKind::PermissionDenied,
+                        "Root directory or volume prefix is not permitted",
+                    )));
+                }
+                _ => {}
+            }
+        }
+
+        let full_path = self.workdir.join(p);
+
+        // If file exists, ensure canonical path is strictly inside canonical workdir
+        if full_path.exists() {
+            if let (Ok(canonical_full), Ok(canonical_workdir)) =
+                (full_path.canonicalize(), self.workdir.canonicalize())
+            {
+                if !canonical_full.starts_with(&canonical_workdir) {
+                    return Err(GitError::Io(std::io::Error::new(
+                        std::io::ErrorKind::PermissionDenied,
+                        "Path escapes repository workdir via symlink or redirection",
+                    )));
+                }
+            }
+        }
+
+        Ok(full_path)
+    }
+
     /// Discard modifications for a file safely with an automated soft backup.
     pub fn soft_discard(
         &self,
         path: &str,
         backup_service: &BackupService,
     ) -> Result<BackupRecord, GitError> {
-        let full_path = self.workdir.join(path);
+        let full_path = self.validate_relative_repo_path(path)?;
         let record = backup_service.backup_file(&full_path)?;
         self.apply_discard_to_worktree_and_index(path)?;
         Ok(record)
@@ -325,9 +378,8 @@ impl GitService {
     }
 
     /// Internal helper that cleanly discards changes based on Git status (untracked, staged, unstaged, deleted).
-    /// Internal helper that cleanly discards changes based on Git status (untracked, staged, unstaged, deleted).
     fn apply_discard_to_worktree_and_index(&self, path: &str) -> Result<(), GitError> {
-        let full_path = self.workdir.join(path);
+        let full_path = self.validate_relative_repo_path(path)?;
         let status = self
             .repo
             .status_file(Path::new(path))
@@ -350,13 +402,13 @@ impl GitService {
                     | git2::Status::INDEX_RENAMED
                     | git2::Status::INDEX_TYPECHANGE,
             ) {
-                let _ = self.unstage_file(path);
+                self.unstage_file(path)?;
             }
 
             if full_path.is_file() {
-                let _ = std::fs::remove_file(&full_path);
+                std::fs::remove_file(&full_path)?;
             } else if full_path.is_dir() {
-                let _ = std::fs::remove_dir_all(&full_path);
+                std::fs::remove_dir_all(&full_path)?;
             }
             return Ok(());
         }
@@ -369,7 +421,7 @@ impl GitService {
                 | git2::Status::INDEX_RENAMED
                 | git2::Status::INDEX_TYPECHANGE,
         ) {
-            let _ = self.unstage_file(path);
+            self.unstage_file(path)?;
         }
 
         let mut opts = git2::build::CheckoutBuilder::new();

@@ -810,7 +810,6 @@ impl OpenRepoModal {
         }
     }
 
-
     /// Handle mouse wheel scroll up
     pub fn scroll_up(&mut self, x: u16, _y: u16, viewport: Rect) {
         let rect = self.modal_rect(viewport);
@@ -1098,14 +1097,16 @@ impl OpenRepoModal {
         let short_cur = if cur_display.len() > max_cur_w {
             format!(
                 "...{}",
-                &cur_display[cur_display.len().saturating_sub(max_cur_w.saturating_sub(3))..]
+                &cur_display[cur_display
+                    .len()
+                    .saturating_sub(max_cur_w.saturating_sub(3))..]
             )
         } else {
             cur_display
         };
 
-        let pad_w = (layout.inner_w as usize)
-            .saturating_sub(label_w + short_cur.len() + buttons_total_w);
+        let pad_w =
+            (layout.inner_w as usize).saturating_sub(label_w + short_cur.len() + buttons_total_w);
 
         lines.push(Line::from(vec![
             Span::styled(label_prefix, Style::default().fg(theme.dim_fg)),
@@ -1169,7 +1170,8 @@ impl OpenRepoModal {
                 row_spans.push(Span::raw(" ".repeat(pad)));
                 row_spans.push(Span::styled(toggle_txt, Style::default().fg(theme.info)));
             } else if row_i <= layout.discovery_visible_count {
-                let disc_idx = (row_i.saturating_sub(1)) as usize + self.discovery_scroll.viewport_offset;
+                let disc_idx =
+                    (row_i.saturating_sub(1)) as usize + self.discovery_scroll.viewport_offset;
                 if let Some(item) = self.discovered_repos.get(disc_idx) {
                     let is_sel = disc_idx == self.discovery_scroll.selected_index
                         && (self.active_section == OpenRepoSection::Discovery
@@ -1315,7 +1317,8 @@ impl OpenRepoModal {
                         Style::default().fg(theme.info).add_modifier(Modifier::BOLD),
                     ));
                 } else if row_i <= layout.recent_visible_count {
-                    let recent_idx = (row_i.saturating_sub(1)) as usize + self.recent_scroll.viewport_offset;
+                    let recent_idx =
+                        (row_i.saturating_sub(1)) as usize + self.recent_scroll.viewport_offset;
                     if let Some(repo_path) = self.recent_repos.get(recent_idx) {
                         let is_sel = recent_idx == self.recent_scroll.selected_index
                             && self.active_section == OpenRepoSection::Recent;
@@ -1337,14 +1340,16 @@ impl OpenRepoModal {
 
                         let btn_w = 17; // "[  Open ] [ ✕ ]" (10 + 1 + 5 + 1)
                         let prefix = "  ";
-                        let max_name_w = (right_w as usize).saturating_sub(prefix.len() + btn_w + 2);
+                        let max_name_w =
+                            (right_w as usize).saturating_sub(prefix.len() + btn_w + 2);
                         let disp_name = if clean_name.len() > max_name_w {
                             format!("{}...", &clean_name[..max_name_w.saturating_sub(3)])
                         } else {
                             clean_name
                         };
 
-                        let pad = (right_w as usize).saturating_sub(prefix.len() + disp_name.len() + btn_w);
+                        let pad = (right_w as usize)
+                            .saturating_sub(prefix.len() + disp_name.len() + btn_w);
 
                         row_spans.push(Span::styled(format!("{}{}", prefix, disp_name), style));
                         row_spans.push(Span::raw(" ".repeat(pad)));
@@ -1420,10 +1425,7 @@ impl OpenRepoModal {
                     } else {
                         "  [ ⇥ Tab: Complete | ↵ Open | Esc: Close ]"
                     };
-                    row_spans.push(Span::styled(
-                        help_txt,
-                        Style::default().fg(theme.dim_fg),
-                    ));
+                    row_spans.push(Span::styled(help_txt, Style::default().fg(theme.dim_fg)));
                 } else if row_i == layout.recent_visible_count + 7 {
                     // Action buttons: Init Repo Here / Clone Remote Here
                     row_spans.push(Span::raw(" "));

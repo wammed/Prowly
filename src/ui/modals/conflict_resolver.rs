@@ -146,10 +146,14 @@ impl ConflictResolverModal {
                 .split(chunks[1]);
             if x >= comp_chunks[0].x && x < comp_chunks[0].x + comp_chunks[0].width {
                 self.resolve_current(ConflictChoice::Current);
-                return Some(ConflictResolverClickResult::Resolve(ConflictChoice::Current));
+                return Some(ConflictResolverClickResult::Resolve(
+                    ConflictChoice::Current,
+                ));
             } else if x >= comp_chunks[1].x && x < comp_chunks[1].x + comp_chunks[1].width {
                 self.resolve_current(ConflictChoice::Incoming);
-                return Some(ConflictResolverClickResult::Resolve(ConflictChoice::Incoming));
+                return Some(ConflictResolverClickResult::Resolve(
+                    ConflictChoice::Incoming,
+                ));
             }
         }
 
@@ -158,10 +162,14 @@ impl ConflictResolverModal {
             let rel_x = x.saturating_sub(chunks[3].x);
             if rel_x < 16 {
                 self.resolve_current(ConflictChoice::Current);
-                return Some(ConflictResolverClickResult::Resolve(ConflictChoice::Current));
+                return Some(ConflictResolverClickResult::Resolve(
+                    ConflictChoice::Current,
+                ));
             } else if rel_x < 33 {
                 self.resolve_current(ConflictChoice::Incoming);
-                return Some(ConflictResolverClickResult::Resolve(ConflictChoice::Incoming));
+                return Some(ConflictResolverClickResult::Resolve(
+                    ConflictChoice::Incoming,
+                ));
             } else if rel_x < 46 {
                 self.resolve_current(ConflictChoice::Both);
                 return Some(ConflictResolverClickResult::Resolve(ConflictChoice::Both));

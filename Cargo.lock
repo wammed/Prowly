@@ -1793,6 +1793,7 @@ dependencies = [
  "lru 0.13.0",
  "octocrab",
  "ratatui",
+ "regex",
  "reqwest",
  "serde",
  "serde_json",

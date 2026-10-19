@@ -190,7 +190,7 @@ auto_fetch_interval_secs = 60
     /// Load configuration following trust boundaries:
     /// 1. Authoritative user config in `~/.config/prowly/config.toml` (or OS equivalent)
     /// 2. Environment variables for API keys
-    /// 3. Workspace preferences in `./prowly.toml` (safe UI options only, NEVER api_key or api_base)
+    /// 3. Workspace preferences in `./prowly.toml` (safe UI options only, NEVER api_key, api_base, or editor.command)
     pub fn load() -> Self {
         // Step 1: Load trusted user config
         let mut config = if let Ok(std_path) = Self::ensure_template_exists() {
@@ -216,14 +216,17 @@ auto_fetch_interval_secs = 60
                             "⚠️ Security Guard: Local prowly.toml cannot override AI API keys or endpoints. Ignored."
                         );
                     }
+                    if local_cfg.editor.command.is_some() {
+                        eprintln!(
+                            "⚠️ Security Guard: Local prowly.toml cannot override editor command. Ignored."
+                        );
+                    }
                     config.theme = local_cfg.theme;
                     config.language = local_cfg.language;
                     config.use_nerd_font = local_cfg.use_nerd_font;
                     config.git.soft_discard_backup = local_cfg.git.soft_discard_backup;
                     config.git.auto_fetch_interval_secs = local_cfg.git.auto_fetch_interval_secs;
-                    if local_cfg.editor.command.is_some() {
-                        config.editor.command = local_cfg.editor.command;
-                    }
+                    // Note: config.editor.command is deliberately NOT overridden from local workspace config!
                 }
             }
         }

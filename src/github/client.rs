@@ -750,7 +750,9 @@ impl GitHubService {
                 }
             }
             Ok(fetch_out) => {
-                let err = String::from_utf8_lossy(&fetch_out.stderr).trim().to_string();
+                let err = String::from_utf8_lossy(&fetch_out.stderr)
+                    .trim()
+                    .to_string();
                 Err(format!(
                     "Failed to fetch PR #{} from origin: {}",
                     pr_number,

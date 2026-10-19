@@ -57,6 +57,12 @@ impl BackupService {
         let dest_dir = self.backup_root.join(&id);
         fs::create_dir_all(&dest_dir)?;
 
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(&dest_dir, fs::Permissions::from_mode(0o700));
+        }
+
         let dest_file = dest_dir.join(&file_name);
         let tmp_file = dest_dir.join(format!(".{}.tmp", file_name));
 
@@ -67,6 +73,12 @@ impl BackupService {
             // Empty placeholder if the file was newly created or untracked
             fs::write(&tmp_file, "")?;
             fs::rename(&tmp_file, &dest_file)?;
+        }
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(&dest_file, fs::Permissions::from_mode(0o600));
         }
 
         Ok(BackupRecord {
@@ -81,7 +93,10 @@ impl BackupService {
     pub fn restore_backup(&self, record: &BackupRecord) -> Result<(), std::io::Error> {
         let dest = Path::new(&record.original_path);
         // Security check: ensure path does not contain parent directory traversal ('..')
-        if dest.components().any(|c| c == std::path::Component::ParentDir) {
+        if dest
+            .components()
+            .any(|c| c == std::path::Component::ParentDir)
+        {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 "Restoration path contains invalid parent directory traversals",
