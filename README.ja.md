@@ -73,6 +73,11 @@
   - README や PR 本文、ドキュメントなどの Markdown ファイルを、アクティブなカラーテーマと調和したリッチなターミナル内モーダルで閲覧。
   - 見出し、太字、斜体、インラインコード、コードブロック（言語タグ枠線付き）、チェックリスト、箇条書き、引用、リンク、水平線に対応。
   - ページスクロール (`PgUp`/`PgDn`)、先頭/末尾ジャンプ、クリップボードコピー (`y`) を完備。
+- 🧪 **200+ の網羅的自動テスト & CI/CD インフラ**:
+  - 全35ファイル・200件超の自動テスト（ユニット、結合、UIクリック判定、セキュリティ、実Gitシナリオ、110+コマンドマトリクス）。
+  - GitHub Actions による全ブランチ自動ビルド・リント・テスト実行 (`.github/workflows/ci.yml`)。
+  - Git コミット直前の自動検証フック (`.githooks/pre-commit`) とファイル保存時自動テストウォッチャー (`scripts/watch_tests.sh`) を完備。
+  - Git コマンド実行時の環境変数完全隔離アーキテクチャ (`clean_git_command`)。
 - 🎨 **厳選された全21種類のカラーテーマ**: Catppuccin、Tokyo Night、Gruvbox、Nord、Dracula、Solarized、One、Rosé Pine、Monokai Pro、Synthwave '84、Everforest Dark。
 - 🌐 **完全なバイリンガル対応**: 英語と日本語をワンキー (`l`) で即時切り替え。
 - 🚀 **アプリランチャー & デフォルトターミナル自動起動**: FreeDesktop 仕様の `.desktop` エントリとアイコンを自動登録し、システムのデフォルトターミナルで起動。

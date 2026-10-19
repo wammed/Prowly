@@ -73,6 +73,11 @@ Whether you prefer keyboard shortcuts or intuitive mouse interactions (clicking,
   - Scrollable floating modal overlay rendering READMEs, documentation, and PR descriptions in rich terminal formatting matching your active color theme.
   - Full support for headings (H1-H6), bold, italic, inline code, fenced code blocks with language tags, checklists, bullet/numbered lists, blockquotes, and links.
   - Fast page scrolling (`PgUp`/`PgDn`), top/bottom jump (`g`/`G`), and direct clipboard copy (`y`).
+- 🧪 **200+ Automated Test Suite & CI/CD Infrastructure**:
+  - Over 200 automated tests across 35 test files covering unit, integration, UI click detection, security, Git operational scenarios, and a 110+ subcommand matrix.
+  - Full-branch GitHub Actions CI/CD automation (`.github/workflows/ci.yml`).
+  - Pre-commit verification hook (`.githooks/pre-commit`) and live file-watch test runner (`scripts/watch_tests.sh`).
+  - Complete Git environment variable isolation architecture (`clean_git_command`) preventing outer environment leakage.
 - 🎨 **21 Curated Color Themes**: Catppuccin, Tokyo Night, Gruvbox, Nord, Dracula, Solarized, One, Rosé Pine, Monokai Pro, Synthwave '84, Everforest Dark.
 - 🌐 **Full Bilingual Support**: Instant switching between English and Japanese (`l`).
 - 🚀 **App Launcher Integration**: Seamless FreeDesktop integration with `Terminal=true` to automatically launch in your desktop environment's default terminal.
