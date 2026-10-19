@@ -18,6 +18,7 @@ async fn test_ai_diagnostic_needs_commit() {
             status: FileStatus::Modified,
             staged: true,
         }],
+        operation_state: Default::default(),
     };
 
     let diagnosis = diagnose_repository(&status, &client, Language::Ja)
@@ -44,6 +45,7 @@ async fn test_ai_diagnostic_conflicted() {
             status: FileStatus::Conflicted,
             staged: false,
         }],
+        operation_state: Default::default(),
     };
 
     let diagnosis = diagnose_repository(&status, &client, Language::En)

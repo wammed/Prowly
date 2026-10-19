@@ -1156,6 +1156,10 @@ impl App {
         if self.conflict_resolver.is_open {
             match key.code {
                 KeyCode::Esc => self.conflict_resolver.close(),
+                KeyCode::Char('A') => {
+                    self.abort_in_progress_operation();
+                    self.conflict_resolver.close();
+                }
                 KeyCode::Tab | KeyCode::Char('n') => self.conflict_resolver.next_hunk(),
                 KeyCode::Char('p') => self.conflict_resolver.previous_hunk(),
                 KeyCode::Char('1') => self
@@ -1310,14 +1314,20 @@ impl App {
                 }
             }
             KeyCode::Char('A') => {
-                self.show_all_files = !self.show_all_files;
-                let msg = if self.show_all_files {
-                    "Showing all repository files"
+                let op_in_progress =
+                    self.repo_status.operation_state != crate::git::RepoOperationState::None;
+                if op_in_progress {
+                    self.abort_in_progress_operation();
                 } else {
-                    "Showing changed files only"
-                };
-                self.last_status = Some(msg.to_string());
-                self.refresh_git_status();
+                    self.show_all_files = !self.show_all_files;
+                    let msg = if self.show_all_files {
+                        "Showing all repository files"
+                    } else {
+                        "Showing changed files only"
+                    };
+                    self.last_status = Some(msg.to_string());
+                    self.refresh_git_status();
+                }
             }
             KeyCode::Char('?') => {
                 let ctx = self.capture_ai_context();
@@ -2688,6 +2698,7 @@ impl App {
             }
             "settings" => self.open_settings(),
             "open_repo" => self.open_open_repo(),
+            "abort_operation" => self.abort_in_progress_operation(),
             "toggle_all_files" => {
                 self.show_all_files = !self.show_all_files;
                 let msg = if self.show_all_files {
@@ -2778,6 +2789,27 @@ impl App {
             {
                 item_mut.staged = !item_mut.staged;
             }
+        }
+    }
+
+    /// Safely abort any in-progress Git operation (rebase, merge, cherry-pick, revert).
+    pub fn abort_in_progress_operation(&mut self) {
+        if let Some(git) = &self.git_service {
+            match git.abort_current_operation() {
+                Ok(msg) => {
+                    self.last_status = Some(if msg.trim().is_empty() {
+                        "Operation aborted successfully".to_string()
+                    } else {
+                        format!("Operation aborted: {}", msg.trim())
+                    });
+                    self.refresh_git_status();
+                }
+                Err(e) => {
+                    self.last_status = Some(format!("Failed to abort operation: {}", e));
+                }
+            }
+        } else {
+            self.last_status = Some("No Git repository active".to_string());
         }
     }
 
@@ -4408,6 +4440,7 @@ impl App {
                 let diff = self.current_diff.clone();
                 let theme = self.theme.clone();
                 let icons = self.icons.clone();
+                let operation_state = self.repo_status.operation_state;
                 let params = ChangesRenderParams {
                     files: &filtered,
                     active_diff: &diff,
@@ -4416,6 +4449,7 @@ impl App {
                     icons: &icons,
                     area: inner,
                     hover_pos: self.hover_pos,
+                    operation_state,
                 };
                 self.changes_view.render(frame, params);
             }

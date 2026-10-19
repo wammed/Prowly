@@ -46,6 +46,7 @@ pub struct ChangesRenderParams<'a> {
     pub icons: &'a Icons,
     pub area: Rect,
     pub hover_pos: Option<(u16, u16)>,
+    pub operation_state: crate::git::RepoOperationState,
 }
 
 /// Changes view controller.
@@ -227,6 +228,7 @@ impl ChangesView {
             icons,
             area,
             hover_pos,
+            operation_state,
         } = params;
 
         // Vertical layout: Top (Files + Diff preview, Min) -> Bottom (Commit box + Actions, Length 6)
@@ -250,7 +252,16 @@ impl ChangesView {
         self.file_list_area = file_list_area;
 
         // 1. Render File List
-        self.render_file_list(frame, files, theme, i18n, icons, file_list_area, hover_pos);
+        self.render_file_list(
+            frame,
+            files,
+            theme,
+            i18n,
+            icons,
+            file_list_area,
+            hover_pos,
+            operation_state,
+        );
 
         // 2. Render Diff Preview
         self.diff_view.render(frame, active_diff, theme, diff_area);
@@ -259,6 +270,7 @@ impl ChangesView {
         self.render_commit_controls(frame, theme, i18n, icons, bottom_area, hover_pos);
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn render_file_list(
         &mut self,
         frame: &mut Frame,
@@ -268,6 +280,7 @@ impl ChangesView {
         icons: &Icons,
         area: Rect,
         hover_pos: Option<(u16, u16)>,
+        operation_state: crate::git::RepoOperationState,
     ) {
         let is_focused = self.focus == ChangesFocus::FileList;
         let border_color = if is_focused {
@@ -279,7 +292,7 @@ impl ChangesView {
         let staged_count = files.iter().filter(|f| f.staged).count();
         let total_count = files.len();
 
-        let title = format!(
+        let base_title = format!(
             " {} {} (Staged: {}/{}) ",
             icons.branch(),
             i18n.t("tabs.changes"),
@@ -287,16 +300,35 @@ impl ChangesView {
             total_count
         );
 
-        let block = Block::default()
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(border_color))
-            .title(Span::styled(
-                title,
+        let title_line = if let Some((op_badge, _desc)) = operation_state.badge() {
+            Line::from(vec![
+                Span::styled(
+                    base_title,
+                    Style::default()
+                        .fg(theme.primary)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    format!(" [ ⚠️ {} IN PROGRESS: Press 'A' to Abort ] ", op_badge),
+                    Style::default()
+                        .fg(theme.error)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ])
+        } else {
+            Line::from(Span::styled(
+                base_title,
                 Style::default()
                     .fg(theme.primary)
                     .add_modifier(Modifier::BOLD),
             ))
+        };
+
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(border_color))
+            .title(title_line)
             .style(Style::default().bg(theme.bg));
 
         let inner = block.inner(area);

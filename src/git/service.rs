@@ -2,6 +2,7 @@
 
 use crate::git::types::{
     DiffHunk, DiffLine, DiffLineType, FileDiff, FileStatus, GitError, GitFileItem, GitRepoStatus,
+    RepoOperationState,
 };
 use crate::services::{BackupRecord, BackupService};
 use git2::{DiffOptions, Repository, Status, StatusOptions};
@@ -148,13 +149,12 @@ impl GitService {
             let path = entry.path().unwrap_or("").to_string();
             let status_flags = entry.status();
 
-            let (staged, file_status) = classify_git_status(status_flags);
-            files.push(GitFileItem {
-                path,
-                staged,
-                status: file_status,
-            });
+            for item in classify_git_status_items(&path, status_flags) {
+                files.push(item);
+            }
         }
+
+        let operation_state = self.get_operation_state();
 
         Ok(GitRepoStatus {
             branch: branch_name,
@@ -162,6 +162,7 @@ impl GitService {
             ahead,
             behind,
             files,
+            operation_state,
         })
     }
 
@@ -653,6 +654,47 @@ impl GitService {
         }
     }
 
+    /// Retrieve configured default remote name (first remote, falling back to "origin").
+    pub fn default_remote_name(&self) -> String {
+        if let Ok(remotes) = self.repo.remotes() {
+            if let Some(first) = remotes.get(0) {
+                return first.to_string();
+            }
+        }
+        "origin".to_string()
+    }
+
+    /// Check whether an interactive operation (Rebase, Merge, Cherry-pick, Revert) is currently in progress.
+    pub fn get_operation_state(&self) -> RepoOperationState {
+        let git_dir = self.repo.path();
+        if git_dir.join("rebase-merge").exists() || git_dir.join("rebase-apply").exists() {
+            RepoOperationState::RebaseInProgress
+        } else if git_dir.join("MERGE_HEAD").exists() {
+            RepoOperationState::MergeInProgress
+        } else if git_dir.join("CHERRY_PICK_HEAD").exists() {
+            RepoOperationState::CherryPickInProgress
+        } else if git_dir.join("REVERT_HEAD").exists() {
+            RepoOperationState::RevertInProgress
+        } else {
+            RepoOperationState::None
+        }
+    }
+
+    /// Safely abort any in-progress operation (rebase, merge, cherry-pick, revert) restoring original state.
+    pub fn abort_current_operation(&self) -> Result<String, GitError> {
+        match self.get_operation_state() {
+            RepoOperationState::RebaseInProgress => self.run_git_cli(&["rebase", "--abort"]),
+            RepoOperationState::MergeInProgress => self.run_git_cli(&["merge", "--abort"]),
+            RepoOperationState::CherryPickInProgress => {
+                self.run_git_cli(&["cherry-pick", "--abort"])
+            }
+            RepoOperationState::RevertInProgress => self.run_git_cli(&["revert", "--abort"]),
+            RepoOperationState::None => Err(GitError::Cli(
+                "No in-progress operation to abort".to_string(),
+            )),
+        }
+    }
+
     /// Invoke Git CLI for push (ensuring SSH agent / Credential Helper / GPG compatibility).
     pub fn cli_push(&self) -> Result<String, GitError> {
         match self.run_git_cli(&["push"]) {
@@ -662,7 +704,8 @@ impl GitService {
                 if err_str.contains("no upstream") || err_str.contains("set-upstream") {
                     if let Ok(head) = self.repo.head() {
                         if let Some(branch) = head.shorthand() {
-                            return self.run_git_cli(&["push", "-u", "origin", branch]);
+                            let remote = self.default_remote_name();
+                            return self.run_git_cli(&["push", "-u", &remote, branch]);
                         }
                     }
                 }
@@ -678,7 +721,21 @@ impl GitService {
 
     /// Invoke Git CLI for pull.
     pub fn cli_pull(&self) -> Result<String, GitError> {
-        self.run_git_cli(&["pull"])
+        match self.run_git_cli(&["pull"]) {
+            Ok(output) => Ok(output),
+            Err(e) => {
+                let err_str = e.to_string();
+                if err_str.contains("no tracking information") || err_str.contains("set-upstream") {
+                    if let Ok(head) = self.repo.head() {
+                        if let Some(branch) = head.shorthand() {
+                            let remote = self.default_remote_name();
+                            return self.run_git_cli(&["pull", &remote, branch]);
+                        }
+                    }
+                }
+                Err(e)
+            }
+        }
     }
 
     /// Save working tree changes to stash via Git CLI.
@@ -707,26 +764,71 @@ impl GitService {
     }
 }
 
-fn classify_git_status(status: Status) -> (bool, FileStatus) {
-    let is_staged = status.is_index_new()
+/// Classify git status flags into discrete staged and unstaged items, supporting dual-state (partially staged) files.
+pub fn classify_git_status_items(path: &str, status: Status) -> Vec<GitFileItem> {
+    if status.is_conflicted() {
+        return vec![GitFileItem {
+            path: path.to_string(),
+            staged: false,
+            status: FileStatus::Conflicted,
+        }];
+    }
+
+    let has_index = status.is_index_new()
         || status.is_index_modified()
         || status.is_index_deleted()
         || status.is_index_renamed()
         || status.is_index_typechange();
 
-    let file_status = if status.is_conflicted() {
-        FileStatus::Conflicted
-    } else if status.is_wt_new() {
-        FileStatus::Untracked
-    } else if status.is_index_new() {
-        FileStatus::Added
-    } else if status.is_wt_deleted() || status.is_index_deleted() {
-        FileStatus::Deleted
-    } else if status.is_index_renamed() || status.is_wt_renamed() {
-        FileStatus::Renamed
-    } else {
-        FileStatus::Modified
-    };
+    let has_worktree = status.is_wt_new()
+        || status.is_wt_modified()
+        || status.is_wt_deleted()
+        || status.is_wt_renamed()
+        || status.is_wt_typechange();
 
-    (is_staged, file_status)
+    let mut items = Vec::with_capacity(2);
+
+    if has_index {
+        let file_status = if status.is_index_new() {
+            FileStatus::Added
+        } else if status.is_index_deleted() {
+            FileStatus::Deleted
+        } else if status.is_index_renamed() {
+            FileStatus::Renamed
+        } else {
+            FileStatus::Modified
+        };
+        items.push(GitFileItem {
+            path: path.to_string(),
+            staged: true,
+            status: file_status,
+        });
+    }
+
+    if has_worktree {
+        let file_status = if status.is_wt_new() {
+            FileStatus::Untracked
+        } else if status.is_wt_deleted() {
+            FileStatus::Deleted
+        } else if status.is_wt_renamed() {
+            FileStatus::Renamed
+        } else {
+            FileStatus::Modified
+        };
+        items.push(GitFileItem {
+            path: path.to_string(),
+            staged: false,
+            status: file_status,
+        });
+    }
+
+    if items.is_empty() {
+        items.push(GitFileItem {
+            path: path.to_string(),
+            staged: false,
+            status: FileStatus::Clean,
+        });
+    }
+
+    items
 }

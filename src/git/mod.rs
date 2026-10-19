@@ -14,8 +14,9 @@ pub use history::{
 pub use rebase::{
     list_recent_commits, quick_squash, reword_head_commit, RebaseAction, RebaseCommitItem,
 };
-pub use service::GitService;
+pub use service::{classify_git_status_items, GitService};
 pub use types::{
     DiffHunk, DiffLine, DiffLineType, FileDiff, FileStatus, GitError, GitFileItem, GitRepoStatus,
+    RepoOperationState,
 };
 pub use worktree::{create_worktree, list_worktrees, remove_worktree, WorktreeItem};

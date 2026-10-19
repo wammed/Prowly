@@ -814,4 +814,29 @@ impl GitSubcommandDef {
     pub fn is_known_subcommand(name: &str) -> bool {
         Self::find(name).is_some()
     }
+
+    /// Check whether this subcommand has a dedicated TUI view, tab, or modal in Prowly.
+    pub fn has_dedicated_ui(&self) -> bool {
+        matches!(
+            self.name,
+            "add"
+                | "branch"
+                | "checkout"
+                | "commit"
+                | "diff"
+                | "fetch"
+                | "log"
+                | "merge"
+                | "pull"
+                | "push"
+                | "rebase"
+                | "reset"
+                | "restore"
+                | "revert"
+                | "stash"
+                | "status"
+                | "switch"
+                | "worktree"
+        )
+    }
 }

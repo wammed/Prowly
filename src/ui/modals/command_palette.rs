@@ -207,6 +207,11 @@ impl PaletteAction {
             title: "AI: Generate Pull Request Draft",
             shortcut: None,
         },
+        PaletteAction {
+            id: "abort_operation",
+            title: "Git: Abort In-Progress Operation (Merge/Cherry-Pick/Revert)",
+            shortcut: Some("A"),
+        },
     ];
 }
 
@@ -1043,8 +1048,21 @@ impl CommandPaletteModal {
                         _ => theme.dim_fg,
                     };
 
+                    let ui_badge = if sub.has_dedicated_ui() {
+                        Span::styled(
+                            "[UI] ",
+                            Style::default()
+                                .fg(theme.primary)
+                                .add_modifier(Modifier::BOLD)
+                                .bg(line_bg),
+                        )
+                    } else {
+                        Span::styled("[CLI] ", Style::default().fg(theme.dim_fg).bg(line_bg))
+                    };
+
                     let spans = vec![
                         Span::styled(prefix, Style::default().fg(theme.primary).bg(line_bg)),
+                        ui_badge,
                         Span::styled(
                             format!("[{}] ", sub.category),
                             Style::default().fg(cat_color).bg(line_bg),
@@ -1069,6 +1087,10 @@ impl CommandPaletteModal {
                 // Footer Help for GitSubcommand
                 let count_str = format!("({}/{}) ", self.selected_index + 1, subs.len());
                 let help = Line::from(vec![
+                    Span::styled(
+                        "[UI]: Dedicated TUI  [CLI]: Direct Execution  ",
+                        Style::default().fg(theme.secondary),
+                    ),
                     Span::styled(
                         "[ Enter: Select Subcommand ]  ",
                         Style::default().fg(theme.primary),

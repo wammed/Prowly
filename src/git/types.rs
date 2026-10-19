@@ -137,6 +137,29 @@ impl FileDiff {
     }
 }
 
+/// In-progress interactive Git operation state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub enum RepoOperationState {
+    #[default]
+    None,
+    RebaseInProgress,
+    MergeInProgress,
+    CherryPickInProgress,
+    RevertInProgress,
+}
+
+impl RepoOperationState {
+    pub const fn badge(&self) -> Option<(&'static str, &'static str)> {
+        match self {
+            Self::None => None,
+            Self::RebaseInProgress => Some(("REBASE", "Interactive Rebase in progress")),
+            Self::MergeInProgress => Some(("MERGE", "Merge in progress (conflicts exist)")),
+            Self::CherryPickInProgress => Some(("CHERRY-PICK", "Cherry-pick in progress")),
+            Self::RevertInProgress => Some(("REVERT", "Revert in progress")),
+        }
+    }
+}
+
 /// Overall repository status summary.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct GitRepoStatus {
@@ -145,4 +168,5 @@ pub struct GitRepoStatus {
     pub ahead: usize,
     pub behind: usize,
     pub files: Vec<GitFileItem>,
+    pub operation_state: RepoOperationState,
 }

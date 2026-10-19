@@ -392,3 +392,142 @@ fn test_strict_tokenization_rejects_malformed_input() {
         SafeGitRunner::tokenize_args_strict(r#"commit -m "valid message" --amend"#).unwrap();
     assert_eq!(valid, vec!["commit", "-m", "valid message", "--amend"]);
 }
+
+#[test]
+fn test_classify_git_status_items_dual_state() {
+    use git2::Status;
+    use prowly::git::{classify_git_status_items, FileStatus};
+
+    // 1. Dual-state: File modified in index and also modified in worktree
+    let dual_flags = Status::INDEX_MODIFIED | Status::WT_MODIFIED;
+    let items = classify_git_status_items("src/lib.rs", dual_flags);
+    assert_eq!(
+        items.len(),
+        2,
+        "Partially staged file should produce 2 items"
+    );
+
+    let staged_item = items
+        .iter()
+        .find(|i| i.staged)
+        .expect("Expected staged item");
+    assert_eq!(staged_item.path, "src/lib.rs");
+    assert_eq!(staged_item.status, FileStatus::Modified);
+
+    let unstaged_item = items
+        .iter()
+        .find(|i| !i.staged)
+        .expect("Expected unstaged item");
+    assert_eq!(unstaged_item.path, "src/lib.rs");
+    assert_eq!(unstaged_item.status, FileStatus::Modified);
+
+    // 2. Conflicted status
+    let conflict_flags = Status::CONFLICTED;
+    let items = classify_git_status_items("src/conflict.rs", conflict_flags);
+    assert_eq!(items.len(), 1);
+    assert!(!items[0].staged);
+    assert_eq!(items[0].status, FileStatus::Conflicted);
+
+    // 3. Clean status
+    let clean_flags = Status::empty();
+    let items = classify_git_status_items("README.md", clean_flags);
+    assert_eq!(items.len(), 1);
+    assert!(!items[0].staged);
+    assert_eq!(items[0].status, FileStatus::Clean);
+}
+
+#[test]
+fn test_operation_state_detection_and_badges() {
+    use prowly::git::{GitService, RepoOperationState};
+
+    let temp = TempDir::new().unwrap();
+    let repo_path = temp.path();
+
+    // Init git repo
+    let repo = git2::Repository::init(repo_path).unwrap();
+    let git_dir = repo.path();
+    let git_service = GitService::open(repo_path).unwrap();
+
+    // Default: None
+    assert_eq!(git_service.get_operation_state(), RepoOperationState::None);
+    assert_eq!(RepoOperationState::None.badge(), None);
+
+    // Rebase in progress via .git/rebase-merge
+    fs::create_dir_all(git_dir.join("rebase-merge")).unwrap();
+    assert_eq!(
+        git_service.get_operation_state(),
+        RepoOperationState::RebaseInProgress
+    );
+    let (badge, desc) = RepoOperationState::RebaseInProgress.badge().unwrap();
+    assert_eq!(badge, "REBASE");
+    assert!(desc.contains("Rebase"));
+    fs::remove_dir_all(git_dir.join("rebase-merge")).unwrap();
+
+    // Merge in progress via MERGE_HEAD
+    fs::write(git_dir.join("MERGE_HEAD"), "deadbeef\n").unwrap();
+    assert_eq!(
+        git_service.get_operation_state(),
+        RepoOperationState::MergeInProgress
+    );
+    let (badge, _) = RepoOperationState::MergeInProgress.badge().unwrap();
+    assert_eq!(badge, "MERGE");
+    fs::remove_file(git_dir.join("MERGE_HEAD")).unwrap();
+
+    // Cherry-pick in progress via CHERRY_PICK_HEAD
+    fs::write(git_dir.join("CHERRY_PICK_HEAD"), "deadbeef\n").unwrap();
+    assert_eq!(
+        git_service.get_operation_state(),
+        RepoOperationState::CherryPickInProgress
+    );
+    let (badge, _) = RepoOperationState::CherryPickInProgress.badge().unwrap();
+    assert_eq!(badge, "CHERRY-PICK");
+    fs::remove_file(git_dir.join("CHERRY_PICK_HEAD")).unwrap();
+
+    // Revert in progress via REVERT_HEAD
+    fs::write(git_dir.join("REVERT_HEAD"), "deadbeef\n").unwrap();
+    assert_eq!(
+        git_service.get_operation_state(),
+        RepoOperationState::RevertInProgress
+    );
+    let (badge, _) = RepoOperationState::RevertInProgress.badge().unwrap();
+    assert_eq!(badge, "REVERT");
+    fs::remove_file(git_dir.join("REVERT_HEAD")).unwrap();
+}
+
+#[test]
+fn test_git_subcommand_ui_vs_cli_catalog_badges() {
+    use prowly::ui::modals::GitSubcommandDef;
+
+    // Subcommands that have dedicated UI
+    assert!(GitSubcommandDef::find("commit").unwrap().has_dedicated_ui());
+    assert!(GitSubcommandDef::find("branch").unwrap().has_dedicated_ui());
+    assert!(GitSubcommandDef::find("log").unwrap().has_dedicated_ui());
+    assert!(GitSubcommandDef::find("diff").unwrap().has_dedicated_ui());
+    assert!(GitSubcommandDef::find("rebase").unwrap().has_dedicated_ui());
+    assert!(GitSubcommandDef::find("merge").unwrap().has_dedicated_ui());
+
+    // Subcommands executed directly via CLI
+    assert!(!GitSubcommandDef::find("bisect").unwrap().has_dedicated_ui());
+    assert!(!GitSubcommandDef::find("archive")
+        .unwrap()
+        .has_dedicated_ui());
+    assert!(!GitSubcommandDef::find("bundle").unwrap().has_dedicated_ui());
+    assert!(!GitSubcommandDef::find("clean").unwrap().has_dedicated_ui());
+    assert!(!GitSubcommandDef::find("format-patch")
+        .unwrap()
+        .has_dedicated_ui());
+}
+
+#[test]
+fn test_default_remote_name_fallback() {
+    use prowly::git::GitService;
+
+    let temp = TempDir::new().unwrap();
+    let repo_path = temp.path();
+
+    let _repo = git2::Repository::init(repo_path).unwrap();
+    let git_service = GitService::open(repo_path).unwrap();
+
+    // Without remotes, falls back to "origin"
+    assert_eq!(git_service.default_remote_name(), "origin");
+}
