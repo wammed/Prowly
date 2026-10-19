@@ -291,12 +291,6 @@ impl GitSubcommandDef {
             common_flags: &["--cached", "-r", "-f", "--force"],
         },
         GitSubcommandDef {
-            name: "scalar",
-            description: "Manage large Git repositories with optimized defaults",
-            category: "Main",
-            common_flags: &["register", "unregister", "run", "diagnose"],
-        },
-        GitSubcommandDef {
             name: "shortlog",
             description: "Summarize git log output grouped by author",
             category: "Main",
@@ -661,12 +655,6 @@ impl GitSubcommandDef {
             common_flags: &["--write-tree", "--trivial"],
         },
         GitSubcommandDef {
-            name: "rerere",
-            description: "Reuse recorded resolution of conflicted merges",
-            category: "Plumbing",
-            common_flags: &["status", "diff", "clear", "forget", "remaining"],
-        },
-        GitSubcommandDef {
             name: "pack-objects",
             description: "Create a packed archive of objects",
             category: "Plumbing",
@@ -691,30 +679,6 @@ impl GitSubcommandDef {
             common_flags: &["write", "verify", "expire", "repack"],
         },
         GitSubcommandDef {
-            name: "fsck",
-            description: "Verifies the connectivity and validity of the objects in the database",
-            category: "Maintenance",
-            common_flags: &["--full", "--unreachable", "--lost-found"],
-        },
-        GitSubcommandDef {
-            name: "count-objects",
-            description: "Count unpacked number of objects and their disk consumption",
-            category: "Maintenance",
-            common_flags: &["-v", "-H", "--human-readable"],
-        },
-        GitSubcommandDef {
-            name: "diagnose",
-            description: "Generate a zip archive of diagnostic information",
-            category: "Maintenance",
-            common_flags: &["--mode=stats", "--mode=all", "-s"],
-        },
-        GitSubcommandDef {
-            name: "bugreport",
-            description: "Collect information for user to file a bug report",
-            category: "Maintenance",
-            common_flags: &["--diagnose", "--suffix="],
-        },
-        GitSubcommandDef {
             name: "verify-commit",
             description: "Check the GPG signature of commits",
             category: "Ancillary",
@@ -737,18 +701,6 @@ impl GitSubcommandDef {
             description: "Show logs with differences each commit introduces",
             category: "Ancillary",
             common_flags: &["-p", "--since=", "-n 10"],
-        },
-        GitSubcommandDef {
-            name: "request-pull",
-            description: "Generates a summary of pending changes for upstream",
-            category: "Collaboration",
-            common_flags: &["-p", "start", "url", "end"],
-        },
-        GitSubcommandDef {
-            name: "send-email",
-            description: "Send a collection of patches as emails",
-            category: "Collaboration",
-            common_flags: &["--to=", "--annotate", "--dry-run", "--confirm=always"],
         },
         GitSubcommandDef {
             name: "check-attr",
@@ -796,12 +748,6 @@ impl GitSubcommandDef {
                 "GIT_COMMITTER_IDENT",
                 "GIT_EDITOR",
             ],
-        },
-        GitSubcommandDef {
-            name: "version",
-            description: "Display Git version information",
-            category: "Main",
-            common_flags: &["--build-options"],
         },
     ];
 

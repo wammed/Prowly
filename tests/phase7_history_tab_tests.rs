@@ -8,27 +8,45 @@ use std::fs;
 use std::process::Command;
 use tempfile::tempdir;
 
+fn git_cmd(path: &std::path::Path) -> Command {
+    let mut cmd = Command::new("git");
+    cmd.current_dir(path)
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_INDEX_FILE")
+        .env_remove("GIT_WORK_TREE")
+        .env_remove("GIT_OBJECT_DIRECTORY")
+        .env_remove("GIT_ALTERNATE_OBJECT_DIRECTORIES")
+        .env_remove("GIT_COMMON_DIR")
+        .env_remove("GIT_PREFIX")
+        .env_remove("GIT_AUTHOR_NAME")
+        .env_remove("GIT_AUTHOR_EMAIL")
+        .env_remove("GIT_AUTHOR_DATE")
+        .env_remove("GIT_COMMITTER_NAME")
+        .env_remove("GIT_COMMITTER_EMAIL")
+        .env_remove("GIT_COMMITTER_DATE")
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_CONFIG_SYSTEM", "/dev/null");
+    cmd
+}
+
 fn setup_test_git_repo() -> (tempfile::TempDir, Vec<String>) {
     let dir = tempdir().expect("Failed to create tempdir");
     let p = dir.path();
 
     // git init
-    assert!(Command::new("git")
-        .current_dir(p)
+    assert!(git_cmd(p)
         .args(["init", "-b", "main"])
         .status()
         .expect("git init")
         .success());
 
-    assert!(Command::new("git")
-        .current_dir(p)
+    assert!(git_cmd(p)
         .args(["config", "user.name", "Tester"])
         .status()
         .expect("git config user.name")
         .success());
 
-    assert!(Command::new("git")
-        .current_dir(p)
+    assert!(git_cmd(p)
         .args(["config", "user.email", "tester@example.com"])
         .status()
         .expect("git config user.email")
@@ -38,57 +56,34 @@ fn setup_test_git_repo() -> (tempfile::TempDir, Vec<String>) {
 
     // Commit 1
     fs::write(p.join("file1.txt"), "Initial content line 1\n").unwrap();
-    Command::new("git")
-        .current_dir(p)
-        .args(["add", "file1.txt"])
-        .status()
-        .unwrap();
-    Command::new("git")
-        .current_dir(p)
+    git_cmd(p).args(["add", "file1.txt"]).status().unwrap();
+    git_cmd(p)
         .args(["commit", "-m", "feat: initial commit"])
         .status()
         .unwrap();
 
-    let out1 = Command::new("git")
-        .current_dir(p)
-        .args(["rev-parse", "HEAD"])
-        .output()
-        .unwrap();
+    let out1 = git_cmd(p).args(["rev-parse", "HEAD"]).output().unwrap();
     commit_hashes.push(String::from_utf8_lossy(&out1.stdout).trim().to_string());
 
     // Commit 2
     fs::write(p.join("file1.txt"), "Initial content line 1\nSecond line\n").unwrap();
-    Command::new("git")
-        .current_dir(p)
+    git_cmd(p)
         .args(["commit", "-am", "feat: second commit"])
         .status()
         .unwrap();
 
-    let out2 = Command::new("git")
-        .current_dir(p)
-        .args(["rev-parse", "HEAD"])
-        .output()
-        .unwrap();
+    let out2 = git_cmd(p).args(["rev-parse", "HEAD"]).output().unwrap();
     commit_hashes.push(String::from_utf8_lossy(&out2.stdout).trim().to_string());
 
     // Commit 3
     fs::write(p.join("file2.txt"), "Another file\n").unwrap();
-    Command::new("git")
-        .current_dir(p)
-        .args(["add", "file2.txt"])
-        .status()
-        .unwrap();
-    Command::new("git")
-        .current_dir(p)
+    git_cmd(p).args(["add", "file2.txt"]).status().unwrap();
+    git_cmd(p)
         .args(["commit", "-m", "feat: third commit"])
         .status()
         .unwrap();
 
-    let out3 = Command::new("git")
-        .current_dir(p)
-        .args(["rev-parse", "HEAD"])
-        .output()
-        .unwrap();
+    let out3 = git_cmd(p).args(["rev-parse", "HEAD"]).output().unwrap();
     commit_hashes.push(String::from_utf8_lossy(&out3.stdout).trim().to_string());
 
     (dir, commit_hashes)
@@ -135,8 +130,7 @@ fn test_checkout_and_branch_creation() {
 
     // 1. Checkout commit 1 (Detached HEAD)
     checkout_commit(repo.path(), &hashes[0]).expect("checkout_commit");
-    let cur_head = Command::new("git")
-        .current_dir(repo.path())
+    let cur_head = git_cmd(repo.path())
         .args(["rev-parse", "HEAD"])
         .output()
         .unwrap();
@@ -145,8 +139,7 @@ fn test_checkout_and_branch_creation() {
     // 2. Create new branch at commit 1 and switch to it
     create_branch_at_commit(repo.path(), "feature-history", &hashes[0], true)
         .expect("create_branch_at_commit");
-    let cur_branch = Command::new("git")
-        .current_dir(repo.path())
+    let cur_branch = git_cmd(repo.path())
         .args(["rev-parse", "--abbrev-ref", "HEAD"])
         .output()
         .unwrap();
@@ -168,8 +161,7 @@ fn test_cherry_pick_and_revert() {
     assert!(repo.path().join("file2.txt").exists());
 
     // Revert commit 3
-    let head_out = Command::new("git")
-        .current_dir(repo.path())
+    let head_out = git_cmd(repo.path())
         .args(["rev-parse", "HEAD"])
         .output()
         .unwrap();
@@ -184,8 +176,7 @@ fn test_time_machine_reset_with_safety_backup() {
     let (repo, hashes) = setup_test_git_repo();
 
     // HEAD is currently at commit 3 (hashes[2])
-    let initial_head = Command::new("git")
-        .current_dir(repo.path())
+    let initial_head = git_cmd(repo.path())
         .args(["rev-parse", "HEAD"])
         .output()
         .unwrap();
@@ -199,8 +190,7 @@ fn test_time_machine_reset_with_safety_backup() {
     assert!(backup_branch.starts_with("backup/timemachine-"));
 
     // Current HEAD must now be at commit 1 (hashes[0])
-    let new_head = Command::new("git")
-        .current_dir(repo.path())
+    let new_head = git_cmd(repo.path())
         .args(["rev-parse", "HEAD"])
         .output()
         .unwrap();
@@ -210,8 +200,7 @@ fn test_time_machine_reset_with_safety_backup() {
     assert!(!repo.path().join("file2.txt").exists());
 
     // The safety backup branch must still point to commit 3
-    let backup_head = Command::new("git")
-        .current_dir(repo.path())
+    let backup_head = git_cmd(repo.path())
         .args(["rev-parse", &backup_branch])
         .output()
         .unwrap();

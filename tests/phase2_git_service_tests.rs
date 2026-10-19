@@ -1,6 +1,28 @@
 use prowly::git::{FileStatus, GitService};
 use std::fs;
+use std::process::Command;
 use tempfile::TempDir;
+
+fn git_cmd(path: &std::path::Path) -> Command {
+    let mut cmd = Command::new("git");
+    cmd.current_dir(path)
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_INDEX_FILE")
+        .env_remove("GIT_WORK_TREE")
+        .env_remove("GIT_OBJECT_DIRECTORY")
+        .env_remove("GIT_ALTERNATE_OBJECT_DIRECTORIES")
+        .env_remove("GIT_COMMON_DIR")
+        .env_remove("GIT_PREFIX")
+        .env_remove("GIT_AUTHOR_NAME")
+        .env_remove("GIT_AUTHOR_EMAIL")
+        .env_remove("GIT_AUTHOR_DATE")
+        .env_remove("GIT_COMMITTER_NAME")
+        .env_remove("GIT_COMMITTER_EMAIL")
+        .env_remove("GIT_COMMITTER_DATE")
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_CONFIG_SYSTEM", "/dev/null");
+    cmd
+}
 
 fn setup_temp_repo() -> (TempDir, GitService) {
     let temp_dir = TempDir::new().unwrap();
@@ -132,8 +154,7 @@ fn test_git_cli_push_and_ahead_status() {
     let git = GitService::open(repo_path).unwrap();
 
     // First push via CLI and set upstream
-    std::process::Command::new("git")
-        .current_dir(repo_path)
+    git_cmd(repo_path)
         .args(["push", "-u", "origin", "main"])
         .output()
         .unwrap();
@@ -306,13 +327,11 @@ fn test_external_cli_commit_detection() {
 
     // Commit via external git CLI command!
     fs::write(local_dir.path().join("external.txt"), "external\n").unwrap();
-    let _ = std::process::Command::new("git")
-        .current_dir(local_dir.path())
+    let _ = git_cmd(local_dir.path())
         .args(["add", "."])
         .output()
         .unwrap();
-    let _ = std::process::Command::new("git")
-        .current_dir(local_dir.path())
+    let _ = git_cmd(local_dir.path())
         .args(["commit", "-m", "External commit from terminal"])
         .output()
         .unwrap();

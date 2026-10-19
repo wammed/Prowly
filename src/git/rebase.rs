@@ -1,8 +1,8 @@
 //! Quick Interactive Rebase operations (Squash, Fixup, Reword).
 
+use crate::git::clean_git_command;
 use crate::git::types::GitError;
 use std::path::Path;
-use std::process::Command;
 
 /// Interactive rebase action per commit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -41,8 +41,7 @@ pub fn list_recent_commits(
     repo_dir: &Path,
     count: usize,
 ) -> Result<Vec<RebaseCommitItem>, GitError> {
-    let output = Command::new("git")
-        .current_dir(repo_dir)
+    let output = clean_git_command(repo_dir)
         .args([
             "log",
             &format!("-n{}", count),
@@ -85,8 +84,7 @@ pub fn quick_squash(repo_dir: &Path, count: usize, new_message: &str) -> Result<
     }
 
     // Soft reset HEAD~count
-    let reset_out = Command::new("git")
-        .current_dir(repo_dir)
+    let reset_out = clean_git_command(repo_dir)
         .args(["reset", "--soft", &format!("HEAD~{}", count)])
         .output()?;
 
@@ -98,8 +96,7 @@ pub fn quick_squash(repo_dir: &Path, count: usize, new_message: &str) -> Result<
     }
 
     // Commit with combined message
-    let commit_out = Command::new("git")
-        .current_dir(repo_dir)
+    let commit_out = clean_git_command(repo_dir)
         .args(["commit", "-m", new_message])
         .output()?;
 
@@ -115,8 +112,7 @@ pub fn quick_squash(repo_dir: &Path, count: usize, new_message: &str) -> Result<
 
 /// Reword the most recent commit message.
 pub fn reword_head_commit(repo_dir: &Path, new_message: &str) -> Result<(), GitError> {
-    let output = Command::new("git")
-        .current_dir(repo_dir)
+    let output = clean_git_command(repo_dir)
         .args(["commit", "--amend", "-m", new_message])
         .output()?;
 
@@ -130,8 +126,7 @@ pub fn reword_head_commit(repo_dir: &Path, new_message: &str) -> Result<(), GitE
 
 /// Fixup staged changes into the most recent commit without editing the message.
 pub fn fixup_head_commit(repo_dir: &Path) -> Result<(), GitError> {
-    let output = Command::new("git")
-        .current_dir(repo_dir)
+    let output = clean_git_command(repo_dir)
         .args(["commit", "--amend", "--no-edit"])
         .output()?;
 

@@ -2,7 +2,6 @@
 
 use crate::git::types::GitError;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 /// Representation of an active Git worktree.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -14,10 +13,11 @@ pub struct WorktreeItem {
     pub is_locked: bool,
 }
 
+use crate::git::clean_git_command;
+
 /// Retrieve all linked worktrees and main worktree.
 pub fn list_worktrees(repo_dir: &Path) -> Result<Vec<WorktreeItem>, GitError> {
-    let output = Command::new("git")
-        .current_dir(repo_dir)
+    let output = clean_git_command(repo_dir)
         .args(["worktree", "list", "--porcelain"])
         .output()?;
 
@@ -101,8 +101,7 @@ pub fn create_worktree(
     args.push(&path_str);
 
     if let Some(b) = branch {
-        let branch_check = Command::new("git")
-            .current_dir(repo_dir)
+        let branch_check = clean_git_command(repo_dir)
             .args(["rev-parse", "--verify", &format!("refs/heads/{}", b)])
             .output()?;
         if !branch_check.status.success() {
@@ -111,10 +110,7 @@ pub fn create_worktree(
         args.push(b);
     }
 
-    let output = Command::new("git")
-        .current_dir(repo_dir)
-        .args(&args)
-        .output()?;
+    let output = clean_git_command(repo_dir).args(&args).output()?;
 
     if !output.status.success() {
         let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
@@ -147,10 +143,7 @@ pub fn remove_worktree(
     }
     args.push(worktree_name_or_path);
 
-    let output = Command::new("git")
-        .current_dir(repo_dir)
-        .args(&args)
-        .output()?;
+    let output = clean_git_command(repo_dir).args(&args).output()?;
 
     if !output.status.success() {
         let err = String::from_utf8_lossy(&output.stderr).trim().to_string();

@@ -1,0 +1,19 @@
+#!/bin/sh
+# Prowly pre-commit hook: automatically runs format check, linter, and tests on commit.
+set -e
+
+# Unset Git repository environment variables set by git commit hook before running cargo,
+# preventing them from leaking into tests that spawn subshells or isolated test repositories.
+unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_PREFIX
+unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_AUTHOR_DATE GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL GIT_COMMITTER_DATE
+
+echo "🦀 [pre-commit] Checking formatting (cargo fmt)..."
+cargo fmt --check
+
+echo "🔍 [pre-commit] Running linter (cargo clippy)..."
+cargo clippy --all-targets --all-features -- -D warnings
+
+echo "🧪 [pre-commit] Running test suite (cargo test)..."
+cargo test --all-targets --all-features
+
+echo "✅ [pre-commit] All checks passed successfully!"

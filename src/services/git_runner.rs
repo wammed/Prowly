@@ -1,7 +1,7 @@
 //! Safe Git CLI execution service and argument tokenizer without shell invocation.
 
 use std::path::Path;
-use std::process::{Command, Output};
+use std::process::Output;
 
 /// Safe runner for Git commands that avoids any shell (`sh -c`) invocation.
 pub struct SafeGitRunner;
@@ -297,8 +297,7 @@ impl SafeGitRunner {
             ));
         }
 
-        Command::new("git")
-            .current_dir(workdir)
+        crate::git::clean_git_command(workdir)
             .arg(subcommand)
             .args(args)
             .output()

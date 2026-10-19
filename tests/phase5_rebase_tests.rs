@@ -3,64 +3,64 @@ use std::fs;
 use std::process::Command;
 use tempfile::tempdir;
 
+fn git_cmd(path: &std::path::Path) -> Command {
+    let mut cmd = Command::new("git");
+    cmd.current_dir(path)
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_INDEX_FILE")
+        .env_remove("GIT_WORK_TREE")
+        .env_remove("GIT_OBJECT_DIRECTORY")
+        .env_remove("GIT_ALTERNATE_OBJECT_DIRECTORIES")
+        .env_remove("GIT_COMMON_DIR")
+        .env_remove("GIT_PREFIX")
+        .env_remove("GIT_AUTHOR_NAME")
+        .env_remove("GIT_AUTHOR_EMAIL")
+        .env_remove("GIT_AUTHOR_DATE")
+        .env_remove("GIT_COMMITTER_NAME")
+        .env_remove("GIT_COMMITTER_EMAIL")
+        .env_remove("GIT_COMMITTER_DATE")
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_CONFIG_SYSTEM", "/dev/null");
+    cmd
+}
+
 fn setup_test_repo() -> tempfile::TempDir {
     let dir = tempdir().unwrap();
     let p = dir.path();
 
-    Command::new("git")
-        .args(["init", "-b", "main"])
-        .current_dir(p)
-        .output()
-        .unwrap();
+    git_cmd(p).args(["init", "-b", "main"]).output().unwrap();
 
-    Command::new("git")
+    git_cmd(p)
         .args(["config", "user.name", "TestUser"])
-        .current_dir(p)
         .output()
         .unwrap();
 
-    Command::new("git")
+    git_cmd(p)
         .args(["config", "user.email", "test@example.com"])
-        .current_dir(p)
         .output()
         .unwrap();
 
     // Commit 1
     fs::write(p.join("file1.txt"), "hello").unwrap();
-    Command::new("git")
-        .args(["add", "file1.txt"])
-        .current_dir(p)
-        .output()
-        .unwrap();
-    Command::new("git")
+    git_cmd(p).args(["add", "file1.txt"]).output().unwrap();
+    git_cmd(p)
         .args(["commit", "-m", "feat: initial commit"])
-        .current_dir(p)
         .output()
         .unwrap();
 
     // Commit 2
     fs::write(p.join("file2.txt"), "world").unwrap();
-    Command::new("git")
-        .args(["add", "file2.txt"])
-        .current_dir(p)
-        .output()
-        .unwrap();
-    Command::new("git")
+    git_cmd(p).args(["add", "file2.txt"]).output().unwrap();
+    git_cmd(p)
         .args(["commit", "-m", "fix: second commit"])
-        .current_dir(p)
         .output()
         .unwrap();
 
     // Commit 3
     fs::write(p.join("file3.txt"), "foo").unwrap();
-    Command::new("git")
-        .args(["add", "file3.txt"])
-        .current_dir(p)
-        .output()
-        .unwrap();
-    Command::new("git")
+    git_cmd(p).args(["add", "file3.txt"]).output().unwrap();
+    git_cmd(p)
         .args(["commit", "-m", "docs: third commit"])
-        .current_dir(p)
         .output()
         .unwrap();
 

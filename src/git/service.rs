@@ -1,5 +1,6 @@
 //! Git hybrid service engine combining in-process libgit2 queries with Git CLI.
 
+use crate::git::clean_git_command;
 use crate::git::types::{
     DiffHunk, DiffLine, DiffLineType, FileDiff, FileStatus, GitError, GitFileItem, GitRepoStatus,
     RepoOperationState,
@@ -7,7 +8,6 @@ use crate::git::types::{
 use crate::services::{BackupRecord, BackupService};
 use git2::{DiffOptions, Repository, Status, StatusOptions};
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 /// Main Git hybrid controller.
 pub struct GitService {
@@ -609,10 +609,7 @@ impl GitService {
 
     /// Initialize a new Git repository in the working directory.
     pub fn init_repo(dir: &std::path::Path) -> Result<(), GitError> {
-        let output = Command::new("git")
-            .current_dir(dir)
-            .args(["init"])
-            .output()?;
+        let output = clean_git_command(dir).args(["init"]).output()?;
         if output.status.success() {
             Ok(())
         } else {
@@ -641,8 +638,7 @@ impl GitService {
 
         let dest = target_dir.join(name);
 
-        let output = Command::new("git")
-            .current_dir(target_dir)
+        let output = clean_git_command(target_dir)
             .args(["clone", trimmed, name])
             .output()?;
 
@@ -750,10 +746,7 @@ impl GitService {
 
     /// Helper to run git command in the repository working directory.
     fn run_git_cli(&self, args: &[&str]) -> Result<String, GitError> {
-        let output = Command::new("git")
-            .current_dir(&self.workdir)
-            .args(args)
-            .output()?;
+        let output = clean_git_command(&self.workdir).args(args).output()?;
 
         if output.status.success() {
             Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())

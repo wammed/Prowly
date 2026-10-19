@@ -2,37 +2,43 @@ use prowly::git::worktree::{create_worktree, list_worktrees, remove_worktree};
 use std::process::Command;
 use tempfile::tempdir;
 
+fn git_cmd(path: &std::path::Path) -> Command {
+    let mut cmd = Command::new("git");
+    cmd.current_dir(path)
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_INDEX_FILE")
+        .env_remove("GIT_WORK_TREE")
+        .env_remove("GIT_OBJECT_DIRECTORY")
+        .env_remove("GIT_ALTERNATE_OBJECT_DIRECTORIES")
+        .env_remove("GIT_COMMON_DIR")
+        .env_remove("GIT_PREFIX");
+    cmd
+}
+
 fn setup_temp_repo() -> tempfile::TempDir {
     let dir = tempdir().expect("Failed to create tempdir");
     let path = dir.path();
 
     // Initialize git repo
-    let status = Command::new("git")
+    let status = git_cmd(path)
         .args(["init", "-b", "main"])
-        .current_dir(path)
         .status()
         .expect("git init failed");
     assert!(status.success());
 
     // Configure user name and email for commits
-    let _ = Command::new("git")
+    let _ = git_cmd(path)
         .args(["config", "user.name", "Test User"])
-        .current_dir(path)
         .status();
-    let _ = Command::new("git")
+    let _ = git_cmd(path)
         .args(["config", "user.email", "test@example.com"])
-        .current_dir(path)
         .status();
 
     // Create an initial commit so HEAD exists
     std::fs::write(path.join("init.txt"), "hello").unwrap();
-    let _ = Command::new("git")
-        .args(["add", "init.txt"])
-        .current_dir(path)
-        .status();
-    let _ = Command::new("git")
+    let _ = git_cmd(path).args(["add", "init.txt"]).status();
+    let _ = git_cmd(path)
         .args(["commit", "-m", "initial commit"])
-        .current_dir(path)
         .status();
 
     dir

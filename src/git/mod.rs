@@ -20,3 +20,21 @@ pub use types::{
     RepoOperationState,
 };
 pub use worktree::{create_worktree, list_worktrees, remove_worktree, WorktreeItem};
+
+use std::path::Path;
+use std::process::Command;
+
+/// Spawns a Git Command with parent/hook environment variables stripped,
+/// preventing leakage of GIT_DIR, GIT_INDEX_FILE, GIT_WORK_TREE, etc.
+pub fn clean_git_command(dir: &Path) -> Command {
+    let mut cmd = Command::new("git");
+    cmd.current_dir(dir)
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_INDEX_FILE")
+        .env_remove("GIT_WORK_TREE")
+        .env_remove("GIT_OBJECT_DIRECTORY")
+        .env_remove("GIT_ALTERNATE_OBJECT_DIRECTORIES")
+        .env_remove("GIT_COMMON_DIR")
+        .env_remove("GIT_PREFIX");
+    cmd
+}

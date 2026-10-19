@@ -1,8 +1,8 @@
 //! Git commit history retrieval, graph parsing, and commit manipulation.
 
+use crate::git::clean_git_command;
 use crate::git::types::GitError;
 use std::path::Path;
-use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// An item representing a commit in the history graph.
@@ -47,8 +47,7 @@ pub struct CommitDetail {
 
 /// Retrieve the commit history graph from git log.
 pub fn get_commit_history(repo_dir: &Path, count: usize) -> Result<Vec<HistoryRow>, GitError> {
-    let output = Command::new("git")
-        .current_dir(repo_dir)
+    let output = clean_git_command(repo_dir)
         .args([
             "log",
             "--graph",
@@ -103,8 +102,7 @@ pub fn get_commit_history(repo_dir: &Path, count: usize) -> Result<Vec<HistoryRo
 
 /// Retrieve full details and diff snippet for a specific commit hash.
 pub fn get_commit_details(repo_dir: &Path, commit_hash: &str) -> Result<CommitDetail, GitError> {
-    let output = Command::new("git")
-        .current_dir(repo_dir)
+    let output = clean_git_command(repo_dir)
         .args(["show", "--stat", "-p", commit_hash])
         .output()?;
 
@@ -192,8 +190,7 @@ pub fn get_commit_details(repo_dir: &Path, commit_hash: &str) -> Result<CommitDe
 
 /// Checkout a specific commit in detached HEAD mode.
 pub fn checkout_commit(repo_dir: &Path, commit_hash: &str) -> Result<(), GitError> {
-    let output = Command::new("git")
-        .current_dir(repo_dir)
+    let output = clean_git_command(repo_dir)
         .args(["checkout", commit_hash])
         .output()?;
 
@@ -211,8 +208,7 @@ pub fn create_branch_at_commit(
     commit_hash: &str,
     switch_to: bool,
 ) -> Result<(), GitError> {
-    let output = Command::new("git")
-        .current_dir(repo_dir)
+    let output = clean_git_command(repo_dir)
         .args(["branch", branch_name, commit_hash])
         .output()?;
 
@@ -222,8 +218,7 @@ pub fn create_branch_at_commit(
     }
 
     if switch_to {
-        let checkout_out = Command::new("git")
-            .current_dir(repo_dir)
+        let checkout_out = clean_git_command(repo_dir)
             .args(["checkout", branch_name])
             .output()?;
 
@@ -240,8 +235,7 @@ pub fn create_branch_at_commit(
 
 /// Cherry-pick a specific commit into the current HEAD.
 pub fn cherry_pick_commit(repo_dir: &Path, commit_hash: &str) -> Result<(), GitError> {
-    let output = Command::new("git")
-        .current_dir(repo_dir)
+    let output = clean_git_command(repo_dir)
         .args(["cherry-pick", commit_hash])
         .output()?;
 
@@ -254,8 +248,7 @@ pub fn cherry_pick_commit(repo_dir: &Path, commit_hash: &str) -> Result<(), GitE
 
 /// Revert a specific commit without opening an interactive editor.
 pub fn revert_commit(repo_dir: &Path, commit_hash: &str) -> Result<(), GitError> {
-    let output = Command::new("git")
-        .current_dir(repo_dir)
+    let output = clean_git_command(repo_dir)
         .args(["revert", "--no-edit", commit_hash])
         .output()?;
 
@@ -271,8 +264,7 @@ pub fn revert_commit(repo_dir: &Path, commit_hash: &str) -> Result<(), GitError>
 /// Returns the name of the safety backup branch created.
 pub fn time_machine_reset(repo_dir: &Path, commit_hash: &str) -> Result<String, GitError> {
     // 1. Get current branch name (or "HEAD" if detached)
-    let branch_out = Command::new("git")
-        .current_dir(repo_dir)
+    let branch_out = clean_git_command(repo_dir)
         .args(["rev-parse", "--abbrev-ref", "HEAD"])
         .output()?;
 
@@ -293,14 +285,12 @@ pub fn time_machine_reset(repo_dir: &Path, commit_hash: &str) -> Result<String, 
     let backup_branch = format!("backup/timemachine-{}-{}", clean_branch, timestamp);
 
     // 2. Create safety branch pointing to current HEAD
-    let _ = Command::new("git")
-        .current_dir(repo_dir)
+    let _ = clean_git_command(repo_dir)
         .args(["branch", &backup_branch, "HEAD"])
         .output();
 
     // 3. Reset hard to target commit
-    let reset_out = Command::new("git")
-        .current_dir(repo_dir)
+    let reset_out = clean_git_command(repo_dir)
         .args(["reset", "--hard", commit_hash])
         .output()?;
 
