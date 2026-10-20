@@ -17,11 +17,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Git auxiliary packages (git-gui, git-email)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends git-gui git-email
-
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
