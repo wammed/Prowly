@@ -153,11 +153,17 @@ fn test_git_cli_push_and_ahead_status() {
 
     let git = GitService::open(repo_path).unwrap();
 
-    // First push via CLI and set upstream
-    git_cmd(repo_path)
-        .args(["push", "-u", "origin", "main"])
+    // First push via CLI and set upstream using the current branch name (e.g. main/master)
+    let branch = git.get_status().unwrap().branch;
+    let push_out = git_cmd(repo_path)
+        .args(["push", "-u", "origin", &branch])
         .output()
         .unwrap();
+    assert!(
+        push_out.status.success(),
+        "Initial push failed: stderr={}",
+        String::from_utf8_lossy(&push_out.stderr)
+    );
 
     let status = git.get_status().unwrap();
     println!(
