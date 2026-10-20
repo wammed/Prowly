@@ -93,12 +93,6 @@ impl GitSubcommandDef {
             ],
         },
         GitSubcommandDef {
-            name: "citool",
-            description: "Graphical alternative to git-commit",
-            category: "Main",
-            common_flags: &["--amend"],
-        },
-        GitSubcommandDef {
             name: "clean",
             description: "Remove untracked files from the working tree",
             category: "Main",

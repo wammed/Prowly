@@ -87,6 +87,10 @@ fn test_matrix_all_subcommands_recognized_by_git_binary() {
         .filter(|l| !l.is_empty())
         .collect();
 
+    // Optional subcommands that may be split into separate packages by some distributions
+    // (e.g. git-email for 'send-email') and may not be installed on headless minimal environments.
+    const OPTIONAL_DISTRO_SUBCOMMANDS: &[&str] = &["send-email"];
+
     // Verify each cataloged command in Prowly is recognized by the system Git
     for sub in GitSubcommandDef::ALL {
         if system_cmds.contains(sub.name) {
@@ -101,6 +105,11 @@ fn test_matrix_all_subcommands_recognized_by_git_binary() {
             if code == 0 || code == 129 {
                 continue;
             }
+        }
+
+        // Gracefully allow known optional distribution-modular subcommands
+        if OPTIONAL_DISTRO_SUBCOMMANDS.contains(&sub.name) {
+            continue;
         }
 
         panic!(
