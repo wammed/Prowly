@@ -35,6 +35,8 @@ pub fn clean_git_command(dir: &Path) -> Command {
         .env_remove("GIT_OBJECT_DIRECTORY")
         .env_remove("GIT_ALTERNATE_OBJECT_DIRECTORIES")
         .env_remove("GIT_COMMON_DIR")
-        .env_remove("GIT_PREFIX");
+        .env_remove("GIT_PREFIX")
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("GCM_INTERACTIVE", "never");
     cmd
 }

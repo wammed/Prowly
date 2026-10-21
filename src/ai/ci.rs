@@ -37,10 +37,11 @@ Line 3+: Detailed explanation and code snippets"
         }
     };
 
+    let masked_logs = crate::ai::mask_secrets(log_snippet);
     let user = format!(
         "Workflow Run: {}\n\nError Log:\n{}",
         workflow_name,
-        log_snippet.chars().take(4000).collect::<String>()
+        masked_logs.chars().take(4000).collect::<String>()
     );
 
     let prompt = AiPrompt::system_and_user(system, user);

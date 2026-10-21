@@ -90,7 +90,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         let theme = prowly::ui::Theme::get(config.theme);
         let icons = prowly::ui::Icons::new(config.use_nerd_font);
-        println!("{} Prowly v0.1.0", icons.branch());
+        println!("{} Prowly v{}", icons.branch(), env!("CARGO_PKG_VERSION"));
         println!("Theme: {} (dark={})", theme.name, theme.is_dark);
         println!("Language: {}", config.language.display_name());
         println!("Nerd Font: {}", config.use_nerd_font);
@@ -102,12 +102,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let default_panic = panic::take_hook();
     panic::set_hook(Box::new(move |panic_info| {
         let _ = disable_raw_mode();
-        let _ = execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture);
+        let _ = execute!(
+            io::stdout(),
+            LeaveAlternateScreen,
+            DisableMouseCapture,
+            crossterm::cursor::Show
+        );
         default_panic(panic_info);
     }));
 
     // Setup terminal with alternate screen and mouse tracking
     enable_raw_mode()?;
+    let _terminal_guard = TerminalGuard;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
     let backend = CrosstermBackend::new(stdout);
@@ -125,6 +131,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             terminal.clear()?;
             app.needs_clear = false;
         }
+        if let Some(path) = app.take_pending_editor() {
+            let pref = app.config.editor.command.as_deref();
+            events.pause();
+            let res = prowly::services::open_external_editor_with_preference(&path, pref);
+            events.resume();
+            events.flush();
+            if res.is_ok() {
+                app.refresh_git_status();
+                app.last_status = Some(format!("Edited {}", path.display()));
+            }
+            app.needs_clear = true;
+        }
+
         terminal.draw(|f| app.render(f))?;
 
         if let Some(event) = events.next().await {
@@ -143,22 +162,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let _ = app.config.save();
 
-    // Restore terminal
-    disable_raw_mode()?;
-    execute!(
-        terminal.backend_mut(),
-        LeaveAlternateScreen,
-        DisableMouseCapture
-    )?;
-    terminal.show_cursor()?;
+    // Terminal guard will automatically restore terminal on drop, but explicit cleanup is good practice
+    drop(_terminal_guard);
 
     Ok(())
+}
+
+/// RAII Guard that unconditionally restores terminal mode and alternate screen when dropped.
+struct TerminalGuard;
+
+impl Drop for TerminalGuard {
+    fn drop(&mut self) {
+        let _ = disable_raw_mode();
+        let _ = execute!(
+            io::stdout(),
+            LeaveAlternateScreen,
+            DisableMouseCapture,
+            crossterm::cursor::Show
+        );
+    }
 }
 
 fn print_help(config: &Config) {
     let icons = prowly::ui::Icons::new(config.use_nerd_font);
     if config.language == prowly::i18n::Language::Ja {
-        println!("{} Prowly v0.1.0", icons.branch());
+        println!("{} Prowly v{}", icons.branch(), env!("CARGO_PKG_VERSION"));
         println!("全面統合AIコパイロット搭載 ターミナル Git & GitHub クライアント\n");
         println!("使用方法:");
         println!("    prowly [オプション] [リポジトリパス]\n");
@@ -172,7 +200,7 @@ fn print_help(config: &Config) {
         println!("        --lang <CODE>     UI表示言語を指定 (en, ja)");
         println!("        --no-nerd-font    Nerd Font グリフを無効化 (ASCII/Unicode フォールバックを使用)");
     } else {
-        println!("{} Prowly v0.1.0", icons.branch());
+        println!("{} Prowly v{}", icons.branch(), env!("CARGO_PKG_VERSION"));
         println!("Terminal Git & GitHub client with Omnipresent AI\n");
         println!("USAGE:");
         println!("    prowly [OPTIONS] [PATH]\n");

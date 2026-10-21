@@ -29,10 +29,15 @@ pub enum AiError {
 #[serde(rename_all = "snake_case")]
 pub enum AiProvider {
     #[default]
+    #[serde(alias = "openai", alias = "OpenAi", alias = "open-ai")]
     OpenAi,
+    #[serde(alias = "anthropic", alias = "Anthropic")]
     Anthropic,
+    #[serde(alias = "gemini", alias = "Gemini")]
     Gemini,
+    #[serde(alias = "ollama", alias = "Ollama")]
     Ollama,
+    #[serde(alias = "custom", alias = "Custom")]
     Custom,
 }
 
@@ -152,6 +157,16 @@ pub struct AiConfig {
     pub max_tokens: Option<u32>,
     #[serde(default)]
     pub num_ctx: Option<u32>,
+    /// Ephemeral environment-provided API key (never written to config file).
+    #[serde(skip)]
+    pub env_api_key: Option<String>,
+}
+
+impl AiConfig {
+    /// Return the active API key, preferring explicit config key over environment variable key.
+    pub fn effective_api_key(&self) -> Option<&str> {
+        self.api_key.as_deref().or(self.env_api_key.as_deref())
+    }
 }
 
 impl Default for AiConfig {
@@ -164,6 +179,7 @@ impl Default for AiConfig {
             temperature: Some(0.3),
             max_tokens: Some(2048),
             num_ctx: Some(8192),
+            env_api_key: None,
         }
     }
 }
@@ -199,8 +215,9 @@ fn default_http_client() -> reqwest::Client {
 fn sanitize_error_body(body: String) -> String {
     let masked = crate::ai::mask_secrets(&body);
     let trimmed = masked.trim();
-    if trimmed.len() > 500 {
-        format!("{}... [truncated]", &trimmed[..500])
+    if trimmed.chars().count() > 500 {
+        let truncated: String = trimmed.chars().take(500).collect();
+        format!("{}... [truncated]", truncated)
     } else {
         trimmed.to_string()
     }
@@ -235,7 +252,7 @@ impl AiClient for OpenAiClient {
 
         let mut headers = HeaderMap::new();
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-        if let Some(key) = &self.config.api_key {
+        if let Some(key) = self.config.effective_api_key() {
             let auth = format!("Bearer {}", key);
             headers.insert(
                 AUTHORIZATION,
@@ -315,8 +332,7 @@ impl AiClient for AnthropicClient {
     async fn complete(&self, prompt: &AiPrompt) -> Result<AiResponse, AiError> {
         let key = self
             .config
-            .api_key
-            .as_deref()
+            .effective_api_key()
             .ok_or_else(|| AiError::MissingApiKey("Anthropic".to_string()))?;
 
         let base = self
@@ -432,8 +448,7 @@ impl AiClient for GeminiClient {
     async fn complete(&self, prompt: &AiPrompt) -> Result<AiResponse, AiError> {
         let key = self
             .config
-            .api_key
-            .as_deref()
+            .effective_api_key()
             .ok_or_else(|| AiError::MissingApiKey("Gemini".to_string()))?;
 
         let base = self
@@ -448,24 +463,39 @@ impl AiClient for GeminiClient {
         );
 
         let mut contents = Vec::new();
+        let mut system_instruction = None;
         for msg in &prompt.messages {
-            let role_str = match msg.role {
-                AiRole::User | AiRole::System => "user",
-                AiRole::Assistant => "model",
-            };
-            contents.push(serde_json::json!({
-                "role": role_str,
-                "parts": [{ "text": msg.content }]
-            }));
+            match msg.role {
+                AiRole::System => {
+                    system_instruction = Some(serde_json::json!({
+                        "parts": [{ "text": msg.content }]
+                    }));
+                }
+                AiRole::User => {
+                    contents.push(serde_json::json!({
+                        "role": "user",
+                        "parts": [{ "text": msg.content }]
+                    }));
+                }
+                AiRole::Assistant => {
+                    contents.push(serde_json::json!({
+                        "role": "model",
+                        "parts": [{ "text": msg.content }]
+                    }));
+                }
+            }
         }
 
-        let body = serde_json::json!({
+        let mut body = serde_json::json!({
             "contents": contents,
             "generationConfig": {
                 "temperature": prompt.temperature.or(self.config.temperature).unwrap_or(0.3),
                 "maxOutputTokens": prompt.max_tokens.or(self.config.max_tokens).unwrap_or(2048)
             }
         });
+        if let Some(sys) = system_instruction {
+            body["systemInstruction"] = sys;
+        }
 
         let res = self
             .client
@@ -565,6 +595,7 @@ impl AiClient for OllamaClient {
             .collect();
 
         let num_ctx = self.config.num_ctx.unwrap_or(8192);
+        let max_tokens = prompt.max_tokens.or(self.config.max_tokens).unwrap_or(2048);
 
         let body = serde_json::json!({
             "model": self.config.model,
@@ -572,7 +603,8 @@ impl AiClient for OllamaClient {
             "stream": false,
             "options": {
                 "temperature": prompt.temperature.or(self.config.temperature).unwrap_or(0.3),
-                "num_ctx": num_ctx
+                "num_ctx": num_ctx,
+                "num_predict": max_tokens,
             }
         });
 

@@ -177,6 +177,33 @@ impl SafeGitRunner {
         }
 
         let args = tokens[1..].to_vec();
+
+        // Strict deny-list for argument patterns that enable Remote Code Execution or arbitrary file write
+        for arg in &args {
+            let lower = arg.to_lowercase();
+            if lower == "--exec" || lower.starts_with("--exec=") || lower == "-x" {
+                return Err(
+                    "Security Guard: 'rebase --exec' is prohibited for AI-generated commands."
+                        .to_string(),
+                );
+            }
+            if lower == "--output" || lower.starts_with("--output=") {
+                return Err(
+                    "Security Guard: '--output' argument is prohibited for AI-generated commands."
+                        .to_string(),
+                );
+            }
+            if lower.starts_with("--upload-pack") || lower.starts_with("--receive-pack") {
+                return Err(
+                    "Security Guard: Custom upload/receive-pack helpers are prohibited."
+                        .to_string(),
+                );
+            }
+            if lower == "--ext-diff" || lower == "--textconv" {
+                return Err("Security Guard: External diff drivers are prohibited for AI-generated commands.".to_string());
+            }
+        }
+
         Ok((subcommand, args))
     }
 
@@ -198,6 +225,12 @@ impl SafeGitRunner {
                 });
                 if has_force {
                     return Some("Force push will overwrite remote commit history!");
+                }
+                let has_delete = lower_args.iter().any(|arg| {
+                    arg == "--delete" || arg == "-d" || (arg.starts_with(':') && arg.len() > 1)
+                });
+                if has_delete {
+                    return Some("Deleting remote branch or tag will remove remote history!");
                 }
             }
             "reset" => {
@@ -252,24 +285,39 @@ impl SafeGitRunner {
                             && !arg.starts_with("--")
                             && (arg.contains('B') || arg.contains('C')))
                 });
-                if has_force || has_force_create {
+                let has_dash_dash = lower_args.iter().any(|arg| arg == "--");
+                if has_force || has_force_create || has_dash_dash {
                     return Some(
-                        "Force checkout or switch will overwrite local changes or branches!",
+                        "Force checkout or file restoration will overwrite local changes or branches!",
                     );
                 }
             }
             "restore" => {
-                let touches_worktree = lower_args
+                let has_staged = lower_args
                     .iter()
-                    .any(|arg| arg == "-w" || arg == "--worktree");
-                let has_source_or_staged = lower_args.iter().any(|arg| {
-                    arg == "-s"
-                        || arg.starts_with("--source=")
-                        || arg == "--source"
-                        || arg == "--staged"
-                });
-                if touches_worktree && has_source_or_staged {
-                    return Some("Restoring worktree files will overwrite uncommitted changes!");
+                    .any(|arg| arg == "--staged" || arg == "-s");
+                let has_worktree = lower_args
+                    .iter()
+                    .any(|arg| arg == "--worktree" || arg == "-w");
+                // If --staged is used without --worktree, it only unstages changes without touching worktree files
+                if !has_staged || has_worktree {
+                    return Some("Restoring files will overwrite uncommitted worktree changes!");
+                }
+            }
+            "stash" => {
+                let is_destructive = lower_args.iter().any(|arg| arg == "drop" || arg == "clear");
+                if is_destructive {
+                    return Some(
+                        "Dropping or clearing stash will permanently remove saved stash entries!",
+                    );
+                }
+            }
+            "rebase" => {
+                let has_exec = lower_args
+                    .iter()
+                    .any(|arg| arg == "-x" || arg == "--exec" || arg.starts_with("--exec="));
+                if has_exec {
+                    return Some("Rebase --exec executes external commands!");
                 }
             }
             _ => {}

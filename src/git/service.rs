@@ -369,17 +369,39 @@ impl GitService {
     ) -> Result<BackupRecord, GitError> {
         let full_path = self.validate_relative_repo_path(path)?;
         let record = backup_service.backup_file(&full_path)?;
-        self.apply_discard_to_worktree_and_index(path)?;
+        self.apply_discard_to_worktree_and_index(path, None)?;
+        Ok(record)
+    }
+
+    /// Discard targeted staged or unstaged modifications for a file safely with an automated soft backup.
+    pub fn soft_discard_targeted(
+        &self,
+        path: &str,
+        staged: bool,
+        backup_service: &BackupService,
+    ) -> Result<BackupRecord, GitError> {
+        let full_path = self.validate_relative_repo_path(path)?;
+        let record = backup_service.backup_file(&full_path)?;
+        self.apply_discard_to_worktree_and_index(path, Some(staged))?;
         Ok(record)
     }
 
     /// Discard modifications for a file directly without creating a backup.
     pub fn hard_discard(&self, path: &str) -> Result<(), GitError> {
-        self.apply_discard_to_worktree_and_index(path)
+        self.apply_discard_to_worktree_and_index(path, None)
+    }
+
+    /// Discard targeted staged or unstaged modifications for a file directly.
+    pub fn hard_discard_targeted(&self, path: &str, staged: bool) -> Result<(), GitError> {
+        self.apply_discard_to_worktree_and_index(path, Some(staged))
     }
 
     /// Internal helper that cleanly discards changes based on Git status (untracked, staged, unstaged, deleted).
-    fn apply_discard_to_worktree_and_index(&self, path: &str) -> Result<(), GitError> {
+    fn apply_discard_to_worktree_and_index(
+        &self,
+        path: &str,
+        staged_target: Option<bool>,
+    ) -> Result<(), GitError> {
         let full_path = self.validate_relative_repo_path(path)?;
         let status = self
             .repo
@@ -394,42 +416,82 @@ impl GitService {
             .map(|t| t.get_path(Path::new(path)).is_ok())
             .unwrap_or(false);
 
-        if !in_head {
-            // File is not in HEAD (it is newly added or untracked)
-            if status.intersects(
-                git2::Status::INDEX_NEW
-                    | git2::Status::INDEX_MODIFIED
-                    | git2::Status::INDEX_DELETED
-                    | git2::Status::INDEX_RENAMED
-                    | git2::Status::INDEX_TYPECHANGE,
-            ) {
-                self.unstage_file(path)?;
-            }
-
-            if full_path.is_file() {
-                std::fs::remove_file(&full_path)?;
-            } else if full_path.is_dir() {
-                std::fs::remove_dir_all(&full_path)?;
-            }
-            return Ok(());
-        }
-
-        // File is in HEAD: unstage any index changes and restore HEAD version to worktree
-        if status.intersects(
-            git2::Status::INDEX_NEW
-                | git2::Status::INDEX_MODIFIED
-                | git2::Status::INDEX_DELETED
-                | git2::Status::INDEX_RENAMED
-                | git2::Status::INDEX_TYPECHANGE,
-        ) {
-            self.unstage_file(path)?;
-        }
-
         let mut opts = git2::build::CheckoutBuilder::new();
         opts.force().path(path);
-        self.repo.checkout_head(Some(&mut opts))?;
 
-        Ok(())
+        match staged_target {
+            Some(false) => {
+                // User explicitly requested to discard UNSTAGED modifications only
+                if status.contains(git2::Status::WT_NEW)
+                    && !status.intersects(git2::Status::INDEX_NEW | git2::Status::INDEX_MODIFIED)
+                {
+                    // Untracked file
+                    if full_path.is_file() {
+                        std::fs::remove_file(&full_path)?;
+                    } else if full_path.is_dir() {
+                        std::fs::remove_dir_all(&full_path)?;
+                    }
+                } else if status.intersects(
+                    git2::Status::WT_MODIFIED
+                        | git2::Status::WT_DELETED
+                        | git2::Status::WT_RENAMED
+                        | git2::Status::WT_TYPECHANGE,
+                ) {
+                    // Restore worktree from index to preserve whatever was staged
+                    self.repo.checkout_index(None, Some(&mut opts))?;
+                }
+                Ok(())
+            }
+            Some(true) => {
+                // User explicitly requested to discard STAGED modifications
+                if in_head {
+                    self.unstage_file(path)?;
+                    self.repo.checkout_head(Some(&mut opts))?;
+                } else {
+                    self.unstage_file(path)?;
+                    if full_path.is_file() {
+                        std::fs::remove_file(&full_path)?;
+                    } else if full_path.is_dir() {
+                        std::fs::remove_dir_all(&full_path)?;
+                    }
+                }
+                Ok(())
+            }
+            None => {
+                // Full discard (both staged and unstaged)
+                if !in_head {
+                    if status.intersects(
+                        git2::Status::INDEX_NEW
+                            | git2::Status::INDEX_MODIFIED
+                            | git2::Status::INDEX_DELETED
+                            | git2::Status::INDEX_RENAMED
+                            | git2::Status::INDEX_TYPECHANGE,
+                    ) {
+                        self.unstage_file(path)?;
+                    }
+
+                    if full_path.is_file() {
+                        std::fs::remove_file(&full_path)?;
+                    } else if full_path.is_dir() {
+                        std::fs::remove_dir_all(&full_path)?;
+                    }
+                    return Ok(());
+                }
+
+                if status.intersects(
+                    git2::Status::INDEX_NEW
+                        | git2::Status::INDEX_MODIFIED
+                        | git2::Status::INDEX_DELETED
+                        | git2::Status::INDEX_RENAMED
+                        | git2::Status::INDEX_TYPECHANGE,
+                ) {
+                    self.unstage_file(path)?;
+                }
+
+                self.repo.checkout_head(Some(&mut opts))?;
+                Ok(())
+            }
+        }
     }
 
     /// Compute structured diff for a file (or whole repo if path is None).
@@ -509,37 +571,37 @@ impl GitService {
         Ok(file_diff)
     }
 
-    /// Create a commit with the staged index.
+    /// Create a commit with the staged index using the Git CLI, ensuring hooks (pre-commit, commit-msg)
+    /// and commit.gpgsign signatures are fully respected.
     pub fn commit(&self, message: &str) -> Result<git2::Oid, GitError> {
-        let mut index = self.repo.index()?;
-        let tree_oid = index.write_tree()?;
-        index.write()?;
-        let tree = self.repo.find_tree(tree_oid)?;
-
-        let sig = self.repo.signature()?;
-        let head = self.repo.head();
-
-        let parents: Vec<git2::Commit> = match head {
-            Ok(ref h) => match h.peel_to_commit() {
-                Ok(c) => vec![c],
-                Err(_) => Vec::new(),
-            },
-            Err(_) => Vec::new(),
-        };
-
-        // Guard against creating accidental empty commits
-        if let Some(parent) = parents.first() {
-            if parent.tree_id() == tree_oid {
-                return Err(GitError::Cli("No staged changes to commit".to_string()));
-            }
+        let trimmed_msg = message.trim();
+        if trimmed_msg.is_empty() {
+            return Err(GitError::Cli("Commit message cannot be empty".to_string()));
         }
 
-        let parent_refs: Vec<&git2::Commit> = parents.iter().collect();
-        let commit_oid =
-            self.repo
-                .commit(Some("HEAD"), &sig, &sig, message, &tree, &parent_refs)?;
+        let mut child = crate::git::clean_git_command(self.workdir())
+            .args(["commit", "-F", "-"])
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()?;
 
-        Ok(commit_oid)
+        if let Some(mut stdin) = child.stdin.take() {
+            use std::io::Write;
+            stdin.write_all(message.as_bytes())?;
+        }
+
+        let output = child.wait_with_output()?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let msg = if !stderr.is_empty() { stderr } else { stdout };
+            return Err(GitError::Cli(msg));
+        }
+
+        let head = self.repo.head()?;
+        let commit = head.peel_to_commit()?;
+        Ok(commit.id())
     }
 
     /// Commit staged changes with summary and optional description.

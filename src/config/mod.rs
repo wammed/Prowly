@@ -84,6 +84,9 @@ pub struct Config {
     /// Recent repositories history
     #[serde(default)]
     pub recent_repositories: Vec<String>,
+    /// Whether auto-save to disk is enabled (disabled during corrupted load or in tests)
+    #[serde(skip)]
+    pub auto_save_enabled: bool,
 }
 
 impl Default for Config {
@@ -97,75 +100,57 @@ impl Default for Config {
             editor: EditorConfig::default(),
             last_repository: None,
             recent_repositories: Vec::new(),
+            auto_save_enabled: true,
         }
     }
 }
 
+/// Partial configuration for local workspace repository (`./prowly.toml`).
+#[derive(Debug, Deserialize)]
+struct WorkspaceConfig {
+    theme: Option<ThemeId>,
+    language: Option<Language>,
+    use_nerd_font: Option<bool>,
+    git: Option<WorkspaceGitConfig>,
+    ai: Option<WorkspaceAiConfig>,
+    editor: Option<WorkspaceEditorConfig>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkspaceGitConfig {
+    soft_discard_backup: Option<bool>,
+    auto_fetch_interval_secs: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkspaceAiConfig {
+    api_key: Option<String>,
+    api_base: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkspaceEditorConfig {
+    command: Option<String>,
+}
+
 impl Config {
-    /// Return the standard template content for config.toml.
+    /// Return the standard template content for config.toml directly synced from config.toml.example.
     pub fn template_content() -> &'static str {
-        r#"# ==============================================================================
-# Prowly Configuration File
-# Location: ~/.config/prowly/config.toml
-# ==============================================================================
-
-# UI Theme: CatppuccinMocha, TokyoNight, GruvboxDark, Nord, Dracula, SolarizedDark, OneDark, MonokaiPro, etc. (21 themes)
-theme = "CatppuccinMocha"
-
-# Language: "en" (English), "ja" (日本語)
-language = "en"
-
-# Nerd Font glyphs: true (recommended for Nerd Font users), false (ASCII fallback)
-use_nerd_font = true
-
-# ------------------------------------------------------------------------------
-# AI Integration (BYOK - Bring Your Own Key)
-# ------------------------------------------------------------------------------
-[ai]
-# Provider: "openai", "anthropic", "gemini", "ollama", "custom"
-provider = "openai"
-
-# Model name:
-# - OpenAI: "gpt-4o", "gpt-4o-mini", "o3-mini"
-# - Anthropic: "claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022"
-# - Gemini: "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash"
-# - Ollama: "llama3.2:latest", "deepseek-r1:latest", "codellama"
-model = "gpt-4o-mini"
-
-# API Key (or set OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY env vars)
-# Note: For Ollama, no API key is required.
-# api_key = "your-api-key-here"
-
-# Custom API Base / Endpoint (optional override)
-# Supports http://localhost:11434 and http://localhost:11434/api for Ollama.
-# api_base = "http://localhost:11434"
-
-temperature = 0.3
-max_tokens = 2048
-num_ctx = 8192
-
-# ------------------------------------------------------------------------------
-# Git Engine Preferences
-# ------------------------------------------------------------------------------
-[git]
-soft_discard_backup = true
-auto_fetch_interval_secs = 60
-
-# ------------------------------------------------------------------------------
-# External Editor Preferences
-# ------------------------------------------------------------------------------
-[editor]
-# command = "nvim"
-"#
+        include_str!("../../config.toml.example")
     }
 
-    /// Standard user config path (`~/.config/prowly/config.toml` or OS equivalent).
+    /// Standard user config path (`~/.config/prowly/config.toml` or OS equivalent, or overridden by `PROWLY_CONFIG_DIR`).
     pub fn standard_config_path() -> Result<PathBuf, ConfigError> {
+        if let Ok(dir) = std::env::var("PROWLY_CONFIG_DIR") {
+            if !dir.trim().is_empty() {
+                return Ok(PathBuf::from(dir).join("config.toml"));
+            }
+        }
         let base = dirs::config_dir().ok_or(ConfigError::NoConfigDir)?;
         Ok(base.join("prowly").join("config.toml"))
     }
 
-    /// Ensure ~/.config/prowly/config.toml template exists, creating it if absent with restricted permissions.
+    /// Ensure ~/.config/prowly/config.toml template exists, creating it if absent with restricted permissions (0700 dir, 0600 file).
     pub fn ensure_template_exists() -> Result<PathBuf, ConfigError> {
         let std_path = Self::standard_config_path()?;
         if !std_path.is_file() {
@@ -177,11 +162,22 @@ auto_fetch_interval_secs = 60
                     let _ = fs::set_permissions(parent, fs::Permissions::from_mode(0o700));
                 }
             }
-            fs::write(&std_path, Self::template_content())?;
             #[cfg(unix)]
             {
-                use std::os::unix::fs::PermissionsExt;
-                let _ = fs::set_permissions(&std_path, fs::Permissions::from_mode(0o600));
+                use std::io::Write;
+                use std::os::unix::fs::OpenOptionsExt;
+                let mut file = fs::OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .truncate(true)
+                    .mode(0o600)
+                    .open(&std_path)?;
+                file.write_all(Self::template_content().as_bytes())?;
+                file.sync_all()?;
+            }
+            #[cfg(not(unix))]
+            {
+                fs::write(&std_path, Self::template_content())?;
             }
         }
         Ok(std_path)
@@ -195,7 +191,29 @@ auto_fetch_interval_secs = 60
         // Step 1: Load trusted user config
         let mut config = if let Ok(std_path) = Self::ensure_template_exists() {
             if std_path.is_file() {
-                Self::load_from_path(&std_path).unwrap_or_default()
+                match Self::load_from_path(&std_path) {
+                    Ok(cfg) => cfg,
+                    Err(e) => {
+                        eprintln!(
+                            "⚠️ Warning: Failed to parse user configuration at {:?}: {}",
+                            std_path, e
+                        );
+                        let bak_path = std_path.with_extension("toml.bak");
+                        if let Err(bak_err) = fs::copy(&std_path, &bak_path) {
+                            eprintln!(
+                                "⚠️ Failed to create config backup {:?}: {}",
+                                bak_path, bak_err
+                            );
+                        } else {
+                            eprintln!("⚠️ Saved backup of existing config to {:?}", bak_path);
+                        }
+                        // CRITICAL: Protect user's broken file from being silently overwritten
+                        Self {
+                            auto_save_enabled: false,
+                            ..Default::default()
+                        }
+                    }
+                }
             } else {
                 Self::default()
             }
@@ -203,30 +221,45 @@ auto_fetch_interval_secs = 60
             Self::default()
         };
 
-        // Step 2: Populate environment API keys into user config
+        // Step 2: Populate environment API keys into ephemeral runtime config
         config.populate_api_keys_from_env();
 
         // Step 3: Check local repository `./prowly.toml` for safe workspace overrides
         let local_path = Path::new("prowly.toml");
         if local_path.is_file() {
             if let Ok(content) = fs::read_to_string(local_path) {
-                if let Ok(local_cfg) = toml::from_str::<Config>(&content) {
-                    if local_cfg.ai.api_base.is_some() || local_cfg.ai.api_key.is_some() {
-                        eprintln!(
-                            "⚠️ Security Guard: Local prowly.toml cannot override AI API keys or endpoints. Ignored."
-                        );
+                if let Ok(local_cfg) = toml::from_str::<WorkspaceConfig>(&content) {
+                    if let Some(ref ai) = local_cfg.ai {
+                        if ai.api_base.is_some() || ai.api_key.is_some() {
+                            eprintln!(
+                                "⚠️ Security Guard: Local prowly.toml cannot override AI API keys or endpoints. Ignored."
+                            );
+                        }
                     }
-                    if local_cfg.editor.command.is_some() {
-                        eprintln!(
-                            "⚠️ Security Guard: Local prowly.toml cannot override editor command. Ignored."
-                        );
+                    if let Some(ref ed) = local_cfg.editor {
+                        if ed.command.is_some() {
+                            eprintln!(
+                                "⚠️ Security Guard: Local prowly.toml cannot override editor command. Ignored."
+                            );
+                        }
                     }
-                    config.theme = local_cfg.theme;
-                    config.language = local_cfg.language;
-                    config.use_nerd_font = local_cfg.use_nerd_font;
-                    config.git.soft_discard_backup = local_cfg.git.soft_discard_backup;
-                    config.git.auto_fetch_interval_secs = local_cfg.git.auto_fetch_interval_secs;
-                    // Note: config.editor.command is deliberately NOT overridden from local workspace config!
+                    if let Some(theme) = local_cfg.theme {
+                        config.theme = theme;
+                    }
+                    if let Some(language) = local_cfg.language {
+                        config.language = language;
+                    }
+                    if let Some(use_nerd_font) = local_cfg.use_nerd_font {
+                        config.use_nerd_font = use_nerd_font;
+                    }
+                    if let Some(git) = local_cfg.git {
+                        if let Some(soft) = git.soft_discard_backup {
+                            config.git.soft_discard_backup = soft;
+                        }
+                        if let Some(interval) = git.auto_fetch_interval_secs {
+                            config.git.auto_fetch_interval_secs = interval;
+                        }
+                    }
                 }
             }
         }
@@ -248,23 +281,52 @@ auto_fetch_interval_secs = 60
         self.save_to_path(&path)
     }
 
-    /// Save configuration to an explicit file path, creating parent directories if needed and setting 0600 on Unix.
+    /// Save configuration to an explicit file path atomically, creating parent directories if needed and setting 0600 on Unix.
     pub fn save_to_path(&self, path: &Path) -> Result<(), ConfigError> {
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                let _ = fs::set_permissions(parent, fs::Permissions::from_mode(0o700));
-            }
+        if !self.auto_save_enabled {
+            return Ok(());
         }
-        let content = toml::to_string_pretty(self)?;
-        fs::write(path, content)?;
+        let parent = match path.parent() {
+            Some(p) => p,
+            None => return Err(ConfigError::NoConfigDir),
+        };
+        fs::create_dir_all(parent)?;
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o600));
+            let _ = fs::set_permissions(parent, fs::Permissions::from_mode(0o700));
         }
+        let content = toml::to_string_pretty(self)?;
+
+        // Atomic write: write to a temporary file with restricted mode 0600, then rename to target path.
+        let tmp_path = parent.join(format!(
+            ".prowly_cfg_{}_{}.tmp",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+
+        #[cfg(unix)]
+        {
+            use std::io::Write;
+            use std::os::unix::fs::OpenOptionsExt;
+            let mut file = fs::OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .mode(0o600)
+                .open(&tmp_path)?;
+            file.write_all(content.as_bytes())?;
+            file.sync_all()?;
+        }
+        #[cfg(not(unix))]
+        {
+            fs::write(&tmp_path, content)?;
+        }
+
+        fs::rename(&tmp_path, path)?;
         Ok(())
     }
 
@@ -303,25 +365,25 @@ auto_fetch_interval_secs = 60
         }
     }
 
-    /// Automatically read standard environment variables if API keys are not specified.
+    /// Automatically read standard environment variables into ephemeral env_api_key (never saved to file).
     pub fn populate_api_keys_from_env(&mut self) {
-        if self.ai.api_key.is_none() {
+        if self.ai.api_key.is_none() && self.ai.env_api_key.is_none() {
             match self.ai.provider {
                 crate::ai::AiProvider::OpenAi => {
                     if let Ok(key) = std::env::var("OPENAI_API_KEY") {
-                        self.ai.api_key = Some(key);
+                        self.ai.env_api_key = Some(key);
                     }
                 }
                 crate::ai::AiProvider::Anthropic => {
                     if let Ok(key) = std::env::var("ANTHROPIC_API_KEY") {
-                        self.ai.api_key = Some(key);
+                        self.ai.env_api_key = Some(key);
                     }
                 }
                 crate::ai::AiProvider::Gemini => {
                     if let Ok(key) = std::env::var("GEMINI_API_KEY") {
-                        self.ai.api_key = Some(key);
+                        self.ai.env_api_key = Some(key);
                     } else if let Ok(key) = std::env::var("GOOGLE_API_KEY") {
-                        self.ai.api_key = Some(key);
+                        self.ai.env_api_key = Some(key);
                     }
                 }
                 _ => {}

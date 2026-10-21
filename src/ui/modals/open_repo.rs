@@ -1211,13 +1211,10 @@ impl OpenRepoModal {
                     };
 
                     let name_max_w = (left_w as usize).saturating_sub(branch_info.len() + 6);
-                    let display_name = if item.name.len() > name_max_w {
-                        format!("{}...", &item.name[..name_max_w.saturating_sub(3)])
-                    } else {
-                        item.name.clone()
-                    };
-
-                    let line_w = 4 + display_name.len() + branch_info.len();
+                    let display_name = crate::ui::truncate_display_width(&item.name, name_max_w);
+                    let line_w = 4
+                        + unicode_width::UnicodeWidthStr::width(display_name.as_str())
+                        + branch_info.len();
                     let pad = (left_w as usize).saturating_sub(line_w);
 
                     row_spans.push(Span::styled(format!(" {} ", icon), style));
@@ -1342,14 +1339,13 @@ impl OpenRepoModal {
                         let prefix = "  ";
                         let max_name_w =
                             (right_w as usize).saturating_sub(prefix.len() + btn_w + 2);
-                        let disp_name = if clean_name.len() > max_name_w {
-                            format!("{}...", &clean_name[..max_name_w.saturating_sub(3)])
-                        } else {
-                            clean_name
-                        };
+                        let disp_name = crate::ui::truncate_display_width(&clean_name, max_name_w);
 
-                        let pad = (right_w as usize)
-                            .saturating_sub(prefix.len() + disp_name.len() + btn_w);
+                        let pad = (right_w as usize).saturating_sub(
+                            prefix.len()
+                                + unicode_width::UnicodeWidthStr::width(disp_name.as_str())
+                                + btn_w,
+                        );
 
                         row_spans.push(Span::styled(format!("{}{}", prefix, disp_name), style));
                         row_spans.push(Span::raw(" ".repeat(pad)));

@@ -10,26 +10,47 @@ use std::fmt;
 #[serde(rename_all = "snake_case")]
 pub enum ThemeId {
     #[default]
+    #[serde(alias = "CatppuccinMocha", alias = "catppuccin-mocha")]
     CatppuccinMocha,
+    #[serde(alias = "CatppuccinMacchiato", alias = "catppuccin-macchiato")]
     CatppuccinMacchiato,
+    #[serde(alias = "CatppuccinFrappe", alias = "catppuccin-frappe")]
     CatppuccinFrappe,
+    #[serde(alias = "CatppuccinLatte", alias = "catppuccin-latte")]
     CatppuccinLatte,
+    #[serde(alias = "TokyoNight", alias = "tokyo-night")]
     TokyoNight,
+    #[serde(alias = "TokyoNightStorm", alias = "tokyo-night-storm")]
     TokyoNightStorm,
+    #[serde(alias = "TokyoNightLight", alias = "tokyo-night-light")]
     TokyoNightLight,
+    #[serde(alias = "Nord", alias = "nord")]
     Nord,
+    #[serde(alias = "Dracula", alias = "dracula")]
     Dracula,
+    #[serde(alias = "GruvboxDark", alias = "gruvbox-dark")]
     GruvboxDark,
+    #[serde(alias = "GruvboxLight", alias = "gruvbox-light")]
     GruvboxLight,
+    #[serde(alias = "SolarizedDark", alias = "solarized-dark")]
     SolarizedDark,
+    #[serde(alias = "SolarizedLight", alias = "solarized-light")]
     SolarizedLight,
+    #[serde(alias = "OneDark", alias = "one-dark")]
     OneDark,
+    #[serde(alias = "OneLight", alias = "one-light")]
     OneLight,
+    #[serde(alias = "RosePine", alias = "rose-pine")]
     RosePine,
+    #[serde(alias = "RosePineMoon", alias = "rose-pine-moon")]
     RosePineMoon,
+    #[serde(alias = "RosePineDawn", alias = "rose-pine-dawn")]
     RosePineDawn,
+    #[serde(alias = "MonokaiPro", alias = "monokai-pro")]
     MonokaiPro,
+    #[serde(alias = "Synthwave84", alias = "synthwave-84", alias = "synthwave84")]
     Synthwave84,
+    #[serde(alias = "EverforestDark", alias = "everforest-dark")]
     EverforestDark,
 }
 

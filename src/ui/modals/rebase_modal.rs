@@ -211,11 +211,8 @@ impl RebaseModal {
                     )
                 };
 
-                let summary_truncated = if item.summary.len() > 24 {
-                    format!("{}...", &item.summary[..21])
-                } else {
-                    format!("{:<24}", item.summary)
-                };
+                let summary_truncated = crate::ui::truncate_display_width(&item.summary, 24);
+                let author_truncated = crate::ui::truncate_chars(&item.author, 10);
 
                 lines.push(Line::from(vec![
                     Span::styled(prefix, line_style),
@@ -225,14 +222,7 @@ impl RebaseModal {
                         Style::default().fg(theme.secondary),
                     ),
                     Span::styled(
-                        format!(
-                            "{:<10} ",
-                            if item.author.len() > 10 {
-                                &item.author[..10]
-                            } else {
-                                &item.author
-                            }
-                        ),
+                        format!("{:<10} ", author_truncated),
                         Style::default().fg(theme.dim_fg),
                     ),
                     Span::styled(summary_truncated, line_style),

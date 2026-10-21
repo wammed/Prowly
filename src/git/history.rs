@@ -260,9 +260,36 @@ pub fn revert_commit(repo_dir: &Path, commit_hash: &str) -> Result<(), GitError>
 }
 
 /// Time Machine: rewind current branch to target commit, discarding subsequent commits.
-/// Automatically creates a safety backup branch first so work can never be permanently lost.
+/// Automatically creates a safety backup branch and stashes uncommitted changes first so work can never be permanently lost.
 /// Returns the name of the safety backup branch created.
 pub fn time_machine_reset(repo_dir: &Path, commit_hash: &str) -> Result<String, GitError> {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+
+    // 0. Verify uncommitted changes. If any exist, save them safely to a stash first.
+    let status_out = clean_git_command(repo_dir)
+        .args(["status", "--porcelain"])
+        .output()?;
+    let mut has_uncommitted = false;
+    if status_out.status.success() && !status_out.stdout.is_empty() {
+        has_uncommitted = true;
+        let stash_msg = format!("timemachine-autostash-{}", timestamp);
+        let stash_out = clean_git_command(repo_dir)
+            .args(["stash", "push", "--include-untracked", "-m", &stash_msg])
+            .output()?;
+        if !stash_out.status.success() {
+            let err = String::from_utf8_lossy(&stash_out.stderr)
+                .trim()
+                .to_string();
+            return Err(GitError::Cli(format!(
+                "Failed to protect uncommitted changes before Time Machine reset: {}",
+                err
+            )));
+        }
+    }
+
     // 1. Get current branch name (or "HEAD" if detached)
     let branch_out = clean_git_command(repo_dir)
         .args(["rev-parse", "--abbrev-ref", "HEAD"])
@@ -276,18 +303,26 @@ pub fn time_machine_reset(repo_dir: &Path, commit_hash: &str) -> Result<String, 
         "HEAD".to_string()
     };
 
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-
     let clean_branch = current_branch.replace('/', "-");
     let backup_branch = format!("backup/timemachine-{}-{}", clean_branch, timestamp);
 
-    // 2. Create safety branch pointing to current HEAD
-    let _ = clean_git_command(repo_dir)
-        .args(["branch", &backup_branch, "HEAD"])
-        .output();
+    // 2. Create safety branch pointing to current HEAD and verify success
+    let branch_res = clean_git_command(repo_dir)
+        .args(["branch", "--", &backup_branch, "HEAD"])
+        .output()?;
+    if !branch_res.status.success() {
+        let err = String::from_utf8_lossy(&branch_res.stderr)
+            .trim()
+            .to_string();
+        return Err(GitError::Cli(format!(
+            "Failed to create safety backup branch '{}': {}",
+            backup_branch, err
+        )));
+    }
+
+    if commit_hash.starts_with('-') || commit_hash.trim().is_empty() {
+        return Err(GitError::Cli("Invalid commit hash format".to_string()));
+    }
 
     // 3. Reset hard to target commit
     let reset_out = clean_git_command(repo_dir)
@@ -301,5 +336,14 @@ pub fn time_machine_reset(repo_dir: &Path, commit_hash: &str) -> Result<String, 
         return Err(GitError::Cli(err));
     }
 
-    Ok(backup_branch)
+    let result_msg = if has_uncommitted {
+        format!(
+            "{} (uncommitted changes stashed in timemachine-autostash-{})",
+            backup_branch, timestamp
+        )
+    } else {
+        backup_branch
+    };
+
+    Ok(result_msg)
 }

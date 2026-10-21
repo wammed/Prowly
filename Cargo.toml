@@ -2,6 +2,7 @@
 name = "prowly"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.80"
 authors = ["Prowly Contributors"]
 description = "Terminal Git & GitHub client with omnipresent AI"
 license = "MIT"
@@ -14,7 +15,6 @@ unicode-width = "0.2"
 
 # Async runtime & concurrency
 tokio = { version = "1", features = ["full"] }
-tokio-stream = "0.1"
 futures = "0.3"
 async-trait = "0.1"
 
@@ -30,7 +30,6 @@ octocrab = "0.42"
 
 # Syntax highlighting & formatting
 syntect = "5.2"
-termimad = "0.31"
 
 # HTTP & AI clients
 reqwest = { version = "0.12", features = ["json", "stream"] }

@@ -128,13 +128,20 @@ impl Default for GitHubRateLimit {
     }
 }
 
-/// Internal cached data container.
-#[derive(Default)]
-struct CachedData {
+/// Per-repository cached data container.
+#[derive(Default, Clone)]
+struct CachedRepoData {
     repo_meta: Option<(Instant, RepoMetadata)>,
     prs: Option<(Instant, Vec<PullRequestItem>)>,
     issues: Option<(Instant, Vec<IssueItem>)>,
     runs: Option<(Instant, Vec<WorkflowRunItem>)>,
+}
+
+/// Internal global cached data container.
+#[derive(Default)]
+struct CachedData {
+    repos: std::collections::HashMap<(String, String), CachedRepoData>,
+    mock_defaults: CachedRepoData,
     alerts: Option<(Instant, Vec<AlertItem>)>,
     rate_limit: GitHubRateLimit,
 }
@@ -226,27 +233,38 @@ impl GitHubService {
     ) {
         let mut guard = self.cache.lock().await;
         let now = Instant::now();
-        guard.prs = Some((now, prs));
-        guard.runs = Some((now, runs));
+        guard.mock_defaults.prs = Some((now, prs.clone()));
+        guard.mock_defaults.runs = Some((now, runs.clone()));
         guard.alerts = Some((now, alerts));
+
+        for repo_entry in guard.repos.values_mut() {
+            repo_entry.prs = Some((now, prs.clone()));
+            repo_entry.runs = Some((now, runs.clone()));
+        }
     }
 
     /// Set mock issues dataset.
     pub async fn set_mock_issues(&self, issues: Vec<IssueItem>) {
         let mut guard = self.cache.lock().await;
-        guard.issues = Some((Instant::now(), issues));
+        let now = Instant::now();
+        guard.mock_defaults.issues = Some((now, issues.clone()));
+        for repo_entry in guard.repos.values_mut() {
+            repo_entry.issues = Some((now, issues.clone()));
+        }
     }
 
     /// Set mock repository metadata.
     pub async fn set_mock_repo_metadata(&self, is_private: bool) {
         let mut guard = self.cache.lock().await;
-        guard.repo_meta = Some((
-            Instant::now(),
-            RepoMetadata {
-                is_private,
-                description: None,
-            },
-        ));
+        let now = Instant::now();
+        let meta = RepoMetadata {
+            is_private,
+            description: None,
+        };
+        guard.mock_defaults.repo_meta = Some((now, meta.clone()));
+        for repo_entry in guard.repos.values_mut() {
+            repo_entry.repo_meta = Some((now, meta.clone()));
+        }
     }
 
     /// Retrieve active rate limit status.
@@ -261,37 +279,48 @@ impl GitHubService {
         target: &GitHubRepoTarget,
         force_refresh: bool,
     ) -> Result<RepoMetadata, String> {
-        let mut guard = self.cache.lock().await;
-        if !force_refresh {
-            if let Some((ts, ref meta)) = guard.repo_meta {
-                if ts.elapsed() < self.cache_ttl {
-                    return Ok(meta.clone());
+        let repo_key = (target.owner.clone(), target.repo.clone());
+        {
+            let guard = self.cache.lock().await;
+            if !force_refresh {
+                let cached = guard
+                    .repos
+                    .get(&repo_key)
+                    .and_then(|r| r.repo_meta.as_ref())
+                    .or_else(|| guard.mock_defaults.repo_meta.as_ref());
+                if let Some((ts, ref meta)) = cached {
+                    if ts.elapsed() < self.cache_ttl {
+                        return Ok(meta.clone());
+                    }
                 }
+            }
+
+            if self.mock_mode {
+                return Ok(guard
+                    .repos
+                    .get(&repo_key)
+                    .and_then(|r| r.repo_meta.as_ref())
+                    .or_else(|| guard.mock_defaults.repo_meta.as_ref())
+                    .map(|(_, m)| m.clone())
+                    .unwrap_or(RepoMetadata {
+                        is_private: false,
+                        description: None,
+                    }));
             }
         }
 
-        if self.mock_mode {
-            return Ok(guard
-                .repo_meta
-                .as_ref()
-                .map(|(_, m)| m.clone())
-                .unwrap_or(RepoMetadata {
-                    is_private: false,
-                    description: None,
-                }));
-        }
+        // 1. Try `gh repo view <owner>/<repo> --json isPrivate` CLI asynchronously without holding Mutex
+        let owner_repo = format!("{}/{}", target.owner, target.repo);
+        let gh_output = tokio::task::spawn_blocking(move || {
+            Command::new("gh")
+                .args(["repo", "view", &owner_repo, "--json", "isPrivate"])
+                .output()
+        })
+        .await
+        .ok()
+        .and_then(|res| res.ok());
 
-        // 1. Try `gh repo view <owner>/<repo> --json isPrivate` CLI first
-        if let Ok(output) = Command::new("gh")
-            .args([
-                "repo",
-                "view",
-                &format!("{}/{}", target.owner, target.repo),
-                "--json",
-                "isPrivate",
-            ])
-            .output()
-        {
+        if let Some(output) = gh_output {
             if output.status.success() {
                 if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&output.stdout) {
                     if let Some(is_private) = val.get("isPrivate").and_then(|v| v.as_bool()) {
@@ -299,7 +328,9 @@ impl GitHubService {
                             is_private,
                             description: None,
                         };
-                        guard.repo_meta = Some((Instant::now(), meta.clone()));
+                        let mut guard = self.cache.lock().await;
+                        guard.repos.entry(repo_key).or_default().repo_meta =
+                            Some((Instant::now(), meta.clone()));
                         return Ok(meta);
                     }
                 }
@@ -322,7 +353,9 @@ impl GitHubService {
                     is_private,
                     description: repo.description,
                 };
-                guard.repo_meta = Some((Instant::now(), meta.clone()));
+                let mut guard = self.cache.lock().await;
+                guard.repos.entry(repo_key).or_default().repo_meta =
+                    Some((Instant::now(), meta.clone()));
                 if guard.rate_limit.remaining > 0 {
                     guard.rate_limit.remaining -= 1;
                 }
@@ -338,9 +371,15 @@ impl GitHubService {
         target: &GitHubRepoTarget,
         force_refresh: bool,
     ) -> Result<Vec<PullRequestItem>, String> {
+        let repo_key = (target.owner.clone(), target.repo.clone());
         let mut guard = self.cache.lock().await;
         if !force_refresh {
-            if let Some((ts, ref prs)) = guard.prs {
+            let cached = guard
+                .repos
+                .get(&repo_key)
+                .and_then(|r| r.prs.as_ref())
+                .or_else(|| guard.mock_defaults.prs.as_ref());
+            if let Some((ts, ref prs)) = cached {
                 if ts.elapsed() < self.cache_ttl {
                     return Ok(prs.clone());
                 }
@@ -349,8 +388,10 @@ impl GitHubService {
 
         if self.mock_mode {
             return Ok(guard
-                .prs
-                .as_ref()
+                .repos
+                .get(&repo_key)
+                .and_then(|r| r.prs.as_ref())
+                .or_else(|| guard.mock_defaults.prs.as_ref())
                 .map(|(_, p)| p.clone())
                 .unwrap_or_default());
         }
@@ -359,8 +400,10 @@ impl GitHubService {
             Some(o) => o,
             None => {
                 return Ok(guard
-                    .prs
-                    .as_ref()
+                    .repos
+                    .get(&repo_key)
+                    .and_then(|r| r.prs.as_ref())
+                    .or_else(|| guard.mock_defaults.prs.as_ref())
                     .map(|(_, p)| p.clone())
                     .unwrap_or_default());
             }
@@ -407,7 +450,8 @@ impl GitHubService {
                     })
                     .collect();
 
-                guard.prs = Some((Instant::now(), items.clone()));
+                guard.repos.entry(repo_key).or_default().prs =
+                    Some((Instant::now(), items.clone()));
                 if guard.rate_limit.remaining > 0 {
                     guard.rate_limit.remaining -= 1;
                 }
@@ -423,9 +467,15 @@ impl GitHubService {
         target: &GitHubRepoTarget,
         force_refresh: bool,
     ) -> Result<Vec<IssueItem>, String> {
+        let repo_key = (target.owner.clone(), target.repo.clone());
         let mut guard = self.cache.lock().await;
         if !force_refresh {
-            if let Some((ts, ref issues)) = guard.issues {
+            let cached = guard
+                .repos
+                .get(&repo_key)
+                .and_then(|r| r.issues.as_ref())
+                .or_else(|| guard.mock_defaults.issues.as_ref());
+            if let Some((ts, ref issues)) = cached {
                 if ts.elapsed() < self.cache_ttl {
                     return Ok(issues.clone());
                 }
@@ -434,8 +484,10 @@ impl GitHubService {
 
         if self.mock_mode {
             return Ok(guard
-                .issues
-                .as_ref()
+                .repos
+                .get(&repo_key)
+                .and_then(|r| r.issues.as_ref())
+                .or_else(|| guard.mock_defaults.issues.as_ref())
                 .map(|(_, p)| p.clone())
                 .unwrap_or_default());
         }
@@ -444,8 +496,10 @@ impl GitHubService {
             Some(o) => o,
             None => {
                 return Ok(guard
-                    .issues
-                    .as_ref()
+                    .repos
+                    .get(&repo_key)
+                    .and_then(|r| r.issues.as_ref())
+                    .or_else(|| guard.mock_defaults.issues.as_ref())
                     .map(|(_, p)| p.clone())
                     .unwrap_or_default());
             }
@@ -485,18 +539,20 @@ impl GitHubService {
                     })
                     .collect();
 
-                guard.issues = Some((Instant::now(), items.clone()));
+                guard.repos.entry(repo_key.clone()).or_default().issues =
+                    Some((Instant::now(), items.clone()));
                 if guard.rate_limit.remaining > 0 {
                     guard.rate_limit.remaining -= 1;
                 }
                 Ok(items)
             }
             Err(e) => {
-                if let Some((_, ref issues)) = guard.issues {
-                    Ok(issues.clone())
-                } else {
-                    Err(format!("GitHub API error listing issues: {}", e))
+                if let Some(repo_entry) = guard.repos.get(&repo_key) {
+                    if let Some((_, ref issues)) = repo_entry.issues {
+                        return Ok(issues.clone());
+                    }
                 }
+                Err(format!("GitHub API error listing issues: {}", e))
             }
         }
     }
@@ -507,9 +563,15 @@ impl GitHubService {
         target: &GitHubRepoTarget,
         force_refresh: bool,
     ) -> Result<Vec<WorkflowRunItem>, String> {
+        let repo_key = (target.owner.clone(), target.repo.clone());
         let mut guard = self.cache.lock().await;
         if !force_refresh {
-            if let Some((ts, ref runs)) = guard.runs {
+            let cached = guard
+                .repos
+                .get(&repo_key)
+                .and_then(|r| r.runs.as_ref())
+                .or_else(|| guard.mock_defaults.runs.as_ref());
+            if let Some((ts, ref runs)) = cached {
                 if ts.elapsed() < self.cache_ttl {
                     return Ok(runs.clone());
                 }
@@ -518,8 +580,10 @@ impl GitHubService {
 
         if self.mock_mode {
             return Ok(guard
-                .runs
-                .as_ref()
+                .repos
+                .get(&repo_key)
+                .and_then(|r| r.runs.as_ref())
+                .or_else(|| guard.mock_defaults.runs.as_ref())
                 .map(|(_, r)| r.clone())
                 .unwrap_or_default());
         }
@@ -528,8 +592,10 @@ impl GitHubService {
             Some(o) => o,
             None => {
                 return Ok(guard
-                    .runs
-                    .as_ref()
+                    .repos
+                    .get(&repo_key)
+                    .and_then(|r| r.runs.as_ref())
+                    .or_else(|| guard.mock_defaults.runs.as_ref())
                     .map(|(_, r)| r.clone())
                     .unwrap_or_default());
             }
@@ -558,7 +624,8 @@ impl GitHubService {
                     })
                     .collect();
 
-                guard.runs = Some((Instant::now(), items.clone()));
+                guard.repos.entry(repo_key).or_default().runs =
+                    Some((Instant::now(), items.clone()));
                 if guard.rate_limit.remaining > 0 {
                     guard.rate_limit.remaining -= 1;
                 }
@@ -657,7 +724,13 @@ impl GitHubService {
     ) -> Result<String, String> {
         if self.mock_mode {
             let mut guard = self.cache.lock().await;
-            if let Some((_, ref mut runs)) = guard.runs {
+            let target_key = (target.owner.clone(), target.repo.clone());
+            let runs_opt = if let Some(repo) = guard.repos.get_mut(&target_key) {
+                repo.runs.as_mut()
+            } else {
+                guard.mock_defaults.runs.as_mut()
+            };
+            if let Some((_, ref mut runs)) = runs_opt {
                 if let Some(r) = runs.iter_mut().find(|r| r.id == run_id) {
                     r.status = "in_progress".to_string();
                     r.conclusion = None;
@@ -727,16 +800,14 @@ impl GitHubService {
 
         // Fallback to git fetch and checkout
         let fetch_ref = format!("pull/{}/head:pr-{}", pr_number, pr_number);
-        let fetch_res = Command::new("git")
-            .current_dir(workdir)
+        let fetch_res = crate::git::clean_git_command(workdir)
             .args(["fetch", "origin", &fetch_ref])
             .output();
 
         match fetch_res {
             Ok(fetch_out) if fetch_out.status.success() => {
                 let branch_name = format!("pr-{}", pr_number);
-                let co = Command::new("git")
-                    .current_dir(workdir)
+                let co = crate::git::clean_git_command(workdir)
                     .args(["checkout", &branch_name])
                     .output();
 

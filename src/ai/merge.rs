@@ -24,14 +24,13 @@ Important: Return ONLY the resolved source code lines. Do NOT include markdown c
         }
     };
 
-    let user = format!(
+    let current = hunk.current_lines.join("\n");
+    let incoming = hunk.incoming_lines.join("\n");
+    let raw_user = format!(
         "File: {}\n\n<<<<<<< Current ({})\n{}\n=======\n{}\n>>>>>>> Incoming ({})",
-        file_path,
-        hunk.current_branch_name,
-        hunk.current_lines.join("\n"),
-        hunk.incoming_lines.join("\n"),
-        hunk.incoming_branch_name
+        file_path, hunk.current_branch_name, current, incoming, hunk.incoming_branch_name
     );
+    let user = crate::ai::mask_secrets(&raw_user);
 
     let prompt = AiPrompt::system_and_user(system, user);
     let res = client.complete(&prompt).await?;

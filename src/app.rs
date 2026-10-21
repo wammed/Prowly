@@ -13,9 +13,7 @@ use crate::git::{
 };
 use crate::github::{GitHubRepoTarget, GitHubService};
 use crate::i18n::I18n;
-use crate::services::{
-    open_external_editor_with_preference, reveal_in_file_manager, BackupService, ClipboardService,
-};
+use crate::services::{reveal_in_file_manager, BackupService, ClipboardService};
 use crate::ui::capsule::{key_badge, pill, split_pill};
 use crate::ui::layout::LayoutAreas;
 use crate::ui::modals::{
@@ -200,6 +198,9 @@ pub struct App {
 
     /// Current mouse hover coordinates in terminal cells
     pub hover_pos: Option<(u16, u16)>,
+
+    /// Pending file requested to open in external editor outside event loop
+    pub pending_external_editor: Option<std::path::PathBuf>,
 }
 
 impl App {
@@ -226,7 +227,6 @@ impl App {
             let p_str = git.workdir().display().to_string();
             config.add_recent_repository(p_str.clone());
             config.last_repository = Some(p_str);
-            let _ = config.save();
         }
 
         let gh_token = GitHubService::detect_token();
@@ -277,6 +277,7 @@ impl App {
             last_auto_fetch: std::time::Instant::now(),
             last_status_check: std::time::Instant::now(),
             hover_pos: None,
+            pending_external_editor: None,
         };
 
         app.refresh_git_status();
@@ -303,8 +304,7 @@ impl App {
             if let Some(sender) = self.event_sender.clone() {
                 tokio::spawn(async move {
                     let res = tokio::task::spawn_blocking(move || {
-                        std::process::Command::new("git")
-                            .current_dir(&workdir)
+                        crate::git::clean_git_command(&workdir)
                             .args(["fetch", "--all", "--prune"])
                             .output()
                             .map_err(|e| e.to_string())
@@ -351,8 +351,7 @@ impl App {
             if let Some(sender) = self.event_sender.clone() {
                 tokio::spawn(async move {
                     let res = tokio::task::spawn_blocking(move || {
-                        std::process::Command::new("git")
-                            .current_dir(&workdir)
+                        crate::git::clean_git_command(&workdir)
                             .args(["pull"])
                             .output()
                             .map_err(|e| e.to_string())
@@ -398,8 +397,7 @@ impl App {
             if let Some(sender) = self.event_sender.clone() {
                 tokio::spawn(async move {
                     let res = tokio::task::spawn_blocking(move || {
-                        std::process::Command::new("git")
-                            .current_dir(&workdir)
+                        crate::git::clean_git_command(&workdir)
                             .args(["push"])
                             .output()
                             .map_err(|e| e.to_string())
@@ -441,6 +439,37 @@ impl App {
     pub fn refresh_git_status(&mut self) {
         if let Some(git) = &self.git_service {
             if let Ok(status) = git.get_status() {
+                self.repo_status = status;
+                self.all_repo_files = git
+                    .list_all_repo_files()
+                    .unwrap_or_else(|_| self.repo_status.files.clone());
+                let repo_dirs = git.list_all_directories();
+                self.dir_map
+                    .update_from_repo(&repo_dirs, &self.repo_status.files);
+
+                let filtered = self.filtered_files();
+                self.changes_view
+                    .file_scroll
+                    .set_total_items(filtered.len());
+                self.update_active_diff();
+            }
+        } else {
+            self.repo_status = GitRepoStatus::default();
+            self.all_repo_files.clear();
+            self.dir_map.update_from_files(&[]);
+            self.changes_view.file_scroll.set_total_items(0);
+        }
+    }
+
+    /// Lightweight status refresh for timer ticks: avoids expensive directory and file-tree walks
+    /// when repository status has not changed.
+    pub fn refresh_git_status_light(&mut self) {
+        if let Some(git) = &self.git_service {
+            if let Ok(status) = git.get_status() {
+                // If repository status matches what we already have, skip expensive deep walk
+                if status == self.repo_status {
+                    return;
+                }
                 self.repo_status = status;
                 self.all_repo_files = git
                     .list_all_repo_files()
@@ -689,10 +718,10 @@ impl App {
                 self.needs_clear = true;
             }
             AppEvent::Tick => {
-                // Auto-refresh git status every 1.5s to detect local filesystem changes and CLI commits
+                // Auto-refresh git status every 1.5s using lightweight check to avoid blocking UI thread
                 if self.last_status_check.elapsed() >= std::time::Duration::from_millis(1500) {
                     self.last_status_check = std::time::Instant::now();
-                    self.refresh_git_status();
+                    self.refresh_git_status_light();
                 }
 
                 let interval = self.config.git.auto_fetch_interval_secs;
@@ -2839,9 +2868,10 @@ impl App {
         let idx = self.changes_view.file_scroll.selected_index;
         if let Some(item) = filtered.get(idx) {
             let path = item.path.clone();
+            let is_staged = item.staged;
             if let Some(git) = &self.git_service {
                 if !self.config.git.soft_discard_backup {
-                    match git.hard_discard(&path) {
+                    match git.hard_discard_targeted(&path, is_staged) {
                         Ok(()) => {
                             self.refresh_git_status();
                             self.last_status =
@@ -2852,7 +2882,7 @@ impl App {
                         }
                     }
                 } else {
-                    match git.soft_discard(&path, &self.backup_service) {
+                    match git.soft_discard_targeted(&path, is_staged, &self.backup_service) {
                         Ok(backup) => {
                             self.refresh_git_status();
                             self.last_status = Some(format!(
@@ -3133,13 +3163,13 @@ impl App {
             } else {
                 std::path::PathBuf::from(&item.path)
             };
-            let pref = self.config.editor.command.as_deref();
-            if open_external_editor_with_preference(&full_path, pref).is_ok() {
-                self.refresh_git_status();
-                self.last_status = Some(format!("Edited {}", item.path));
-            }
-            self.needs_clear = true;
+            self.pending_external_editor = Some(full_path);
         }
+    }
+
+    /// Retrieve and clear any pending external editor request to execute cleanly outside event loop.
+    pub fn take_pending_editor(&mut self) -> Option<std::path::PathBuf> {
+        self.pending_external_editor.take()
     }
 
     /// Reveal currently selected file in OS file manager.
@@ -3386,26 +3416,31 @@ impl App {
         let query = self.ai_modal.input_query.clone();
         let ctx = self.capture_ai_context();
         let client = crate::ai::create_ai_client(&self.config.ai);
-        let has_key = self.config.ai.api_key.is_some()
+        let has_key = self.config.ai.effective_api_key().is_some()
             || self.config.ai.provider == crate::ai::AiProvider::Ollama;
         if !has_key {
-            let response = format!(
-                "󱚣 AI Assistant response for '{}':\n\n• Recommendation: Code is clean and staged files are ready.\n• Conventional Commit suggested: feat: implement feature changes\n• Tip: Configure your AI API key in ~/.config/prowly/config.toml to enable live LLM integration.",
-                query
-            );
+            let provider_name = format!("{:?}", self.config.ai.provider);
+            let response = if self.config.language == crate::i18n::Language::Ja {
+                format!(
+                    "⚠️ プロバイダー '{}' の AI API キーが設定されていません。\n\n~/.config/prowly/config.toml、環境変数（例: {}_API_KEY）、または設定モーダル (F2) で API キーを設定してください。",
+                    provider_name,
+                    provider_name.to_uppercase()
+                )
+            } else {
+                format!(
+                    "⚠️ AI API key is not configured for provider '{}'.\n\nPlease set your API key in ~/.config/prowly/config.toml, via environment variable (e.g. {}_API_KEY), or in the Settings modal (F2).",
+                    provider_name,
+                    provider_name.to_uppercase()
+                )
+            };
             self.ai_modal.set_response(response, None);
             return;
         }
 
-        let lang = self.config.language;
         let sys = "You are Prowly, an expert AI assistant inside a modern Git/GitHub TUI client. Provide concise answers and include unified diff patches in ```diff code blocks when recommending changes.";
-        let prompt_text = format!(
-            "User Question: {}\n\nContext:\n{}\n\nLanguage: {}\nPlease answer concisely and provide any proposed patch or command in markdown blocks.",
-            query,
-            ctx.summary(),
-            lang.code()
-        );
-        let ai_prompt = crate::ai::AiPrompt::system_and_user(sys, prompt_text);
+        let full_user_prompt = ctx.format_user_prompt(&query);
+        let masked_user_prompt = crate::ai::mask_secrets(&full_user_prompt);
+        let ai_prompt = crate::ai::AiPrompt::system_and_user(sys, masked_user_prompt);
 
         if let Some(sender) = self.event_sender.clone() {
             tokio::spawn(async move {
@@ -3456,16 +3491,43 @@ impl App {
     pub fn apply_ai_suggestion(&mut self) {
         if let Some(ref patch) = self.ai_modal.proposed_patch {
             if let Some(git) = &self.git_service {
-                let temp_patch_file = git.workdir().join(".prowly_ai_patch.diff");
-                if std::fs::write(&temp_patch_file, patch).is_ok() {
-                    let _ = std::process::Command::new("git")
-                        .current_dir(git.workdir())
-                        .args(["apply", ".prowly_ai_patch.diff"])
-                        .output();
-                    let _ = std::fs::remove_file(temp_patch_file);
-                    self.refresh_git_status();
-                    self.last_status = Some("Applied AI patch successfully!".to_string());
-                    self.ai_modal.close();
+                let mut child = match crate::git::clean_git_command(git.workdir())
+                    .args(["apply", "-"])
+                    .stdin(std::process::Stdio::piped())
+                    .stdout(std::process::Stdio::piped())
+                    .stderr(std::process::Stdio::piped())
+                    .spawn()
+                {
+                    Ok(c) => c,
+                    Err(e) => {
+                        self.last_status = Some(format!("Failed to spawn git apply: {}", e));
+                        return;
+                    }
+                };
+
+                if let Some(mut stdin) = child.stdin.take() {
+                    use std::io::Write;
+                    let _ = stdin.write_all(patch.as_bytes());
+                }
+
+                match child.wait_with_output() {
+                    Ok(out) if out.status.success() => {
+                        self.refresh_git_status();
+                        self.last_status = Some("Applied AI patch successfully!".to_string());
+                        self.ai_modal.close();
+                    }
+                    Ok(out) => {
+                        let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
+                        let msg = if err.is_empty() {
+                            String::from_utf8_lossy(&out.stdout).trim().to_string()
+                        } else {
+                            err
+                        };
+                        self.last_status = Some(format!("Failed to apply patch: {}", msg));
+                    }
+                    Err(e) => {
+                        self.last_status = Some(format!("Error running git apply: {}", e));
+                    }
                 }
             }
         } else {
@@ -3620,10 +3682,32 @@ impl App {
     pub fn trigger_ai_pr_draft(&mut self) {
         let client = crate::ai::create_ai_client(&self.config.ai);
         let branch = self.repo_status.branch.clone();
-        let diff_text = format!("{:?}", self.current_diff);
-        let lang = self.config.language;
 
         let ctx = self.capture_ai_context();
+        let diff_text = if let Some(ref snippet) = ctx.diff_snippet {
+            snippet.clone()
+        } else if let Some(ref git) = self.git_service {
+            git.get_diff(None, true)
+                .or_else(|_| git.get_diff(None, false))
+                .map(|d| {
+                    let mut s = String::new();
+                    for hunk in &d.hunks {
+                        s.push_str(&hunk.header);
+                        s.push('\n');
+                        for l in &hunk.lines {
+                            s.push(l.origin);
+                            s.push_str(&l.content);
+                            s.push('\n');
+                        }
+                    }
+                    s
+                })
+                .unwrap_or_default()
+        } else {
+            String::new()
+        };
+
+        let lang = self.config.language;
         self.ai_modal.open_with_context(&ctx);
         self.ai_modal.response_text = "󱚣 AI drafting PR...".to_string();
 
@@ -3650,19 +3734,32 @@ impl App {
 
     /// Trigger AI analysis of CI failure.
     pub fn trigger_ai_ci_analysis(&mut self) {
+        let (run_name, log_snippet) = match self.actions_view.selected_run() {
+            Some(run) => match &run.logs {
+                Some(logs) if !logs.trim().is_empty() => (run.name.clone(), logs.clone()),
+                _ => {
+                    let msg = if self.config.language == crate::i18n::Language::Ja {
+                        "⚠️ 選択されたワークフロー実行のログが取得できません。gh CLI または GitHub API でログがダウンロードされているか確認してください。"
+                    } else {
+                        "⚠️ No logs available for the selected workflow run. Ensure logs have been downloaded via gh CLI or GitHub API."
+                    };
+                    self.ai_modal.set_response(msg.to_string(), None);
+                    return;
+                }
+            },
+            None => {
+                let msg = if self.config.language == crate::i18n::Language::Ja {
+                    "⚠️ CI ワークフローが選択されていません。"
+                } else {
+                    "⚠️ No CI workflow run selected."
+                };
+                self.ai_modal.set_response(msg.to_string(), None);
+                return;
+            }
+        };
+
         let client = crate::ai::create_ai_client(&self.config.ai);
         let lang = self.config.language;
-
-        let (run_name, log_snippet) = if let Some(run) = self.actions_view.selected_run() {
-            (
-                run.name.clone(),
-                run.logs
-                    .clone()
-                    .unwrap_or_else(|| "Error: Process completed with exit code 1".to_string()),
-            )
-        } else {
-            ("CI Workflow".to_string(), "Failed build".to_string())
-        };
 
         let ctx = self.capture_ai_context();
         self.ai_modal.open_with_context(&ctx);
@@ -4070,8 +4167,8 @@ impl App {
         let (ai_icon, ai_label, ai_fg) = if ai_connected {
             let model_display = if top_area.width < 135 {
                 "".to_string()
-            } else if ai_mod.len() > 12 {
-                format!(" ({})", &ai_mod[..10])
+            } else if ai_mod.chars().count() > 12 {
+                format!(" ({})", crate::ui::truncate_chars(&ai_mod, 10))
             } else if !ai_mod.is_empty() {
                 format!(" ({})", ai_mod)
             } else {

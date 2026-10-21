@@ -35,10 +35,11 @@ Format rules:\n\
         }
     };
 
+    let masked_diff = crate::ai::mask_secrets(diff_summary);
     let user = format!(
         "Branch: {}\n\nDiff Summary:\n{}",
         branch_name,
-        diff_summary.chars().take(4000).collect::<String>()
+        masked_diff.chars().take(4000).collect::<String>()
     );
 
     let prompt = AiPrompt::system_and_user(system, user);
