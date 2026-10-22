@@ -66,6 +66,14 @@ fn test_worktree_lifecycle() {
     // 3. List should now show 2 worktrees
     let updated_list = list_worktrees(repo_path).expect("list_worktrees after add failed");
     assert_eq!(updated_list.len(), 2);
+    assert!(updated_list[0].is_current);
+    assert!(!updated_list[1].is_current);
+
+    // Listing from the linked worktree should mark the linked worktree as current
+    let linked_list = list_worktrees(&wt_path).expect("list_worktrees from linked wt failed");
+    assert_eq!(linked_list.len(), 2);
+    assert!(!linked_list[0].is_current);
+    assert!(linked_list[1].is_current);
 
     // 4. Safely remove worktree
     let remove_res = remove_worktree(repo_path, wt_path.to_str().unwrap(), false);
@@ -73,4 +81,22 @@ fn test_worktree_lifecycle() {
 
     let final_list = list_worktrees(repo_path).expect("list_worktrees after remove failed");
     assert_eq!(final_list.len(), 1);
+    assert!(final_list[0].is_current);
+}
+
+#[test]
+fn test_worktree_symlinked_repo_dir() {
+    let repo = setup_temp_repo();
+    let repo_path = repo.path();
+
+    let sym_parent = tempdir().expect("failed to create sym tempdir");
+    let sym_repo_path = sym_parent.path().join("sym_repo");
+
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(repo_path, &sym_repo_path).expect("symlink failed");
+        let list = list_worktrees(&sym_repo_path).expect("list_worktrees via symlink failed");
+        assert_eq!(list.len(), 1);
+        assert!(list[0].is_current);
+    }
 }

@@ -33,21 +33,47 @@ pub fn list_worktrees(repo_dir: &Path) -> Result<Vec<WorktreeItem>, GitError> {
     let mut current_branch: Option<String> = None;
     let mut is_locked = false;
 
+    let repo_dir_canon = repo_dir.canonicalize().ok();
+    let is_same_path = |p: &Path| -> bool {
+        if p == repo_dir {
+            return true;
+        }
+        if let Some(ref r_canon) = repo_dir_canon {
+            if p == r_canon {
+                return true;
+            }
+            if let Ok(p_canon) = p.canonicalize() {
+                if &p_canon == r_canon || p_canon == repo_dir {
+                    return true;
+                }
+            }
+        } else if let Ok(p_canon) = p.canonicalize() {
+            if p_canon == repo_dir {
+                return true;
+            }
+        }
+        false
+    };
+
+    let mut push_item = |p: PathBuf, branch: Option<String>, locked: bool| {
+        let name = p
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "worktree".to_string());
+        let is_curr = is_same_path(&p);
+        items.push(WorktreeItem {
+            name,
+            path: p,
+            head_branch: branch,
+            is_current: is_curr,
+            is_locked: locked,
+        });
+    };
+
     for line in text.lines() {
         if line.starts_with("worktree ") {
             if let Some(p) = current_path.take() {
-                let name = p
-                    .file_name()
-                    .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or_else(|| "worktree".to_string());
-                let is_curr = p == repo_dir;
-                items.push(WorktreeItem {
-                    name,
-                    path: p,
-                    head_branch: current_branch.take(),
-                    is_current: is_curr,
-                    is_locked,
-                });
+                push_item(p, current_branch.take(), is_locked);
                 is_locked = false;
             }
             let raw_path = line.trim_start_matches("worktree ").trim();
@@ -62,18 +88,7 @@ pub fn list_worktrees(repo_dir: &Path) -> Result<Vec<WorktreeItem>, GitError> {
     }
 
     if let Some(p) = current_path {
-        let name = p
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| "worktree".to_string());
-        let is_curr = p == repo_dir;
-        items.push(WorktreeItem {
-            name,
-            path: p,
-            head_branch: current_branch,
-            is_current: is_curr,
-            is_locked,
-        });
+        push_item(p, current_branch, is_locked);
     }
 
     // Fallback if worktree command returned empty
@@ -85,6 +100,10 @@ pub fn list_worktrees(repo_dir: &Path) -> Result<Vec<WorktreeItem>, GitError> {
             is_current: true,
             is_locked: false,
         });
+    } else if !items.iter().any(|wt| wt.is_current) {
+        // If path comparison didn't match any worktree (e.g. symlink edge case),
+        // fallback to marking the first (main) worktree as current.
+        items[0].is_current = true;
     }
 
     Ok(items)
