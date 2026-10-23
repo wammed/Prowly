@@ -3,10 +3,11 @@
 
 use crate::ai::AiConfig;
 use crate::i18n::Language;
-use crate::ui::ThemeId;
+pub mod theme_id;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
+pub use theme_id::ThemeId;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -367,27 +368,22 @@ impl Config {
 
     /// Automatically read standard environment variables into ephemeral env_api_key (never saved to file).
     pub fn populate_api_keys_from_env(&mut self) {
-        if self.ai.api_key.is_none() && self.ai.env_api_key.is_none() {
-            match self.ai.provider {
-                crate::ai::AiProvider::OpenAi => {
-                    if let Ok(key) = std::env::var("OPENAI_API_KEY") {
-                        self.ai.env_api_key = Some(key);
-                    }
-                }
-                crate::ai::AiProvider::Anthropic => {
-                    if let Ok(key) = std::env::var("ANTHROPIC_API_KEY") {
-                        self.ai.env_api_key = Some(key);
-                    }
-                }
-                crate::ai::AiProvider::Gemini => {
-                    if let Ok(key) = std::env::var("GEMINI_API_KEY") {
-                        self.ai.env_api_key = Some(key);
-                    } else if let Ok(key) = std::env::var("GOOGLE_API_KEY") {
-                        self.ai.env_api_key = Some(key);
-                    }
-                }
-                _ => {}
-            }
+        if self.ai.api_key.is_none() {
+            self.ai.env_api_key = match self.ai.provider {
+                crate::ai::AiProvider::OpenAi => std::env::var("OPENAI_API_KEY")
+                    .ok()
+                    .filter(|k| !k.trim().is_empty()),
+                crate::ai::AiProvider::Anthropic => std::env::var("ANTHROPIC_API_KEY")
+                    .ok()
+                    .filter(|k| !k.trim().is_empty()),
+                crate::ai::AiProvider::Gemini => std::env::var("GEMINI_API_KEY")
+                    .ok()
+                    .or_else(|| std::env::var("GOOGLE_API_KEY").ok())
+                    .filter(|k| !k.trim().is_empty()),
+                _ => None,
+            };
+        } else {
+            self.ai.env_api_key = None;
         }
     }
 }

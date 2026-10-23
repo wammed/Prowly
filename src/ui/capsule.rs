@@ -19,6 +19,58 @@ pub fn spans_width(spans: &[Span]) -> usize {
         .sum()
 }
 
+/// Calculate the total terminal display width of a single capsule pill without heap allocation.
+pub fn pill_width(icon: Option<&str>, text: &str, use_nerd_font: bool) -> usize {
+    if use_nerd_font {
+        let content_width = if let Some(ic) = icon {
+            let ic_w = UnicodeWidthStr::width(ic);
+            if text.is_empty() {
+                2 + ic_w
+            } else {
+                3 + ic_w + UnicodeWidthStr::width(text)
+            }
+        } else {
+            2 + UnicodeWidthStr::width(text)
+        };
+        2 + content_width
+    } else if let Some(ic) = icon {
+        let ic_w = UnicodeWidthStr::width(ic);
+        if text.is_empty() {
+            4 + ic_w
+        } else {
+            5 + ic_w + UnicodeWidthStr::width(text)
+        }
+    } else {
+        4 + UnicodeWidthStr::width(text)
+    }
+}
+
+/// Calculate the total terminal display width of a dual-segment pill badge without heap allocation.
+pub fn split_pill_width(
+    left_icon: Option<&str>,
+    left_text: &str,
+    right_text: &str,
+    use_nerd_font: bool,
+) -> usize {
+    if use_nerd_font {
+        let left_w = if let Some(ic) = left_icon {
+            3 + UnicodeWidthStr::width(ic) + UnicodeWidthStr::width(left_text)
+        } else {
+            2 + UnicodeWidthStr::width(left_text)
+        };
+        let right_w = 2 + UnicodeWidthStr::width(right_text);
+        2 + left_w + right_w
+    } else {
+        let left_w = if let Some(ic) = left_icon {
+            5 + UnicodeWidthStr::width(ic) + UnicodeWidthStr::width(left_text)
+        } else {
+            4 + UnicodeWidthStr::width(left_text)
+        };
+        let right_w = 1 + UnicodeWidthStr::width(right_text);
+        left_w + right_w
+    }
+}
+
 /// Create a single capsule/pill badge.
 ///
 /// Example with Nerd Font:
@@ -33,7 +85,11 @@ pub fn pill(
 ) -> Vec<Span<'static>> {
     if use_nerd_font {
         let content = if let Some(ic) = icon {
-            format!(" {} {} ", ic, text)
+            if text.is_empty() {
+                format!(" {} ", ic)
+            } else {
+                format!(" {} {} ", ic, text)
+            }
         } else {
             format!(" {} ", text)
         };
@@ -48,7 +104,11 @@ pub fn pill(
         ]
     } else {
         let content = if let Some(ic) = icon {
-            format!(" [{} {}] ", ic, text)
+            if text.is_empty() {
+                format!(" [{}] ", ic)
+            } else {
+                format!(" [{} {}] ", ic, text)
+            }
         } else {
             format!(" [{}] ", text)
         };
@@ -64,6 +124,7 @@ pub fn pill(
 }
 
 /// Create a sleek dual-segment pill badge (e.g., [ KEY | ACTION ] or [ BRANCH | AHEAD/BEHIND ]).
+#[allow(clippy::too_many_arguments)]
 pub fn split_pill(
     left_icon: Option<&str>,
     left_text: &str,
@@ -286,5 +347,52 @@ mod tests {
             Color::Black,
         );
         assert!(bar.len() >= 4);
+    }
+
+    #[test]
+    fn test_pill_width_matches_spans_width() {
+        for nf in [true, false] {
+            for icon in [None, Some(""), Some("")] {
+                for text in ["", "Settings", "Prowly TUI Client"] {
+                    let spans = pill(icon, text, Color::White, Color::Blue, Color::Black, nf);
+                    let computed = pill_width(icon, text, nf);
+                    assert_eq!(
+                        spans_width(&spans),
+                        computed,
+                        "Mismatch for icon={:?}, text={}, nf={}",
+                        icon,
+                        text,
+                        nf
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_split_pill_width_matches_spans_width() {
+        for nf in [true, false] {
+            for icon in [None, Some("")] {
+                let spans = split_pill(
+                    icon,
+                    "main",
+                    Color::White,
+                    Color::Blue,
+                    "↑1 ↓2",
+                    Color::Black,
+                    Color::Cyan,
+                    Color::Black,
+                    nf,
+                );
+                let computed = split_pill_width(icon, "main", "↑1 ↓2", nf);
+                assert_eq!(
+                    spans_width(&spans),
+                    computed,
+                    "Mismatch for split_pill icon={:?}, nf={}",
+                    icon,
+                    nf
+                );
+            }
+        }
     }
 }

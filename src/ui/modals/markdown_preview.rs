@@ -122,7 +122,7 @@ impl MarkdownPreviewModal {
         if y == footer_y {
             let inner_x = rect.x + 1;
             let rel_x = x.saturating_sub(inner_x);
-            if rel_x >= 51 && rel_x < 63 {
+            if (51..63).contains(&rel_x) {
                 return Some(MarkdownPreviewClickResult::Copy);
             } else if rel_x >= 63 {
                 return Some(MarkdownPreviewClickResult::Close);

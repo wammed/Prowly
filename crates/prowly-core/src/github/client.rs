@@ -3,7 +3,63 @@
 use std::process::Command;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use thiserror::Error;
 use tokio::sync::Mutex;
+
+/// Error types occurring during GitHub API and CLI operations.
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum GitHubError {
+    #[error("GitHub token not configured")]
+    NoToken,
+
+    #[error("GitHub rate limit exceeded")]
+    RateLimited,
+
+    #[error("GitHub resource not found: {0}")]
+    NotFound(String),
+
+    #[error("GitHub API error: {0}")]
+    Api(String),
+
+    #[error("Git CLI error: {0}")]
+    Cli(String),
+
+    #[error("Serialization error: {0}")]
+    Serialization(String),
+
+    #[error("Network error: {0}")]
+    Network(String),
+
+    #[error("{0}")]
+    Other(String),
+}
+
+impl From<octocrab::Error> for GitHubError {
+    fn from(err: octocrab::Error) -> Self {
+        match &err {
+            octocrab::Error::GitHub { source, .. } => {
+                if source.status_code.as_u16() == 404 {
+                    GitHubError::NotFound(source.message.clone())
+                } else if source.status_code.as_u16() == 403
+                    && source.message.to_lowercase().contains("rate limit")
+                {
+                    GitHubError::RateLimited
+                } else {
+                    GitHubError::Api(source.message.clone())
+                }
+            }
+            octocrab::Error::Http { source, .. } => GitHubError::Network(source.to_string()),
+            octocrab::Error::Json { source, .. } => GitHubError::Serialization(source.to_string()),
+            other => GitHubError::Other(other.to_string()),
+        }
+    }
+}
+
+impl From<GitHubError> for String {
+    fn from(err: GitHubError) -> Self {
+        err.to_string()
+    }
+}
 
 /// Target GitHub repository (owner/name).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -278,7 +334,7 @@ impl GitHubService {
         &self,
         target: &GitHubRepoTarget,
         force_refresh: bool,
-    ) -> Result<RepoMetadata, String> {
+    ) -> Result<RepoMetadata, GitHubError> {
         let repo_key = (target.owner.clone(), target.repo.clone());
         {
             let guard = self.cache.lock().await;
@@ -361,7 +417,7 @@ impl GitHubService {
                 }
                 Ok(meta)
             }
-            Err(e) => Err(format!("GitHub API error: {}", e)),
+            Err(e) => Err(GitHubError::from(e)),
         }
     }
 
@@ -370,7 +426,7 @@ impl GitHubService {
         &self,
         target: &GitHubRepoTarget,
         force_refresh: bool,
-    ) -> Result<Vec<PullRequestItem>, String> {
+    ) -> Result<Vec<PullRequestItem>, GitHubError> {
         let repo_key = (target.owner.clone(), target.repo.clone());
         let mut guard = self.cache.lock().await;
         if !force_refresh {
@@ -457,7 +513,7 @@ impl GitHubService {
                 }
                 Ok(items)
             }
-            Err(e) => Err(format!("GitHub API error: {}", e)),
+            Err(e) => Err(GitHubError::from(e)),
         }
     }
 
@@ -466,7 +522,7 @@ impl GitHubService {
         &self,
         target: &GitHubRepoTarget,
         force_refresh: bool,
-    ) -> Result<Vec<IssueItem>, String> {
+    ) -> Result<Vec<IssueItem>, GitHubError> {
         let repo_key = (target.owner.clone(), target.repo.clone());
         let mut guard = self.cache.lock().await;
         if !force_refresh {
@@ -552,7 +608,7 @@ impl GitHubService {
                         return Ok(issues.clone());
                     }
                 }
-                Err(format!("GitHub API error listing issues: {}", e))
+                Err(GitHubError::from(e))
             }
         }
     }
@@ -562,7 +618,7 @@ impl GitHubService {
         &self,
         target: &GitHubRepoTarget,
         force_refresh: bool,
-    ) -> Result<Vec<WorkflowRunItem>, String> {
+    ) -> Result<Vec<WorkflowRunItem>, GitHubError> {
         let repo_key = (target.owner.clone(), target.repo.clone());
         let mut guard = self.cache.lock().await;
         if !force_refresh {
@@ -631,12 +687,12 @@ impl GitHubService {
                 }
                 Ok(items)
             }
-            Err(e) => Err(format!("GitHub API error: {}", e)),
+            Err(e) => Err(GitHubError::from(e)),
         }
     }
 
     /// List notifications / alerts.
-    pub async fn list_alerts(&self, force_refresh: bool) -> Result<Vec<AlertItem>, String> {
+    pub async fn list_alerts(&self, force_refresh: bool) -> Result<Vec<AlertItem>, GitHubError> {
         let mut guard = self.cache.lock().await;
         if !force_refresh {
             if let Some((ts, ref alerts)) = guard.alerts {
@@ -686,12 +742,12 @@ impl GitHubService {
                 }
                 Ok(items)
             }
-            Err(e) => Err(format!("GitHub API error: {}", e)),
+            Err(e) => Err(GitHubError::from(e)),
         }
     }
 
     /// Mark a notification as read.
-    pub async fn mark_notification_read(&self, thread_id: &str) -> Result<(), String> {
+    pub async fn mark_notification_read(&self, thread_id: &str) -> Result<(), GitHubError> {
         let mut guard = self.cache.lock().await;
         if let Some((_, ref mut alerts)) = guard.alerts {
             if let Some(item) = alerts.iter_mut().find(|a| a.id == thread_id) {
@@ -705,11 +761,14 @@ impl GitHubService {
 
         if let Ok(id_u64) = thread_id.parse::<u64>() {
             if let Some(octo) = self.get_octocrab().await {
-                let _ = octo
+                if let Err(e) = octo
                     .activity()
                     .notifications()
                     .mark_as_read(id_u64.into())
-                    .await;
+                    .await
+                {
+                    return Err(GitHubError::from(e));
+                }
             }
         }
 
@@ -721,7 +780,7 @@ impl GitHubService {
         &self,
         target: &GitHubRepoTarget,
         run_id: u64,
-    ) -> Result<String, String> {
+    ) -> Result<String, GitHubError> {
         if self.mock_mode {
             let mut guard = self.cache.lock().await;
             let target_key = (target.owner.clone(), target.repo.clone());
@@ -763,10 +822,10 @@ impl GitHubService {
             );
             match octo.post::<_, serde_json::Value>(&route, None::<&()>).await {
                 Ok(_) => Ok(format!("Triggered rerun for workflow #{}", run_id)),
-                Err(e) => Err(format!("Failed to rerun workflow #{}: {}", run_id, e)),
+                Err(e) => Err(GitHubError::from(e)),
             }
         } else {
-            Err("No GitHub authentication token found".to_string())
+            Err(GitHubError::NoToken)
         }
     }
 
@@ -777,7 +836,7 @@ impl GitHubService {
         pr_number: u64,
         head_branch: &str,
         workdir: &std::path::Path,
-    ) -> Result<String, String> {
+    ) -> Result<String, GitHubError> {
         // Try `gh pr checkout <number>`
         if let Ok(output) = Command::new("gh")
             .current_dir(workdir)
@@ -798,33 +857,31 @@ impl GitHubService {
             }
         }
 
-        // Fallback to git fetch and checkout
+        // Fallback to git fetch and checkout with timeout guard
         let fetch_ref = format!("pull/{}/head:pr-{}", pr_number, pr_number);
-        let fetch_res = crate::git::clean_git_command(workdir)
-            .args(["fetch", "origin", &fetch_ref])
-            .output();
+        let fetch_res = crate::git::clean_git_run(workdir, &["fetch", "origin", &fetch_ref]);
 
         match fetch_res {
             Ok(fetch_out) if fetch_out.status.success() => {
                 let branch_name = format!("pr-{}", pr_number);
-                let co = crate::git::clean_git_command(workdir)
-                    .args(["checkout", &branch_name])
-                    .output();
+                let co = crate::git::clean_git_run(workdir, &["checkout", &branch_name]);
 
                 match co {
                     Ok(out) if out.status.success() => Ok(format!(
                         "Checked out PR #{} as branch '{}'",
                         pr_number, branch_name
                     )),
-                    Ok(out) => Err(String::from_utf8_lossy(&out.stderr).trim().to_string()),
-                    Err(e) => Err(e.to_string()),
+                    Ok(out) => Err(GitHubError::Cli(
+                        String::from_utf8_lossy(&out.stderr).trim().to_string(),
+                    )),
+                    Err(e) => Err(GitHubError::Cli(e.to_string())),
                 }
             }
             Ok(fetch_out) => {
                 let err = String::from_utf8_lossy(&fetch_out.stderr)
                     .trim()
                     .to_string();
-                Err(format!(
+                Err(GitHubError::Cli(format!(
                     "Failed to fetch PR #{} from origin: {}",
                     pr_number,
                     if err.is_empty() {
@@ -832,12 +889,12 @@ impl GitHubService {
                     } else {
                         err
                     }
-                ))
+                )))
             }
-            Err(e) => Err(format!(
+            Err(e) => Err(GitHubError::Cli(format!(
                 "Failed to execute git fetch for PR #{}: {}",
                 pr_number, e
-            )),
+            ))),
         }
     }
 }

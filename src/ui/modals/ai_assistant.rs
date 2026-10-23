@@ -84,6 +84,20 @@ impl AiAssistantModal {
         self.proposed_patch = patch;
     }
 
+    /// Append an incoming streaming chunk to the response text in real-time.
+    pub fn append_chunk(&mut self, chunk: &str) {
+        self.response_text.push_str(chunk);
+        if self.response_text.contains("```diff") {
+            let patch = self
+                .response_text
+                .split("```diff")
+                .nth(1)
+                .and_then(|s| s.split("```").next())
+                .map(|s| s.trim().to_string());
+            self.proposed_patch = patch;
+        }
+    }
+
     /// Calculate modal bounding box.
     pub fn modal_rect(&self, area: Rect) -> Rect {
         let popup_width = (area.width * 75 / 100).max(50).min(area.width);
@@ -139,7 +153,7 @@ impl AiAssistantModal {
             let rel_x = x.saturating_sub(chunks[3].x);
             if rel_x < 17 {
                 return Some(AiAssistantClickResult::ApplyOrSubmit);
-            } else if rel_x >= 20 && rel_x < 37 {
+            } else if (20..37).contains(&rel_x) {
                 return Some(AiAssistantClickResult::Close);
             }
         }

@@ -115,3 +115,27 @@ async fn test_github_service_mock_and_caching() {
         "Should return is_private=false after set_mock_repo_metadata(false)"
     );
 }
+
+#[tokio::test]
+async fn test_github_error_variants() {
+    use prowly::github::GitHubError;
+
+    let err_not_found = GitHubError::NotFound("issue #999".to_string());
+    assert_eq!(
+        err_not_found.to_string(),
+        "GitHub resource not found: issue #999"
+    );
+
+    let err_rate = GitHubError::RateLimited;
+    assert_eq!(err_rate.to_string(), "GitHub rate limit exceeded");
+
+    let err_token = GitHubError::NoToken;
+    assert_eq!(err_token.to_string(), "GitHub token not configured");
+
+    // Live service with no token should return NoToken on rerun_workflow_run
+    let service = GitHubService::new(None);
+    let target = GitHubRepoTarget::new("nonexistent-owner-abc", "nonexistent-repo-xyz");
+    let res = service.rerun_workflow_run(&target, 12345).await;
+    assert!(res.is_err());
+    assert_eq!(res.unwrap_err(), GitHubError::NoToken);
+}

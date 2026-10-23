@@ -114,3 +114,55 @@ fn test_ai_context_with_ci_and_pr() {
     assert!(prompt.contains("src/lib.rs"));
     assert!(prompt.contains("Explain what failed"));
 }
+
+#[test]
+fn test_ai_connection_status_effective_key() {
+    let mut config = prowly::Config::default();
+    config.ai.provider = prowly::ai::AiProvider::OpenAi;
+    config.ai.api_key = None;
+    config.ai.env_api_key = Some("sk-test-env-key-12345".to_string());
+
+    let app = prowly::App::new(config);
+    let (connected, prov_name, _model) = app.ai_connection_status();
+    assert!(
+        connected,
+        "AI should report connected when env_api_key is present"
+    );
+    assert_eq!(prov_name, "OpenAI");
+}
+
+#[tokio::test]
+async fn test_ai_query_cancellation_and_streaming() {
+    let mut config = prowly::Config::default();
+    config.ai.provider = prowly::ai::AiProvider::Ollama;
+    let mut app = prowly::App::new(config);
+
+    // Test append_chunk streaming
+    app.ai_modal.response_text.clear();
+    app.ai_modal.append_chunk("Here is a patch:\n```diff\n");
+    app.ai_modal
+        .append_chunk("--- a/foo\n+++ b/foo\n@@ -1 +1 @@\n-bar\n+baz\n```");
+    assert!(app.ai_modal.proposed_patch.is_some());
+    assert_eq!(
+        app.ai_modal.proposed_patch.as_deref(),
+        Some("--- a/foo\n+++ b/foo\n@@ -1 +1 @@\n-bar\n+baz")
+    );
+
+    // Test cancellation
+    let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+    app.set_event_sender(tx);
+    let handle = tokio::spawn(async {
+        tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+    });
+    app.ai_modal.is_loading = true;
+    app.ai_abort_handle = Some(handle.abort_handle());
+
+    // Trigger cancel
+    app.cancel_ai_query();
+    assert!(!app.ai_modal.is_loading);
+    assert!(app.ai_abort_handle.is_none());
+    assert!(
+        app.ai_modal.response_text.contains("キャンセル")
+            || app.ai_modal.response_text.contains("cancelled")
+    );
+}

@@ -180,6 +180,7 @@ impl SettingsModal {
         } else {
             Some(self.editor_command.trim().to_string())
         };
+        config.populate_api_keys_from_env();
     }
 
     /// Handle text input when a text field is focused.
@@ -324,15 +325,15 @@ impl SettingsModal {
         // Language & Nerd Font
         if content_y == 3 + offset {
             // [ English ] (10..23), [ 日本語 ] (23..34)
-            if inner_x >= 10 && inner_x < 23 {
+            if (10..23).contains(&inner_x) {
                 self.language = Language::En;
-            } else if inner_x >= 23 && inner_x < 34 {
+            } else if (23..34).contains(&inner_x) {
                 self.language = Language::Ja;
             }
             // Nerd Font: [ ON ] (52..60), [ OFF ] (60..69)
-            if inner_x >= 52 && inner_x < 60 {
+            if (52..60).contains(&inner_x) {
                 self.use_nerd_font = true;
-            } else if inner_x >= 60 && inner_x < 69 {
+            } else if (60..69).contains(&inner_x) {
                 self.use_nerd_font = false;
             }
         }
@@ -389,15 +390,15 @@ impl SettingsModal {
         // API Key Input & Buttons
         if content_y == 9 + offset {
             // [ Show / Hide ] (40..50), [ Clear ] (50..63)
-            if inner_x >= 40 && inner_x < 50 {
+            if (40..50).contains(&inner_x) {
                 self.show_api_key = !self.show_api_key;
                 return None;
             }
-            if inner_x >= 50 && inner_x < 63 {
+            if (50..63).contains(&inner_x) {
                 self.ai_api_key.clear();
                 return None;
             }
-            if inner_x >= 10 && inner_x < 40 {
+            if (10..40).contains(&inner_x) {
                 self.focused_input = Some(SettingsInputFocus::AiApiKey);
                 return None;
             }
@@ -406,11 +407,11 @@ impl SettingsModal {
         // Endpoint Base URL & Reset Default
         if content_y == 10 + offset {
             // [ Default ] (50..63)
-            if inner_x >= 50 && inner_x < 63 {
+            if (50..63).contains(&inner_x) {
                 self.ai_api_base.clear();
                 return None;
             }
-            if inner_x >= 10 && inner_x < 50 {
+            if (10..50).contains(&inner_x) {
                 self.focused_input = Some(SettingsInputFocus::AiApiBase);
                 return None;
             }
@@ -419,23 +420,23 @@ impl SettingsModal {
         // Git Soft Discard & Auto Fetch
         if content_y == 12 + offset {
             // Soft Discard: [ ON ] (14..22), [ OFF ] (22..31)
-            if inner_x >= 14 && inner_x < 22 {
+            if (14..22).contains(&inner_x) {
                 self.git_soft_discard = true;
-            } else if inner_x >= 22 && inner_x < 31 {
+            } else if (22..31).contains(&inner_x) {
                 self.git_soft_discard = false;
             }
             // Auto Fetch: [ Off ] (48..57), [ 30s ] (57..66), [ 60s ] (66..75)
-            if inner_x >= 48 && inner_x < 57 {
+            if (48..57).contains(&inner_x) {
                 self.git_auto_fetch_secs = 0;
-            } else if inner_x >= 57 && inner_x < 66 {
+            } else if (57..66).contains(&inner_x) {
                 self.git_auto_fetch_secs = 30;
-            } else if inner_x >= 66 && inner_x < 75 {
+            } else if (66..75).contains(&inner_x) {
                 self.git_auto_fetch_secs = 60;
             }
             // Restore Repo: [ ON ] (90..98), [ OFF ] (98..107)
-            if inner_x >= 90 && inner_x < 98 {
+            if (90..98).contains(&inner_x) {
                 self.git_restore_last_repo = true;
-            } else if inner_x >= 98 && inner_x < 107 {
+            } else if (98..107).contains(&inner_x) {
                 self.git_restore_last_repo = false;
             }
         }
@@ -443,17 +444,17 @@ impl SettingsModal {
         // Editor Command
         if content_y == 13 + offset {
             // Presets: [ nvim ] (40..50), [ code ] (50..60), [ nano ] (60..70)
-            if inner_x >= 40 && inner_x < 50 {
+            if (40..50).contains(&inner_x) {
                 self.editor_command = "nvim".to_string();
                 return None;
-            } else if inner_x >= 50 && inner_x < 60 {
+            } else if (50..60).contains(&inner_x) {
                 self.editor_command = "code".to_string();
                 return None;
-            } else if inner_x >= 60 && inner_x < 70 {
+            } else if (60..70).contains(&inner_x) {
                 self.editor_command = "nano".to_string();
                 return None;
             }
-            if inner_x >= 10 && inner_x < 30 {
+            if (10..30).contains(&inner_x) {
                 self.focused_input = Some(SettingsInputFocus::EditorCommand);
                 return None;
             }
@@ -461,10 +462,10 @@ impl SettingsModal {
 
         // Bottom Action Bar: content_y == 15 + offset or inner_y near bottom
         if content_y == 15 + offset || inner_y >= rect.height.saturating_sub(4) {
-            if inner_x >= 1 && inner_x < 38 {
+            if (1..38).contains(&inner_x) {
                 return Some(SettingsAction::SaveAndApply);
             }
-            if inner_x >= 38 && inner_x < 65 {
+            if (38..65).contains(&inner_x) {
                 return Some(SettingsAction::Close);
             }
         }
@@ -509,7 +510,7 @@ impl SettingsModal {
         let offset = (theme_rows.len() as u16).saturating_sub(1);
         let total_content_lines = 16 + offset;
         let scroll_hint = if inner_height < total_content_lines {
-            format!(" [ ▲▼ Scroll: j/k ]")
+            " [ ▲▼ Scroll: j/k ]".to_string()
         } else {
             String::new()
         };

@@ -1,3 +1,9 @@
+[workspace]
+members = [
+    ".",
+    "crates/prowly-core",
+]
+
 [package]
 name = "prowly"
 version = "0.1.0"
@@ -8,6 +14,9 @@ description = "Terminal Git & GitHub client with omnipresent AI"
 license = "MIT"
 
 [dependencies]
+# Core library
+prowly-core = { path = "crates/prowly-core" }
+
 # TUI & Terminal
 ratatui = { version = "0.29", features = ["serde", "crossterm"] }
 crossterm = { version = "0.28", features = ["event-stream"] }

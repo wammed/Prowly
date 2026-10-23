@@ -1,0 +1,40 @@
+[package]
+name = "prowly-core"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+authors = ["Prowly Contributors"]
+description = "Headless core library for Prowly: Git, GitHub, AI, services, i18n, and config"
+license = "MIT"
+
+[dependencies]
+# Async runtime & concurrency
+tokio = { version = "1", features = ["full"] }
+futures = "0.3"
+async-trait = "0.1"
+
+# Serialization & Configuration
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+dirs = "5.0"
+
+# Git & GitHub
+git2 = "0.19"
+octocrab = "0.42"
+
+# HTTP & AI clients
+reqwest = { version = "0.12", features = ["json", "stream"] }
+
+# Clipboard
+arboard = "3.4"
+
+# Caching & Utilities
+lru = "0.13"
+thiserror = "2.0"
+anyhow = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+regex = "1.11"
+
+[dev-dependencies]
+tempfile = "3.17"

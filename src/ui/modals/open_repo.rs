@@ -365,11 +365,11 @@ impl OpenRepoModal {
                 }
             }
 
-            repos.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+            repos.sort_by_key(|a| a.name.to_lowercase());
             list.extend(repos);
 
             if self.show_all_dirs {
-                other_dirs.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+                other_dirs.sort_by_key(|a| a.name.to_lowercase());
                 list.extend(other_dirs);
             }
         }
@@ -621,9 +621,7 @@ impl OpenRepoModal {
                                 self.refresh_discovery();
                             }
                             None
-                        } else if entry.is_current {
-                            Some(OpenRepoAction::Open(entry.path))
-                        } else if entry.is_git {
+                        } else if entry.is_current || entry.is_git {
                             Some(OpenRepoAction::Open(entry.path))
                         } else if entry.path.is_dir() {
                             // Subdirectory without git - enter it
@@ -638,15 +636,10 @@ impl OpenRepoModal {
                         None
                     }
                 }
-                OpenRepoSection::Recent => {
-                    if let Some(repo_path) =
-                        self.recent_repos.get(self.recent_scroll.selected_index)
-                    {
-                        Some(OpenRepoAction::Open(PathBuf::from(repo_path)))
-                    } else {
-                        None
-                    }
-                }
+                OpenRepoSection::Recent => self
+                    .recent_repos
+                    .get(self.recent_scroll.selected_index)
+                    .map(|repo_path| OpenRepoAction::Open(PathBuf::from(repo_path))),
                 OpenRepoSection::CloneInput => None,
             },
             KeyCode::Tab => {
@@ -953,7 +946,7 @@ impl OpenRepoModal {
                 // Action buttons row (layout.clone_actions_y)
                 if inner_y == layout.clone_actions_y {
                     // [  Start Clone ]: x 1..22
-                    if right_inner_x >= 1 && right_inner_x <= 22 {
+                    if (1..=22).contains(&right_inner_x) {
                         let trimmed = self.clone_url_input.trim();
                         if !trimmed.is_empty() {
                             let target_dir = self.resolved_path();
@@ -967,7 +960,7 @@ impl OpenRepoModal {
                         }
                     }
                     // [ ❌ Cancel ]: x 23..38
-                    if right_inner_x >= 23 && right_inner_x <= 38 {
+                    if (23..=38).contains(&right_inner_x) {
                         self.is_clone_mode = false;
                         self.clone_url_input.clear();
                         self.active_section = OpenRepoSection::Input;
@@ -1023,11 +1016,11 @@ impl OpenRepoModal {
             // Normal mode: Action buttons row: layout.actions_y
             if inner_y == layout.actions_y || inner_y == layout.actions_y + 1 {
                 // [ i ] Init Repo Here: right_inner_x 1..24
-                if right_inner_x >= 1 && right_inner_x <= 24 {
+                if (1..=24).contains(&right_inner_x) {
                     return Some(OpenRepoAction::InitRepo(self.resolved_path()));
                 }
                 // [ c ] Clone Remote Here: right_inner_x 25..52
-                if right_inner_x >= 25 && right_inner_x <= 52 {
+                if (25..=52).contains(&right_inner_x) {
                     self.is_clone_mode = true;
                     self.clone_url_input.clear();
                     self.active_section = OpenRepoSection::CloneInput;

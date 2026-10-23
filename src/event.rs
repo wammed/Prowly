@@ -35,6 +35,7 @@ pub enum AppEvent {
     AiCommandSuggested(Result<SuggestedGitCommand, String>),
     AiMergeResolved(Result<String, String>),
     AiAssistantResponseReceived(Result<(String, Option<String>), String>),
+    AiAssistantChunkReceived(String),
     GitHubWorkflowRerunResult(Result<String, String>),
 }
 

@@ -694,7 +694,7 @@ impl GitService {
         let name = trimmed
             .trim_end_matches('/')
             .trim_end_matches(".git")
-            .rsplit(|c| c == '/' || c == ':')
+            .rsplit(['/', ':'])
             .next()
             .unwrap_or("repo");
 
@@ -806,12 +806,21 @@ impl GitService {
         self.run_git_cli(&["stash", "pop"])
     }
 
-    /// Helper to run git command in the repository working directory.
+    /// Helper to run git command in the repository working directory with timeout guard.
     fn run_git_cli(&self, args: &[&str]) -> Result<String, GitError> {
-        let output = clean_git_command(&self.workdir).args(args).output()?;
+        let output = crate::git::clean_git_run(&self.workdir, args)?;
 
         if output.status.success() {
-            Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+            let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            let msg = if !stdout.is_empty() {
+                stdout
+            } else if !stderr.is_empty() {
+                stderr
+            } else {
+                "Success".to_string()
+            };
+            Ok(msg)
         } else {
             let err = String::from_utf8_lossy(&output.stderr).trim().to_string();
             Err(GitError::Cli(err))

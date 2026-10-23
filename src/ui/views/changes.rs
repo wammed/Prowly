@@ -343,7 +343,7 @@ impl ChangesView {
             width: menu_btn_w,
             height: 1,
         };
-        let is_menu_hovered = hover_pos.map_or(false, |(hx, hy)| self.hit_test_menu_button(hx, hy));
+        let is_menu_hovered = hover_pos.is_some_and(|(hx, hy)| self.hit_test_menu_button(hx, hy));
         let menu_style = if is_menu_hovered {
             Style::default()
                 .bg(theme.secondary)

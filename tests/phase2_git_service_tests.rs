@@ -396,3 +396,17 @@ fn test_cli_pull_updates_local_branch() {
     assert_eq!(status_after.behind, 0);
     assert!(local1_dir.path().join("file2.txt").exists());
 }
+
+#[test]
+fn test_git_command_timeout_guard() {
+    let mut cmd = std::process::Command::new("sleep");
+    cmd.arg("2");
+    let res = prowly::git::run_command_with_timeout(&mut cmd, std::time::Duration::from_millis(50));
+    assert!(res.is_err());
+    match res {
+        Err(prowly::git::GitError::Timeout(dur)) => {
+            assert_eq!(dur, std::time::Duration::from_millis(50));
+        }
+        other => panic!("Expected GitError::Timeout, got: {:?}", other),
+    }
+}

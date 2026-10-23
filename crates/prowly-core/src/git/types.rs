@@ -17,6 +17,9 @@ pub enum GitError {
 
     #[error("Repository not found: {0}")]
     NotFound(String),
+
+    #[error("Git command timed out after {0:?}")]
+    Timeout(std::time::Duration),
 }
 
 /// Status of a file in the working directory or staging index.

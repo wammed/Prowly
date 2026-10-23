@@ -257,9 +257,8 @@ fn render_heading(text: &str, level: usize, theme: &Theme) -> Line<'static> {
 
 /// Check if a line starts with a numbered list prefix like "1. ", "2. ", etc.
 fn parse_numbered_list(line: &str) -> Option<(&str, &str)> {
-    let mut chars = line.char_indices();
     let mut end_idx = 0;
-    while let Some((idx, ch)) = chars.next() {
+    for (idx, ch) in line.char_indices() {
         if ch.is_ascii_digit() {
             end_idx = idx + 1;
         } else {

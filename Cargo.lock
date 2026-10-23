@@ -1605,6 +1605,7 @@ dependencies = [
  "git2",
  "lru 0.13.0",
  "octocrab",
+ "prowly-core",
  "ratatui",
  "regex",
  "reqwest",
@@ -1616,6 +1617,29 @@ dependencies = [
  "tokio",
  "toml",
  "unicode-width 0.2.0",
+]
+
+[[package]]
+name = "prowly-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "arboard",
+ "async-trait",
+ "chrono",
+ "dirs",
+ "futures",
+ "git2",
+ "lru 0.13.0",
+ "octocrab",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "toml",
 ]
 
 [[package]]

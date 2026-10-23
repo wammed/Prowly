@@ -51,7 +51,7 @@ pub fn get_commit_history(repo_dir: &Path, count: usize) -> Result<Vec<HistoryRo
         .args([
             "log",
             "--graph",
-            &format!("--pretty=format:LOGROW\x1f%h\x1f%H\x1f%d\x1f%an\x1f%ar\x1f%s"),
+            "--pretty=format:LOGROW\x1f%h\x1f%H\x1f%d\x1f%an\x1f%ar\x1f%s",
             &format!("-n{}", count),
         ])
         .output()?;
