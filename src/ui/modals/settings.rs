@@ -630,7 +630,7 @@ impl SettingsModal {
                     &["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022"]
                 }
                 AiProvider::Gemini => &["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash"],
-                AiProvider::Ollama => &["llama3.2:latest", "deepseek-r1:latest", "codellama"],
+                AiProvider::Ollama => &["CyberTielCorder:35B-A3B", "bonsai-2:27b", "codellama"],
                 AiProvider::Custom => &["default", "local-model"],
             };
             let mut cur_x = 10;
