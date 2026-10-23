@@ -147,6 +147,13 @@ impl Config {
                 return Ok(PathBuf::from(dir).join("config.toml"));
             }
         }
+        if std::env::var("CARGO_TARGET_TMPDIR").is_ok()
+            || std::env::var("RUST_TEST_NOCAPTURE").is_ok()
+        {
+            let tmp = std::env::temp_dir().join("prowly_test_config");
+            let _ = fs::create_dir_all(&tmp);
+            return Ok(tmp.join("config.toml"));
+        }
         let base = dirs::config_dir().ok_or(ConfigError::NoConfigDir)?;
         Ok(base.join("prowly").join("config.toml"))
     }
@@ -262,6 +269,14 @@ impl Config {
                         }
                     }
                 }
+            }
+        }
+
+        // Step 4: Sanitize recent repositories and recover last_repository if deleted
+        config.recent_repositories.retain(|p| Path::new(p).is_dir());
+        if let Some(ref last) = config.last_repository {
+            if !Path::new(last).is_dir() {
+                config.last_repository = config.recent_repositories.first().cloned();
             }
         }
 

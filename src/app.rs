@@ -200,7 +200,20 @@ impl App {
         let clipboard = ClipboardService::new();
         let backup_service = BackupService::new();
 
+        let home = dirs::home_dir();
         let mut git_service = GitService::discover().ok();
+        if git_service.as_ref().map(|g| g.workdir()) == home.as_deref()
+            && config.git.restore_last_repository
+        {
+            if let Some(ref last) = config.last_repository {
+                let p = std::path::Path::new(last);
+                if p.is_dir() && Some(p) != home.as_deref() {
+                    if let Ok(svc) = GitService::open(p) {
+                        git_service = Some(svc);
+                    }
+                }
+            }
+        }
         if git_service.is_none() {
             if let Some(ref last) = config.last_repository {
                 let p = std::path::Path::new(last);
@@ -213,8 +226,10 @@ impl App {
         if let Some(ref git) = git_service {
             let _ = std::env::set_current_dir(git.workdir());
             let p_str = git.workdir().display().to_string();
-            config.add_recent_repository(p_str.clone());
-            config.last_repository = Some(p_str);
+            if Some(git.workdir()) != home.as_deref() || config.last_repository.is_none() {
+                config.add_recent_repository(p_str.clone());
+                config.last_repository = Some(p_str);
+            }
         }
 
         let gh_token = GitHubService::detect_token();

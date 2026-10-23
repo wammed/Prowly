@@ -192,6 +192,7 @@ impl App {
                 match action {
                     SettingsAction::SaveAndApply => {
                         self.settings_modal.apply_to_config(&mut self.config);
+                        self.config.auto_save_enabled = true;
                         if let Err(e) = self.config.save() {
                             self.last_status = Some(format!("Save config error: {}", e));
                         } else {
@@ -1143,6 +1144,7 @@ impl App {
                         match action {
                             SettingsAction::SaveAndApply => {
                                 self.settings_modal.apply_to_config(&mut self.config);
+                                self.config.auto_save_enabled = true;
                                 if let Err(e) = self.config.save() {
                                     self.last_status = Some(format!("Save config error: {}", e));
                                 } else {

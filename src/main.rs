@@ -43,14 +43,44 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 3. If no explicit path was passed and restore_last_repository is true, restore last_repository
     if !has_explicit_path && config.git.restore_last_repository {
-        if let Some(ref last) = config.last_repository {
-            let last_p = std::path::Path::new(last);
-            if last_p.is_dir() {
-                let home = dirs::home_dir();
-                let cwd = std::env::current_dir().ok();
-                if cwd == home || prowly::GitService::discover().is_err() {
-                    let _ = std::env::set_current_dir(last_p);
+        let home = dirs::home_dir();
+        let cwd = std::env::current_dir().ok();
+
+        let candidate = config
+            .last_repository
+            .as_ref()
+            .and_then(|p| {
+                let path = std::path::Path::new(p);
+                if path.is_dir() && Some(path) != home.as_deref() {
+                    Some(path.to_path_buf())
+                } else {
+                    None
                 }
+            })
+            .or_else(|| {
+                config.recent_repositories.iter().find_map(|p| {
+                    let path = std::path::Path::new(p);
+                    if path.is_dir() && Some(path) != home.as_deref() {
+                        Some(path.to_path_buf())
+                    } else {
+                        None
+                    }
+                })
+            })
+            .or_else(|| {
+                config.last_repository.as_ref().and_then(|p| {
+                    let path = std::path::Path::new(p);
+                    if path.is_dir() {
+                        Some(path.to_path_buf())
+                    } else {
+                        None
+                    }
+                })
+            });
+
+        if let Some(target) = candidate {
+            if cwd == home || prowly::GitService::discover().is_err() {
+                let _ = std::env::set_current_dir(&target);
             }
         }
     }
@@ -157,8 +187,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Save last repository and configuration on exit
     if let Some(ref git) = app.git_service {
         let p_str = git.workdir().display().to_string();
-        app.config.add_recent_repository(p_str.clone());
-        app.config.last_repository = Some(p_str);
+        let home = dirs::home_dir();
+        if Some(git.workdir()) != home.as_deref() || app.config.last_repository.is_none() {
+            app.config.add_recent_repository(p_str.clone());
+            app.config.last_repository = Some(p_str);
+        }
     }
     let _ = app.config.save();
 

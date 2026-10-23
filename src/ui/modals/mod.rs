@@ -28,4 +28,4 @@ pub use markdown_preview::{MarkdownPreviewClickResult, MarkdownPreviewModal};
 pub use open_repo::{OpenRepoAction, OpenRepoModal};
 pub use rebase_modal::{RebaseClickResult, RebaseModal};
 pub use remote_diff_preview::{RemoteDiffClickResult, RemoteDiffPreviewModal};
-pub use settings::{SettingsAction, SettingsModal};
+pub use settings::{SettingsAction, SettingsInputFocus, SettingsModal, SettingsNavFocus};

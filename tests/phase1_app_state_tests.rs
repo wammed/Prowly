@@ -131,7 +131,11 @@ fn test_stage_checkbox_toggle_space() {
     std::fs::write(&file, "test content").unwrap();
 
     let orig_dir = std::env::current_dir().ok();
-    let mut app = App::new(Config::default());
+    let cfg = Config {
+        auto_save_enabled: false,
+        ..Default::default()
+    };
+    let mut app = App::new(cfg);
     app.switch_repository(repo_path);
 
     assert_eq!(app.active_tab, AppTab::Changes);
@@ -232,7 +236,11 @@ fn test_app_commit_staged_requires_explicit_staging_and_prevents_empty() {
         .unwrap();
 
     let orig_dir = std::env::current_dir().ok();
-    let mut app = App::new(Config::default());
+    let cfg = Config {
+        auto_save_enabled: false,
+        ..Default::default()
+    };
+    let mut app = App::new(cfg);
     app.switch_repository(repo_path);
 
     // 1. Without any changes, commit_staged should report "No changes to commit"
@@ -305,7 +313,11 @@ fn test_repo_badge_visibility_rendering() {
             .collect()
     };
 
-    let mut app = App::new(Config::default());
+    let cfg = Config {
+        auto_save_enabled: false,
+        ..Default::default()
+    };
+    let mut app = App::new(cfg);
     app.switch_repository(repo_path);
 
     // 1. When is_repo_private is Some(false) (Public)

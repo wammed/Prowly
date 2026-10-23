@@ -260,3 +260,75 @@ fn test_settings_modal_all_themes_selectable() {
         );
     }
 }
+
+#[test]
+fn test_settings_keyboard_navigation_and_cursor() {
+    use prowly::ui::modals::settings::SettingsNavFocus;
+
+    let mut modal = SettingsModal::new();
+    let config = Config::default();
+    modal.open_with_config(&config);
+
+    assert_eq!(modal.focused_nav, SettingsNavFocus::Theme);
+
+    // Tab down to Language
+    modal.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+    assert_eq!(modal.focused_nav, SettingsNavFocus::Language);
+
+    // Space toggles language from En to Ja
+    assert_eq!(modal.language, Language::En);
+    modal.handle_key(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE));
+    assert_eq!(modal.language, Language::Ja);
+
+    // Down arrow to Nerd Font
+    modal.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+    assert_eq!(modal.focused_nav, SettingsNavFocus::NerdFont);
+
+    // Right arrow or Space toggles Nerd Font
+    assert!(modal.use_nerd_font);
+    modal.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+    assert!(!modal.use_nerd_font);
+
+    // Tab to AI Provider
+    modal.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+    assert_eq!(modal.focused_nav, SettingsNavFocus::AiProvider);
+
+    // Right arrow switches provider to Anthropic
+    modal.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+    assert_eq!(modal.ai_provider, prowly::ai::AiProvider::Anthropic);
+
+    // Ctrl+S saves from anywhere
+    let save_action = modal.handle_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL));
+    assert_eq!(save_action, Some(SettingsAction::SaveAndApply));
+}
+
+#[test]
+fn test_settings_text_input_mode_and_escape() {
+    use prowly::ui::modals::settings::{SettingsInputFocus, SettingsNavFocus};
+
+    let mut modal = SettingsModal::new();
+    let config = Config::default();
+    modal.open_with_config(&config);
+
+    // Focus AiModel input
+    modal.focused_nav = SettingsNavFocus::AiModelInput;
+    modal.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert_eq!(modal.focused_input, Some(SettingsInputFocus::AiModel));
+
+    // Type text
+    modal.handle_key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
+    assert!(modal.ai_model.ends_with('x'));
+
+    // Backspace
+    modal.handle_key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
+    assert!(!modal.ai_model.ends_with('x'));
+
+    // Esc exits text editing without closing modal
+    let act = modal.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    assert_eq!(act, None);
+    assert_eq!(modal.focused_input, None);
+
+    // Second Esc closes modal
+    let act_close = modal.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    assert_eq!(act_close, Some(SettingsAction::Close));
+}
