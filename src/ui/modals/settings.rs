@@ -470,17 +470,7 @@ impl SettingsModal {
                 self.ai_model = self.ai_provider.default_model().to_string();
             }
             SettingsNavFocus::AiModelPresets => {
-                let presets: &[&str] = match self.ai_provider {
-                    AiProvider::OpenAi => &["gpt-4o-mini", "gpt-4o", "o3-mini"],
-                    AiProvider::Anthropic => {
-                        &["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022"]
-                    }
-                    AiProvider::Gemini => {
-                        &["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash"]
-                    }
-                    AiProvider::Ollama => &["cyberTielCorder:35B-A3B", "bonsai-2:27b", "qwen3-30b"],
-                    AiProvider::Custom => &["default", "local-model"],
-                };
+                let presets = self.ai_provider.model_presets();
                 let idx = presets
                     .iter()
                     .position(|&m| m == self.ai_model)
@@ -624,15 +614,7 @@ impl SettingsModal {
 
         // Model Presets
         if content_y == 7 + offset {
-            let presets: &[&str] = match self.ai_provider {
-                AiProvider::OpenAi => &["gpt-4o-mini", "gpt-4o", "o3-mini"],
-                AiProvider::Anthropic => {
-                    &["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022"]
-                }
-                AiProvider::Gemini => &["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash"],
-                AiProvider::Ollama => &["CyberTielCorder:35B-A3B", "bonsai-2:27b", "codellama"],
-                AiProvider::Custom => &["default", "local-model"],
-            };
+            let presets = self.ai_provider.model_presets();
             let mut cur_x = 10;
             for model_name in presets {
                 let w = model_name.len() as u16 + 4;
@@ -1131,13 +1113,7 @@ impl SettingsModal {
 
         // 6. Model Presets
         let is_preset_nav = self.focused_nav == SettingsNavFocus::AiModelPresets;
-        let presets: &[&str] = match self.ai_provider {
-            AiProvider::OpenAi => &["gpt-4o-mini", "gpt-4o", "o3-mini"],
-            AiProvider::Anthropic => &["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022"],
-            AiProvider::Gemini => &["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash"],
-            AiProvider::Ollama => &["CyberTielCorder:35B-A3B", "bonsai-2:27b", "codellama"],
-            AiProvider::Custom => &["default", "local-model"],
-        };
+        let presets = self.ai_provider.model_presets();
         let mut model_chips = vec![
             cursor_span(is_preset_nav),
             Span::styled(

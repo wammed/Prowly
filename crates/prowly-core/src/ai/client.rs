@@ -60,6 +60,16 @@ impl AiProvider {
         }
     }
 
+    pub const fn model_presets(&self) -> &'static [&'static str] {
+        match self {
+            Self::OpenAi => &["gpt-4o-mini", "gpt-4o", "o3-mini"],
+            Self::Anthropic => &["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022"],
+            Self::Gemini => &["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash"],
+            Self::Ollama => &["CyberTielCorder:35B-A3B", "bonsai-2:27b", "ornith-1.5:35b"],
+            Self::Custom => &["default", "local-model"],
+        }
+    }
+
     pub const fn default_endpoint(&self) -> &'static str {
         match self {
             Self::OpenAi => "https://api.openai.com/v1",
