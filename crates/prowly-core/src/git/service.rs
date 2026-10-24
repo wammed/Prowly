@@ -342,17 +342,42 @@ impl GitService {
             }
         }
 
+        let canonical_workdir = self.workdir.canonicalize().map_err(GitError::Io)?;
         let full_path = self.workdir.join(p);
 
-        // If file exists, ensure canonical path is strictly inside canonical workdir
+        // Fail-closed verification:
+        // 1. If file exists, ensure canonical path is strictly inside canonical workdir.
+        // 2. If path is a symlink (including broken/dangling), fail closed (reject).
+        // 3. If file does not exist, resolve nearest existing ancestor directory and verify it is inside canonical workdir.
+        // 4. Any error in canonicalization fails closed immediately.
         if full_path.exists() {
-            if let (Ok(canonical_full), Ok(canonical_workdir)) =
-                (full_path.canonicalize(), self.workdir.canonicalize())
-            {
-                if !canonical_full.starts_with(&canonical_workdir) {
+            let canonical_full = full_path.canonicalize().map_err(GitError::Io)?;
+            if !canonical_full.starts_with(&canonical_workdir) {
+                return Err(GitError::Io(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "Path escapes repository workdir via symlink or redirection",
+                )));
+            }
+        } else if full_path.is_symlink() {
+            return Err(GitError::Io(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "Broken or dangling symlink cannot be safely verified within repository workdir",
+            )));
+        } else {
+            let mut ancestor = full_path.as_path();
+            while !ancestor.exists() {
+                if let Some(parent) = ancestor.parent() {
+                    ancestor = parent;
+                } else {
+                    break;
+                }
+            }
+            if ancestor.exists() {
+                let canonical_ancestor = ancestor.canonicalize().map_err(GitError::Io)?;
+                if !canonical_ancestor.starts_with(&canonical_workdir) {
                     return Err(GitError::Io(std::io::Error::new(
                         std::io::ErrorKind::PermissionDenied,
-                        "Path escapes repository workdir via symlink or redirection",
+                        "Parent directory escapes repository workdir via symlink",
                     )));
                 }
             }

@@ -548,15 +548,31 @@ impl CommandPaletteModal {
                     if let Ok((sub, args)) =
                         crate::services::SafeGitRunner::parse_ai_command(&cmd.command)
                     {
-                        if let Some(warn) =
+                        let danger_warn: Option<String> = if let Some(warn) =
                             crate::services::SafeGitRunner::check_dangerous_git_args(&sub, &args)
                         {
+                            Some(warn.to_string())
+                        } else if sub == "push" {
+                            let target_info = if args.is_empty() {
+                                "default upstream remote".to_string()
+                            } else {
+                                args.join(" ")
+                            };
+                            Some(format!(
+                                "AI Push Confirmation: Target '{}'. Confirm push to remote repository?",
+                                target_info
+                            ))
+                        } else {
+                            None
+                        };
+
+                        if let Some(warn) = danger_warn {
                             if self.confirmed_danger_target.as_deref() != Some(&cmd.command) {
                                 self.confirmed_danger = true;
                                 self.confirmed_danger_target = Some(cmd.command.clone());
-                                self.danger_message = Some(warn.to_string());
+                                self.danger_message = Some(warn.clone());
                                 self.ai_suggestion = Some(cmd);
-                                return PaletteEnterResult::DangerWarning(warn.to_string());
+                                return PaletteEnterResult::DangerWarning(warn);
                             }
                         }
                     }

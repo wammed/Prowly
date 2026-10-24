@@ -204,6 +204,37 @@ impl SafeGitRunner {
             }
         }
 
+        // Strict protection against arbitrary URL push destinations
+        if subcommand == "push" {
+            let has_url = args.iter().any(|arg| {
+                let lower = arg.to_lowercase();
+                lower.starts_with("http://")
+                    || lower.starts_with("https://")
+                    || lower.starts_with("ssh://")
+                    || lower.starts_with("git://")
+                    || lower.starts_with("ftp://")
+                    || lower.starts_with("ftps://")
+                    || (lower.starts_with("git@") && lower.contains(':'))
+                    || (lower.contains("://") && !lower.starts_with('-'))
+            });
+            if has_url {
+                return Err("Security Guard: Pushing directly to arbitrary URL destinations is prohibited for AI-generated commands.".to_string());
+            }
+        }
+
+        // Strict protection against modifying remote configuration
+        if subcommand == "remote" {
+            let is_modifying = args.iter().any(|arg| {
+                matches!(
+                    arg.to_lowercase().as_str(),
+                    "add" | "rename" | "remove" | "rm" | "set-url" | "set-head"
+                )
+            });
+            if is_modifying {
+                return Err("Security Guard: Modifying remote configuration is prohibited for AI-generated commands.".to_string());
+            }
+        }
+
         Ok((subcommand, args))
     }
 
@@ -231,6 +262,46 @@ impl SafeGitRunner {
                 });
                 if has_delete {
                     return Some("Deleting remote branch or tag will remove remote history!");
+                }
+                let has_mirror = lower_args.iter().any(|arg| arg == "--mirror");
+                if has_mirror {
+                    return Some("Push --mirror will overwrite all remote refs!");
+                }
+                let has_prune = lower_args.iter().any(|arg| arg == "--prune");
+                if has_prune {
+                    return Some("Push --prune will remove remote branches not present locally!");
+                }
+                let has_all = lower_args.iter().any(|arg| arg == "--all");
+                if has_all {
+                    return Some("Push --all will push all local branches to remote!");
+                }
+                let has_url = lower_args.iter().any(|arg| {
+                    arg.starts_with("http://")
+                        || arg.starts_with("https://")
+                        || arg.starts_with("ssh://")
+                        || arg.starts_with("git://")
+                        || arg.starts_with("ftp://")
+                        || arg.starts_with("ftps://")
+                        || (arg.starts_with("git@") && arg.contains(':'))
+                        || (arg.contains("://") && !arg.starts_with('-'))
+                });
+                if has_url {
+                    return Some(
+                        "Pushing directly to an explicit URL endpoint requires confirmation!",
+                    );
+                }
+            }
+            "remote" => {
+                let modifies_remote = lower_args.iter().any(|arg| {
+                    matches!(
+                        arg.as_str(),
+                        "add" | "rename" | "remove" | "rm" | "set-url" | "set-head" | "prune"
+                    )
+                });
+                if modifies_remote {
+                    return Some(
+                        "Modifying remote repository URLs or configurations requires confirmation!",
+                    );
                 }
             }
             "reset" => {
@@ -326,23 +397,58 @@ impl SafeGitRunner {
         None
     }
 
-    /// Check dangerous git arguments from a space-separated arguments string.
+    /// Check dangerous git arguments from an arguments string, strictly tokenizing to prevent syntax bypasses.
     pub fn check_dangerous_git_str(subcommand: &str, args_str: &str) -> Option<&'static str> {
-        let tokens = Self::tokenize_args(args_str);
+        let tokens = match Self::tokenize_args_strict(args_str) {
+            Ok(tokens) => tokens,
+            Err(_) => return Some("Unclosed quotes or invalid escape sequence in arguments!"),
+        };
         Self::check_dangerous_git_args(subcommand, &tokens)
     }
 
     /// Safely execute Git CLI command directly without a shell.
+    /// Dangerous operations are blocked by default unless authorized via `execute_git_authorized`.
     pub fn execute_git(
         workdir: &Path,
         subcommand: &str,
         args: &[String],
+    ) -> Result<Output, std::io::Error> {
+        Self::execute_git_with_auth(workdir, subcommand, args, false)
+    }
+
+    /// Safely execute Git CLI command with explicit user authorization for dangerous operations.
+    pub fn execute_git_authorized(
+        workdir: &Path,
+        subcommand: &str,
+        args: &[String],
+    ) -> Result<Output, std::io::Error> {
+        Self::execute_git_with_auth(workdir, subcommand, args, true)
+    }
+
+    /// Safely execute Git CLI command directly without a shell, enforcing security policy.
+    pub fn execute_git_with_auth(
+        workdir: &Path,
+        subcommand: &str,
+        args: &[String],
+        authorized: bool,
     ) -> Result<Output, std::io::Error> {
         if !Self::is_safe_subcommand(subcommand) {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 format!("Invalid Git subcommand: '{}'", subcommand),
             ));
+        }
+
+        if !authorized {
+            if let Some(warn) = Self::check_dangerous_git_args(subcommand, args) {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    format!(
+                        "Dangerous Git operation blocked by runner safety policy: {}",
+                        warn
+                    ),
+                ));
+            }
         }
 
         crate::git::clean_git_command(workdir)

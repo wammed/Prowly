@@ -98,7 +98,7 @@ impl App {
             }
             PaletteEnterResult::ExecuteGitCommand { subcommand, args } => {
                 self.command_palette.close();
-                self.execute_git_cli(&subcommand, &args);
+                self.execute_git_cli_authorized(&subcommand, &args);
             }
             PaletteEnterResult::ExecuteAiCommand(cmd) => {
                 self.command_palette.close();
@@ -110,7 +110,9 @@ impl App {
                             std::env::current_dir()
                                 .unwrap_or_else(|_| std::path::PathBuf::from("."))
                         };
-                        match crate::services::SafeGitRunner::execute_git(&workdir, &sub, &args) {
+                        match crate::services::SafeGitRunner::execute_git_authorized(
+                            &workdir, &sub, &args,
+                        ) {
                             Ok(output) => {
                                 if output.status.success() {
                                     self.last_status = Some(format!(
@@ -291,7 +293,17 @@ impl App {
     }
 
     /// Execute an arbitrary Git CLI command in the repository workspace safely without a shell.
+    /// Blocks dangerous operations unless authorized via `execute_git_cli_authorized`.
     pub fn execute_git_cli(&mut self, subcommand: &str, args: &str) {
+        self.execute_git_cli_internal(subcommand, args, false);
+    }
+
+    /// Execute an arbitrary Git CLI command with explicit user authorization for dangerous operations.
+    pub fn execute_git_cli_authorized(&mut self, subcommand: &str, args: &str) {
+        self.execute_git_cli_internal(subcommand, args, true);
+    }
+
+    fn execute_git_cli_internal(&mut self, subcommand: &str, args: &str, authorized: bool) {
         let workdir = if let Some(git) = &self.git_service {
             git.workdir().to_path_buf()
         } else {
@@ -310,9 +322,23 @@ impl App {
             return;
         }
 
-        let parsed_args = crate::services::SafeGitRunner::tokenize_args(trimmed_args);
-        let output =
-            crate::services::SafeGitRunner::execute_git(&workdir, subcommand, &parsed_args);
+        let parsed_args = match crate::services::SafeGitRunner::tokenize_args_strict(trimmed_args) {
+            Ok(tokens) => tokens,
+            Err(e) => {
+                self.last_status = Some(format!("Argument syntax error ({}): {}", full_cmd_str, e));
+                return;
+            }
+        };
+
+        let output = if authorized {
+            crate::services::SafeGitRunner::execute_git_authorized(
+                &workdir,
+                subcommand,
+                &parsed_args,
+            )
+        } else {
+            crate::services::SafeGitRunner::execute_git(&workdir, subcommand, &parsed_args)
+        };
 
         match output {
             Ok(output) => {
